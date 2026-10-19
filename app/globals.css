@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* =========================================================
+   STYLING KHUSUS TAMPILAN AI (REACT MARKDOWN)
+   ========================================================= */
+
+/* Styling Tabel Markdown */
+.prose table {
+  width: 100%;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  border-collapse: collapse;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.prose th, 
+.prose td {
+  border: 1px solid #334155; /* slate-700 */
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.prose th {
+  background-color: #1e293b; /* slate-800 */
+  color: #38bdf8; /* sky-400 */
+  font-weight: 600;
+}
+
+.prose tr:nth-child(even) {
+  background-color: rgba(30, 41, 59, 0.3);
+}
+
+/* Headings (H1, H2, H3, H4) */
+.prose h1, 
+.prose h2, 
+.prose h3, 
+.prose h4 {
+  color: #f8fafc; /* slate-50 */
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.prose h1 {
+  font-size: 1.5rem;
+  border-bottom: 2px solid #334155;
+  padding-bottom: 0.5rem;
+}
+
+.prose h2 {
+  font-size: 1.25rem;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 0.25rem;
+}
+
+.prose h3 {
+  font-size: 1.1rem;
+}
+
+/* List (Bullets & Numbering) */
+.prose ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose li {
+  margin-bottom: 0.25rem;
+}
+
+/* Garis Pemisah (---) */
+.prose hr {
+  border: 0;
+  border-top: 1px solid #334155;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Teks Tebal & Miring */
+.prose strong {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.prose em {
+  color: #cbd5e1;
+}
+
+/* Blok Kutipan / Catatan Guru */
+.prose blockquote {
+  border-left: 4px solid #6366f1; /* indigo-500 */
+  padding-left: 1rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  color: #94a3b8;
+  font-style: italic;
+  background-color: rgba(30, 41, 59, 0.4);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
