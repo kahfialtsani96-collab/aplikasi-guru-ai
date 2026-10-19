@@ -34,14 +34,18 @@ interface StatusAbsensiMap {
 }
 
 export default function AbsensiPage() {
-  // Ubah 'input' | 'riwayat' menjadi tambahkan 'rekap'
+  // State User Informasi (Harus ada agar tidak error TS2304)
+  const [userDisplayName, setUserDisplayName] = useState('')
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  // State Tab & Mode
   const [activeTab, setActiveTab] = useState<'input' | 'riwayat' | 'rekap'>('input')
   const [modeInput, setModeInput] = useState<'manual' | 'qr'>('manual')
 
   // Custom Hook Hak Akses
   const { isOperator, canAccessBimbingan } = useAuthRole()
 
-  // Sediakan todayStr dan state tanggal
+  // Sediakan todayStr dan state tanggal secara aman
   const [tanggal, setTanggal] = useState('')
   const [todayStr, setTodayStr] = useState('')
 
