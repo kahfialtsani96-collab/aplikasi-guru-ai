@@ -34,17 +34,20 @@ interface StatusAbsensiMap {
 }
 
 export default function AbsensiPage() {
-  const [userDisplayName, setUserDisplayName] = useState('GURU')
+  const [userDisplayName, setUserDisplayName] = useState('')
   const [userEmail, setUserEmail] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
+  const [activeTab, setActiveTab] = useState<'input' | 'riwayat'>('input')
   const [modeInput, setModeInput] = useState<'manual' | 'qr'>('manual')
 
   // Custom Hook Hak Akses
   const { isOperator, canAccessBimbingan } = useAuthRole()
-  
+
   // State Input Absensi
-  const todayStr = new Date().toISOString().split('T')[0]
-  const [tanggal, setTanggal] = useState(todayStr)
+  const [tanggal, setTanggal] = useState('')
+
+  useEffect(() => {
+    setTanggal(new Date().toISOString().split('T')[0])
+  }, [])
   const [selectedKelas, setSelectedKelas] = useState('')
   const [selectedMapel, setSelectedMapel] = useState('')
   const [siswaList, setSiswaList] = useState<Siswa[]>([])
