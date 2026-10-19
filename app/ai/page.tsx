@@ -264,17 +264,17 @@ export default function AiToolsPage() {
           setSelectedDoc(doc.id)
 
           const payloadBody = {
-            tool: currentConfig?.title || 'Asisten Guru AI',
-            activeTool,
-            selectedDoc: doc.id,
-            mapel: adminForm.mapel || 'IPA',
-            faseKelas: adminForm.faseKelas || 'Fase D / Kelas VII',
-            materiTopik: adminForm.cpPerElemen || modulForm.rumusanTp,
-            spesifikData: formData,
-            tanpaKisiKisi: true,
-            ...adminForm,
-            ...modulForm
-          }
+  ...adminForm,
+  ...modulForm,
+  tool: currentConfig?.title || 'Asisten Guru AI',
+  activeTool,
+  selectedDoc: doc.id,
+  mapel: adminForm.mapel || 'IPA',
+  faseKelas: adminForm.faseKelas || 'Fase D / Kelas VII',
+  materiTopik: adminForm.cpPerElemen || modulForm.rumusanTp,
+  spesifikData: formData,
+  tanpaKisiKisi: true
+}
 
           const response = await fetch('/api/gemini', {
             method: 'POST',
