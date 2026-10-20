@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -10,6 +12,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   
   const { isOperator, canAccessBimbingan } = useAuthRole()
@@ -25,12 +28,23 @@ export default function DashboardPage() {
     async function fetchDataFromSupabase() {
       setIsLoading(true)
 
-      const { data: { user } } = await supabase.auth.getUser()
+      // 1. AUTH GUARD: Cek apakah user sudah login
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      // Jika TIDAK ADA sesi login, langsung lemparkan ke /login
+      if (!session) {
+        router.replace('/login')
+        return
+      }
+
+      // Ambil data user
+      const user = session.user
       if (user) {
         const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'GURU'
         setUserDisplayName(nameFromMeta.toUpperCase())
       }
 
+      // Ambil data statistik dari Supabase
       const { count: countSiswa } = await supabase
         .from('siswa')
         .select('*', { count: 'exact', head: true })
@@ -67,11 +81,15 @@ export default function DashboardPage() {
     }
 
     fetchDataFromSupabase()
-  }, [])
+  }, [router])
 
   return (
-    <div className="min-h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden">
-      
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+      className="min-h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden"
+    >
       {/* 1. FIXED BACKGROUND WATERMARK LOGO SCHOOL */}
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
         <img
@@ -82,10 +100,11 @@ export default function DashboardPage() {
       </div>
 
       <div className="relative z-10">
-        {/* 2. HEADER TOPBAR GLASSMORPHISM */}
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-3 flex items-center justify-between sticky top-0 z-50 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+        {/* 2. HEADER TOPBAR GLASSMORPHISM (RESPONSIVE HP FIXED) */}
+        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xs gap-2">
+          {/* Sisi Kiri: Logo & Nama Sekolah */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
               <img
                 src="/logo-smp.jpg"
                 alt="Logo SMP Muna Mustofa"
@@ -93,33 +112,37 @@ export default function DashboardPage() {
               />
             </div>
             <div>
-              <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-              <p className="text-[11px] text-emerald-800 font-bold mt-1">SMP Muna Mustofa</p>
+              <h1 className="font-bold text-xs sm:text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
+              <p className="text-[10px] sm:text-[11px] text-emerald-800 font-bold mt-0.5 sm:mt-1">SMP Muna Mustofa</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-100/80 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2">
+          {/* Sisi Kanan: Status, User, & Tombol Logout */}
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {/* Sembunyikan badge Supabase Live di layar HP kecil agar tidak sempit */}
+            <div className="hidden md:flex bg-emerald-100/80 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-full items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
               <span>Supabase Live</span>
             </div>
 
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
-              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+            {/* User Chip */}
+            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs">
+              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
-              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+              <span className="max-w-[70px] sm:max-w-none truncate">{userDisplayName}</span>
+              <span className="hidden sm:inline-block bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
                 {isOperator ? 'Operator' : 'Guru'}
               </span>
             </div>
 
+            {/* Tombol Logout (Selalu Terlihat di HP & Komputer) */}
             <button
               onClick={async () => {
                 await supabase.auth.signOut()
-                window.location.href = '/login'
+                router.replace('/login')
               }}
-              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
+              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-1.5 sm:p-2 rounded-xl transition cursor-pointer shrink-0"
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,60 +153,60 @@ export default function DashboardPage() {
         </header>
 
         {/* 3. MAIN CONTENT AREA */}
-        <main className="max-w-6xl mx-auto p-6 space-y-8">
+        <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
 
-          {/* TOP STATS ROW (KARTU GRADASI SOFT UNGU-BIRU) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition">
-              <div className="w-12 h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-xl shrink-0 shadow-xs">
+          {/* TOP STATS ROW */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-xs">
                 👥
               </div>
               <div>
-                <p className="text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Total Siswa</p>
-                <p className="text-2xl font-black text-slate-900">{isLoading ? '...' : totalSiswa}</p>
+                <p className="text-[10px] sm:text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Total Siswa</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{isLoading ? '...' : totalSiswa}</p>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition">
-              <div className="w-12 h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-xl shrink-0 shadow-xs">
+            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-xs">
                 🏫
               </div>
               <div>
-                <p className="text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Total Kelas</p>
-                <p className="text-2xl font-black text-slate-900">{isLoading ? '...' : totalKelas}</p>
+                <p className="text-[10px] sm:text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Total Kelas</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{isLoading ? '...' : totalKelas}</p>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition">
-              <div className="w-12 h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-xl shrink-0 shadow-xs">
+            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-xs">
                 👨‍🏫
               </div>
               <div>
-                <p className="text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Total Guru</p>
-                <p className="text-2xl font-black text-slate-900">{isLoading ? '...' : totalGuru}</p>
+                <p className="text-[10px] sm:text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Total Guru</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{isLoading ? '...' : totalGuru}</p>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition">
-              <div className="w-12 h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-xl shrink-0 shadow-xs">
+            <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-xs">
                 📋
               </div>
               <div>
-                <p className="text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Hadir Hari Ini</p>
-                <p className="text-lg font-black text-slate-900">{isLoading ? '...' : persentaseHadir}</p>
+                <p className="text-[10px] sm:text-[11px] font-bold text-indigo-900/70 uppercase tracking-wider">Hadir Hari Ini</p>
+                <p className="text-base sm:text-lg font-black text-slate-900">{isLoading ? '...' : persentaseHadir}</p>
               </div>
             </div>
           </div>
 
           {/* BANNER DEEP LEARNING AI PRO */}
-          <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 rounded-3xl p-8 text-white shadow-xl space-y-6 relative overflow-hidden border border-emerald-700/50">
-            <div className="inline-flex items-center gap-2 bg-amber-400 text-slate-950 text-[11px] font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-md">
+          <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl space-y-4 sm:space-y-6 relative overflow-hidden border border-emerald-700/50">
+            <div className="inline-flex items-center gap-2 bg-amber-400 text-slate-950 text-[10px] sm:text-[11px] font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-md">
               <span>DEEP LEARNING AI PRO</span>
               <span>✨</span>
             </div>
 
             <div className="space-y-2 max-w-2xl">
-              <h2 className="text-3xl font-black tracking-tight leading-tight text-white">
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight text-white">
                 Buat Modul Ajar Deep Learning Otomatis
               </h2>
               <p className="text-xs text-emerald-100 leading-relaxed font-medium">
@@ -194,7 +217,7 @@ export default function DashboardPage() {
             <div>
               <Link
                 href="/ai"
-                className="inline-flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold px-6 py-3 rounded-2xl text-xs transition shadow-lg cursor-pointer"
+                className="inline-flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-xs transition shadow-lg cursor-pointer"
               >
                 <span>✏️</span>
                 <span>Buka Modul Ajar AI</span>
@@ -202,19 +225,19 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* GRID MENU AKSES CEPAT (DENGAN GRADASI SOFT UNGU-BIRU) */}
+          {/* GRID MENU AKSES CEPAT */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
                 <span className="text-indigo-700">🔲</span> Akses Cepat Modul &amp; Menu Administrasi Guru
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               
-              {/* 1. KELOLA MASTER SISWA (KHUSUS OPERATOR) */}
+              {/* 1. KELOLA MASTER SISWA */}
               {isOperator && (
-                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
                     <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                       👥
@@ -236,9 +259,9 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 2. CETAK KARTU & QR CODE (KHUSUS OPERATOR) */}
+              {/* 2. CETAK KARTU & QR CODE */}
               {isOperator && (
-                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
                     <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                       🎴
@@ -260,8 +283,8 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 3. KELOLA MATA PELAJARAN (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 3. KELOLA MATA PELAJARAN */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     📖
@@ -282,8 +305,8 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 4. JADWAL MENGAJAR (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 4. JADWAL MENGAJAR */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     📅
@@ -304,8 +327,8 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 5. SCAN & INPUT ABSENSI (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 5. SCAN & INPUT ABSENSI */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     📋
@@ -326,8 +349,8 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 6. INPUT PENILAIAN & LEGER (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 6. INPUT PENILAIAN & LEGER */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     🎓
@@ -348,8 +371,8 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 7. AGENDA MENGAJAR GURU (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 7. AGENDA MENGAJAR GURU */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     📓
@@ -370,9 +393,9 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 8. BIMBINGAN GURU WALI (KHUSUS OPERATOR & WALI KELAS) */}
+              {/* 8. BIMBINGAN GURU WALI */}
               {canAccessBimbingan && (
-                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
                     <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                       💖
@@ -394,8 +417,8 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 9. MODUL AJAR DEEP LEARNING AI (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 9. MODUL AJAR DEEP LEARNING AI */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     ✨
@@ -416,8 +439,8 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 10. ASISTEN CHATBOT GURU AI (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 10. ASISTEN CHATBOT GURU AI */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     🤖
@@ -438,8 +461,8 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 11. PUSAT LAPORAN PDF (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 11. PUSAT LAPORAN PDF */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     📄
@@ -460,8 +483,8 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 12. PENGATURAN & PROFIL (SEMUA GURU) */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+              {/* 12. PENGATURAN & PROFIL */}
+              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
                     ⚙️
@@ -553,6 +576,6 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
