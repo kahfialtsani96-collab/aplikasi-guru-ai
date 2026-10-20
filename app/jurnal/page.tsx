@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
@@ -9,13 +10,29 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+interface OptionItem {
+  id: number
+  nama: string
+}
+
+interface MasterJamItem {
+  id: number
+  hari: string
+  jam_ke: number
+  waktu_mulai: string
+  waktu_selesai: string
+  keterangan: string
+}
+
 interface JurnalRecord {
-  id?: string
+  id?: number | string
   created_at?: string
   tanggal: string
   jam_ke: string
-  kelas: string
-  mapel: string
+  kelas_id?: number
+  mapel_id?: number
+  kelas?: string
+  mapel?: string
   materi: string
   status: 'Terlaksana' | 'Tertunda'
   absen_siswa: string
@@ -24,18 +41,24 @@ interface JurnalRecord {
 }
 
 export default function AgendaMengajarPage() {
+  const router = useRouter()
+  const { isOperator, canAccessBimbingan } = useAuthRole()
+
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
 
-  // Custom Hook Hak Akses
-  const { isOperator, canAccessBimbingan } = useAuthRole()
+  // Master Data Options
+  const [kelasList, setKelasList] = useState<OptionItem[]>([])
+  const [mapelList, setMapelList] = useState<OptionItem[]>([])
+  const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
 
   // State Input Jurnal Agenda
   const [tanggal, setTanggal] = useState('')
-  const [jamKe, setJamKe] = useState('1-2')
-  const [selectedKelas, setSelectedKelas] = useState('')
-  const [selectedMapel, setSelectedMapel] = useState('')
+  const [hari, setHari] = useState('Senin')
+  const [selectedJamKe, setSelectedJamKe] = useState('1')
+  const [selectedKelasId, setSelectedKelasId] = useState('')
+  const [selectedMapelId, setSelectedMapelId] = useState('')
   const [materi, setMateri] = useState('')
   const [status, setStatus] = useState<'Terlaksana' | 'Tertunda'>('Terlaksana')
   const [absenSiswa, setAbsenSiswa] = useState('Nihil')
@@ -45,10 +68,10 @@ export default function AgendaMengajarPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // State Riwayat & Rekapitulasi Agenda
+  // State Rekapitulasi Agenda
   const [rekapList, setRekapList] = useState<JurnalRecord[]>([])
-  const [filterKelas, setFilterKelas] = useState('')
-  const [filterMapel, setFilterMapel] = useState('')
+  const [filterKelasId, setFilterKelasId] = useState('')
+  const [filterMapelId, setFilterMapelId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [searchMateri, setSearchMateri] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
@@ -57,22 +80,71 @@ export default function AgendaMengajarPage() {
     async function initUser() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        setUserEmail(user.email || null)
-        const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'GURU'
+        const email = user.email || ''
+        setUserEmail(email)
+        const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
         setUserDisplayName(nameFromMeta.toUpperCase())
         
-        // Load data awal dengan email user
-        fetchJurnal(user.email)
+        fetchJadwalGuru(email)
+        fetchMasterJam()
+        fetchJurnal(email)
       }
     }
 
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayObj = new Date()
+    const todayStr = todayObj.toISOString().split('T')[0]
     setTanggal(todayStr)
+
+    // Deteksi Hari
+    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][todayObj.getDay()]
+    if (namaHari !== 'Jumat') {
+      setHari(namaHari)
+    }
 
     initUser()
   }, [])
 
-  // Load Jurnal Agenda (DIFILTER BERDASARKAN GURU_EMAIL)
+  // Fetch Slot Waktu dari Master Jam
+  async function fetchMasterJam() {
+    const { data } = await supabase.from('master_jam').select('*').order('jam_ke', { ascending: true })
+    if (data) setMasterJamList(data)
+  }
+
+  // Auto-Fetch Kelas & Mapel yang diampu oleh Guru yang login
+  async function fetchJadwalGuru(email: string) {
+    try {
+      const { data, error } = await supabase
+        .from('jadwal')
+        .select(`
+          kelas_id,
+          mapel_id,
+          kelas:kelas_id(id, nama_kelas),
+          mapel:mapel_id(id, nama_mapel)
+        `)
+        .eq('guru_email', email)
+
+      if (!error && data) {
+        const uniqueKelasMap = new Map<number, string>()
+        const uniqueMapelMap = new Map<number, string>()
+
+        data.forEach((item: any) => {
+          if (item.kelas && item.kelas.id) {
+            uniqueKelasMap.set(item.kelas.id, item.kelas.nama_kelas)
+          }
+          if (item.mapel && item.mapel.id) {
+            uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
+          }
+        })
+
+        setKelasList(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama })))
+        setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
+      }
+    } catch (err) {
+      console.error('Error fetching jadwal guru:', err)
+    }
+  }
+
+  // Load Jurnal Agenda milik Guru
   async function fetchJurnal(emailParam?: string | null) {
     const activeEmail = emailParam || userEmail
     if (!activeEmail) return
@@ -82,11 +154,11 @@ export default function AgendaMengajarPage() {
       const { data, error } = await supabase
         .from('jurnal_agenda')
         .select('*')
-        .eq('guru_email', activeEmail) // <-- Filter email guru
+        .eq('guru_email', activeEmail)
         .order('created_at', { ascending: false })
 
       if (!error && data) {
-        setJurnalList(data)
+        setJurnalList(data as any)
       }
     } catch (err) {
       console.error('Error fetching jurnal:', err)
@@ -95,7 +167,7 @@ export default function AgendaMengajarPage() {
     }
   }
 
-  // Load & Realtime Listener Rekapitulasi Jurnal (DIFILTER BERDASARKAN GURU_EMAIL)
+  // Fetch Rekapitulasi Jurnal
   const fetchRekap = async () => {
     if (!userEmail) return
 
@@ -104,18 +176,18 @@ export default function AgendaMengajarPage() {
       let query = supabase
         .from('jurnal_agenda')
         .select('*')
-        .eq('guru_email', userEmail) // <-- Filter email guru
+        .eq('guru_email', userEmail)
         .order('created_at', { ascending: false })
 
-      if (filterKelas) query = query.eq('kelas', filterKelas)
-      if (filterMapel) query = query.eq('mapel', filterMapel)
+      if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
+      if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
       if (filterStatus) query = query.eq('status', filterStatus)
       if (searchMateri.trim()) query = query.ilike('materi', `%${searchMateri.trim()}%`)
 
       const { data, error } = await query
 
       if (!error && data) {
-        setRekapList(data)
+        setRekapList(data as any)
       } else {
         setRekapList([])
       }
@@ -129,24 +201,16 @@ export default function AgendaMengajarPage() {
   useEffect(() => {
     if (activeTab === 'rekap' && userEmail) {
       fetchRekap()
-
-      const channel = supabase
-        .channel('realtime_jurnal_agenda')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'jurnal_agenda' }, () => {
-          fetchRekap()
-        })
-        .subscribe()
-
-      return () => {
-        supabase.removeChannel(channel)
-      }
     }
-  }, [activeTab, filterKelas, filterMapel, filterStatus, searchMateri, userEmail])
+  }, [activeTab, filterKelasId, filterMapelId, filterStatus, searchMateri, userEmail])
+
+  // Filter jam pelajaran berdasarkan hari yang terpilih
+  const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
 
   // Simpan Jurnal Agenda Baru
   const handleSimpanJurnal = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedKelas || !selectedMapel || !materi.trim() || !tanggal) {
+    if (!selectedKelasId || !selectedMapelId || !materi.trim() || !tanggal) {
       alert('Silakan lengkapi data Tanggal, Kelas, Mapel, dan Materi Pembelajaran!')
       return
     }
@@ -158,17 +222,29 @@ export default function AgendaMengajarPage() {
 
     setSaving(true)
     try {
+      const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
+      const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+
+      // Format teks Jam Ke dinamis sesuai master_jam
+      const jamDetail = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(selectedJamKe))
+      const ketInfo = jamDetail?.keterangan && jamDetail.keterangan !== 'KBM' ? ` [${jamDetail.keterangan}]` : ''
+      const jamFormattedText = jamDetail
+        ? `Jam Ke-${jamDetail.jam_ke} (${jamDetail.waktu_mulai.slice(0, 5)} - ${jamDetail.waktu_selesai.slice(0, 5)})${ketInfo}`
+        : `Jam Ke-${selectedJamKe}`
+
       const { error } = await supabase.from('jurnal_agenda').insert([
         {
           tanggal,
-          jam_ke: jamKe.trim(),
-          kelas: selectedKelas,
-          mapel: selectedMapel,
+          jam_ke: jamFormattedText,
+          kelas_id: Number(selectedKelasId),
+          mapel_id: Number(selectedMapelId),
+          kelas: selectedKelasObj?.nama || '',
+          mapel: selectedMapelObj?.nama || '',
           materi: materi.trim(),
           status,
           absen_siswa: absenSiswa.trim(),
           keterangan: keterangan.trim(),
-          guru_email: userEmail // <-- Menyimpan email guru penginput
+          guru_email: userEmail
         },
       ])
 
@@ -187,7 +263,7 @@ export default function AgendaMengajarPage() {
     }
   }
 
-  const handleDeleteJurnal = async (id?: string) => {
+  const handleDeleteJurnal = async (id?: number | string) => {
     if (!id || !confirm('Hapus jurnal agenda ini?')) return
 
     try {
@@ -201,52 +277,56 @@ export default function AgendaMengajarPage() {
     }
   }
 
-  // Akumulasi Statistik Rekapitulasi Jurnal
   const totalJurnal = rekapList.length
   const totalTerlaksana = rekapList.filter((item) => item.status === 'Terlaksana').length
   const totalTertunda = rekapList.filter((item) => item.status === 'Tertunda').length
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative">
-      <div>
-        {/* TOPBAR / HEADER */}
-        <header className="border-b border-slate-800/80 bg-[#0d1322]/90 backdrop-blur-md sticky top-0 z-50 px-6 py-3 flex items-center justify-between">
+    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
+      
+      {/* WATERMARK LOGO */}
+      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
+        <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
+      </div>
+
+      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+        
+        {/* HEADER TOPBAR */}
+        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-400 hover:text-white p-2 rounded-lg transition">
+            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-amber-400 text-slate-950 rounded-xl flex items-center justify-center font-bold text-xl shadow-md shadow-amber-400/20">
-                🎓
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+                <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-base text-white leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-sky-400 font-medium mt-1">Jurnal Agenda Mengajar</p>
+                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
+                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Jurnal Agenda Mengajar Harian</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Supabase Live</span>
-            </div>
-
-            <div className="bg-slate-800/80 border border-slate-700/60 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-semibold text-slate-200">
-              <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">
+            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
+              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+                {isOperator ? 'Operator' : 'Guru'}
+              </span>
             </div>
 
             <button
               onClick={async () => {
                 await supabase.auth.signOut()
-                window.location.href = '/login'
+                router.replace('/login')
               }}
-              className="bg-rose-950/40 border border-rose-800/50 hover:bg-rose-900/60 text-rose-400 p-2 rounded-xl transition cursor-pointer"
+              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -257,276 +337,251 @@ export default function AgendaMengajarPage() {
         </header>
 
         {/* SUB-NAVBAR AKADEMIK */}
-        <div className="bg-[#0d1322] border-b border-slate-800/80 px-6 py-2.5 overflow-x-auto">
-          <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-medium">
-            <span className="text-sky-400 font-bold flex items-center gap-1 pr-2 border-r border-slate-800">
+        <div className="bg-slate-200/80 backdrop-blur-md border-b border-slate-300 px-6 py-2 shrink-0 overflow-x-auto print:hidden">
+          <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
+            <span className="text-indigo-900 font-black pr-2 border-r border-slate-300 flex items-center gap-1">
               🎓 Akademik:
             </span>
-            <Link href="/jadwal" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+            <Link href="/jadwal" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
               <span>🕒</span> Jadwal Mengajar
             </Link>
-            <Link href="/absensi" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+            <Link href="/absensi" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
               <span>📋</span> Input Absensi
             </Link>
-            <Link href="/nilai" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+            <Link href="/nilai" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
               <span>⭐</span> Input Penilaian
             </Link>
-            <Link href="/jurnal" className="bg-blue-600 text-white px-3.5 py-1.5 rounded-xl shadow-md font-semibold flex items-center gap-1.5">
+            <Link href="/jurnal" className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl shadow-xs font-extrabold flex items-center gap-1.5">
               <span>📓</span> Agenda Mengajar
             </Link>
-
-            {/* TAB BIMBINGAN HANYA MUNCUL JIKA WALI KELAS / OPERATOR */}
             {canAccessBimbingan && (
-              <Link href="/bimbingan" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+              <Link href="/bimbingan" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
                 <span>💖</span> Bimbingan Guru Wali
               </Link>
             )}
           </div>
         </div>
 
-        {/* MAIN CONTENT */}
-        <main className="max-w-6xl mx-auto p-6 space-y-6">
+        {/* MAIN CONTENT AREA */}
+        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
           
-          {/* TAB MODE SWITCHER */}
-          <div className="grid grid-cols-2 bg-[#0d1322] p-1.5 rounded-2xl border border-slate-800 max-w-2xl text-xs font-bold">
-            <button
-              onClick={() => setActiveTab('input')}
-              className={`py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
-                activeTab === 'input' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>📅</span> Input Jurnal Agenda
-            </button>
-            <button
-              onClick={() => setActiveTab('rekap')}
-              className={`py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
-                activeTab === 'rekap' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>📜</span> Riwayat &amp; Rekapitulasi Agenda
-            </button>
+          {/* TAB MODE BAR */}
+          <div className="flex items-center justify-between shrink-0 print:hidden">
+            <div className="grid grid-cols-2 bg-slate-200/90 p-1 rounded-xl border border-slate-300 max-w-md text-xs font-extrabold flex-1">
+              <button
+                onClick={() => setActiveTab('input')}
+                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === 'input' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                <span>📅</span> Input Jurnal Agenda
+              </button>
+              <button
+                onClick={() => setActiveTab('rekap')}
+                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === 'rekap' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                <span>📜</span> Riwayat &amp; Rekapitulasi
+              </button>
+            </div>
           </div>
 
-          {/* TAB CONTENT 1: INPUT JURNAL AGENDA */}
+          {/* TAB 1: INPUT JURNAL */}
           {activeTab === 'input' && (
-            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-6 min-h-[460px] space-y-6">
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 border-b border-slate-800/80 pb-5">
-                  <div className="w-10 h-10 bg-blue-950/80 text-blue-400 rounded-xl flex items-center justify-center text-lg">
-                    📅
+            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+              
+              {/* FORM INPUT */}
+              <form onSubmit={handleSimpanJurnal} className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden space-y-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">TANGGAL *</label>
+                    <input
+                      type="date"
+                      value={tanggal}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setTanggal(val)
+                        if (val) {
+                          const d = new Date(val)
+                          const nHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
+                          if (nHari !== 'Jumat') setHari(nHari)
+                        }
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      required
+                    />
                   </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Jurnal Agenda Mengajar Harian</h2>
-                    <p className="text-xs text-slate-400">
-                      Catat keterlaksanaan materi harian, jam ke, dan kendala siswa.
-                    </p>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">HARI *</label>
+                    <select
+                      value={hari}
+                      onChange={(e) => {
+                        setHari(e.target.value)
+                        setSelectedJamKe('1')
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                    >
+                      <option value="Senin">Senin</option>
+                      <option value="Selasa">Selasa</option>
+                      <option value="Rabu">Rabu</option>
+                      <option value="Kamis">Kamis</option>
+                      <option value="Sabtu">Sabtu</option>
+                      <option value="Minggu">Minggu</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">JAM MENGAJAR DINAMIS *</label>
+                    <select
+                      value={selectedJamKe}
+                      onChange={(e) => setSelectedJamKe(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                    >
+                      {jamOptionsForHari.length > 0 ? (
+                        jamOptionsForHari.map((j) => (
+                          <option key={j.id} value={j.jam_ke}>
+                            Jam Ke-{j.jam_ke} ({j.waktu_mulai.slice(0, 5)} - {j.waktu_selesai.slice(0, 5)}){j.keterangan !== 'KBM' ? ` [${j.keterangan}]` : ''}
+                          </option>
+                        ))
+                      ) : (
+                        [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                          <option key={num} value={num}>Jam Ke-{num}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">KELAS DIAJAR *</label>
+                    <select
+                      value={selectedKelasId}
+                      onChange={(e) => setSelectedKelasId(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      required
+                    >
+                      <option value="">-- Pilih Kelas --</option>
+                      {kelasList.map((k) => (
+                        <option key={k.id} value={k.id}>{k.nama}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">MAPEL DIAJAR *</label>
+                    <select
+                      value={selectedMapelId}
+                      onChange={(e) => setSelectedMapelId(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      required
+                    >
+                      <option value="">-- Pilih Mapel --</option>
+                      {mapelList.map((m) => (
+                        <option key={m.id} value={m.id}>{m.nama}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
-                {/* Form Input Jurnal Agenda */}
-                <form onSubmit={handleSimpanJurnal} className="bg-[#0d1322]/80 border border-slate-800/80 p-5 rounded-xl space-y-4">
-                  {/* Row 1 */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                    <div className="md:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        TANGGAL *
-                      </label>
-                      <input
-                        type="date"
-                        value={tanggal}
-                        onChange={(e) => setTanggal(e.target.value)}
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                        required
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        JAM KE *
-                      </label>
-                      <input
-                        type="text"
-                        value={jamKe}
-                        onChange={(e) => setJamKe(e.target.value)}
-                        placeholder="1-2"
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                        required
-                      />
-                    </div>
-
-                    <div className="md:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        KELAS *
-                      </label>
-                      <select
-                        value={selectedKelas}
-                        onChange={(e) => setSelectedKelas(e.target.value)}
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                        required
-                      >
-                        <option value="">Pilih Kelas</option>
-                        <option value="Kelas VII A">Kelas VII A</option>
-                        <option value="Kelas VII B">Kelas VII B</option>
-                        <option value="Kelas VIII A">Kelas VIII A</option>
-                        <option value="Kelas VIII B">Kelas VIII B</option>
-                        <option value="Kelas IX A">Kelas IX A</option>
-                        <option value="Kelas IX B">Kelas IX B</option>
-                      </select>
-                    </div>
-
-                    <div className="md:col-span-4">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        MATA PELAJARAN *
-                      </label>
-                      <select
-                        value={selectedMapel}
-                        onChange={(e) => setSelectedMapel(e.target.value)}
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                        required
-                      >
-                        <option value="">Pilih Mapel</option>
-                        <option value="Pendidikan Agama Islam dan Budi Pekerti">Pendidikan Agama Islam dan Budi Pekerti</option>
-                        <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
-                        <option value="Pembelajaran Berbasis Projek">Pembelajaran Berbasis Projek</option>
-                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                        <option value="Bahasa Inggris">Bahasa Inggris</option>
-                        <option value="Matematika (Umum)">Matematika (Umum)</option>
-                        <option value="Ilmu Pengetahuan Alam (IPA)">Ilmu Pengetahuan Alam (IPA)</option>
-                        <option value="Ilmu Pengetahuan Sosial (IPS)">Ilmu Pengetahuan Sosial (IPS)</option>
-                        <option value="Informatika">Informatika</option>
-                        <option value="Pendidikan Jasmani, Olahraga, dan Kesehatan">Pendidikan Jasmani, Olahraga, dan Kesehatan</option>
-                        <option value="Seni, Budaya dan Prakarya">Seni, Budaya dan Prakarya</option>
-                        <option value="Bahasa Lampung (Mulok)">Bahasa Lampung (Mulok)</option>
-                        <option value="Kejuruan Pertanian">Kejuruan Pertanian</option>
-                        <option value="Bimbingan dan Konseling (BP/BK)">Bimbingan dan Konseling (BP/BK)</option>
-                      </select>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  <div className="sm:col-span-5">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">MATERI PEMBELAJARAN *</label>
+                    <input
+                      type="text"
+                      value={materi}
+                      onChange={(e) => setMateri(e.target.value)}
+                      placeholder="Detail materi atau modul yang diajarkan..."
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      required
+                    />
                   </div>
 
-                  {/* Row 2 */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                    <div className="md:col-span-6">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        MATERI PEMBELAJARAN *
-                      </label>
-                      <input
-                        type="text"
-                        value={materi}
-                        onChange={(e) => setMateri(e.target.value)}
-                        placeholder="Detail materi atau modul yang diajarkan"
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                        required
-                      />
-                    </div>
-
-                    <div className="md:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        STATUS KETERLAKSANAAN
-                      </label>
-                      <select
-                        value={status}
-                        onChange={(e) => setStatus(e.target.value as 'Terlaksana' | 'Tertunda')}
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                      >
-                        <option value="Terlaksana">Terlaksana</option>
-                        <option value="Tertunda">Tertunda</option>
-                      </select>
-                    </div>
-
-                    <div className="md:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        ABSEN SISWA
-                      </label>
-                      <input
-                        type="text"
-                        value={absenSiswa}
-                        onChange={(e) => setAbsenSiswa(e.target.value)}
-                        placeholder="Nihil"
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">STATUS</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as 'Terlaksana' | 'Tertunda')}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                    >
+                      <option value="Terlaksana">Terlaksana</option>
+                      <option value="Tertunda">Tertunda</option>
+                    </select>
                   </div>
 
-                  {/* Row 3 */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    <div className="md:col-span-9">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        KETERANGAN / CATATAN TAMBAHAN
-                      </label>
-                      <input
-                        type="text"
-                        value={keterangan}
-                        onChange={(e) => setKeterangan(e.target.value)}
-                        placeholder="Opsional (misal: diskusi kelompok lancar)"
-                        className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div className="md:col-span-3">
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <span>+ Simpan Jurnal</span>
-                      </button>
-                    </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">ABSEN SISWA</label>
+                    <input
+                      type="text"
+                      value={absenSiswa}
+                      onChange={(e) => setAbsenSiswa(e.target.value)}
+                      placeholder="Nihil"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                    />
                   </div>
-                </form>
 
-                {/* Tabel Data Jurnal Agenda */}
-                <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+                  <div className="sm:col-span-2">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-1.5 rounded-xl text-xs transition shadow-xs cursor-pointer"
+                    >
+                      + Simpan Jurnal
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* TABEL DATA JURNAL */}
+              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
+                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
                   <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-[#0d1322] text-slate-400 border-b border-slate-800 font-bold uppercase tracking-wider">
-                        <th className="py-3 px-4">TANGGAL</th>
-                        <th className="py-3 px-4">JAM</th>
-                        <th className="py-3 px-4">KELAS &amp; MAPEL</th>
-                        <th className="py-3 px-4">MATERI PEMBELAJARAN</th>
-                        <th className="py-3 px-4 text-center">STATUS</th>
-                        <th className="py-3 px-4 text-center">ABSEN</th>
-                        <th className="py-3 px-4 text-center w-24">AKSI</th>
+                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
+                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                        <th className="py-2.5 px-3">TANGGAL</th>
+                        <th className="py-2.5 px-3">JAM MENGAJAR</th>
+                        <th className="py-2.5 px-3">KELAS &amp; MAPEL</th>
+                        <th className="py-2.5 px-3">MATERI PEMBELAJARAN</th>
+                        <th className="py-2.5 px-3 text-center">STATUS</th>
+                        <th className="py-2.5 px-3 text-center">ABSEN</th>
+                        <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    <tbody className="divide-y divide-slate-200 text-slate-800">
                       {loading ? (
                         <tr>
-                          <td colSpan={7} className="py-12 text-center text-slate-400">
-                            Memuat daftar agenda mengajar...
-                          </td>
+                          <td colSpan={7} className="py-10 text-center text-slate-600 font-medium">Memuat data agenda...</td>
                         </tr>
                       ) : jurnalList.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="py-16 text-center text-slate-500">
-                            Belum ada jurnal agenda mengajar.
-                          </td>
+                          <td colSpan={7} className="py-10 text-center text-slate-600 font-medium">Belum ada jurnal agenda tersimpan.</td>
                         </tr>
                       ) : (
                         jurnalList.map((item, index) => (
-                          <tr key={item.id || index} className="hover:bg-slate-800/40 transition">
-                            <td className="py-3 px-4 font-mono text-slate-300">{item.tanggal}</td>
-                            <td className="py-3 px-4 font-mono text-slate-400">{item.jam_ke}</td>
-                            <td className="py-3 px-4">
-                              <span className="font-semibold text-white">{item.kelas}</span>
-                              <span className="block text-[10px] text-sky-400">{item.mapel}</span>
+                          <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
+                            <td className="py-2 px-3 font-mono font-bold text-slate-700">{item.tanggal}</td>
+                            <td className="py-2 px-3 font-bold text-indigo-900">{item.jam_ke}</td>
+                            <td className="py-2 px-3">
+                              <span className="font-extrabold text-slate-900">{item.kelas}</span>
+                              <span className="block text-[10px] font-bold text-emerald-800">{item.mapel}</span>
                             </td>
-                            <td className="py-3 px-4 font-medium text-slate-200">{item.materi}</td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-2 px-3 font-bold text-slate-800">{item.materi}</td>
+                            <td className="py-2 px-3 text-center">
                               <span
-                                className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase ${
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
                                   item.status === 'Terlaksana'
-                                    ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50'
-                                    : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : 'bg-rose-100 text-rose-800 border border-rose-300'
                                 }`}
                               >
                                 {item.status}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-center text-slate-400">{item.absen_siswa}</td>
-                            <td className="py-3 px-4 text-center">
+                            <td className="py-2 px-3 text-center font-bold text-slate-600">{item.absen_siswa}</td>
+                            <td className="py-2 px-3 text-center print:hidden">
                               <button
                                 onClick={() => handleDeleteJurnal(item.id)}
-                                className="bg-rose-950/60 text-rose-400 hover:bg-rose-900/80 p-1.5 rounded-lg border border-rose-800/50 transition cursor-pointer"
+                                className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
                                 title="Hapus Jurnal"
                               >
                                 🗑️
@@ -539,98 +594,66 @@ export default function AgendaMengajarPage() {
                   </table>
                 </div>
               </div>
+
             </div>
           )}
 
-          {/* TAB CONTENT 2: RIWAYAT & REKAPITULASI JURNAL AGENDA */}
+          {/* TAB 2: REKAPITULASI */}
           {activeTab === 'rekap' && (
-            <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-6 min-h-[480px] space-y-6">
+            <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
-              {/* Header Title Section */}
-              <div className="flex items-center gap-3 border-b border-slate-800/80 pb-5">
-                <div className="w-10 h-10 bg-indigo-950/80 text-indigo-400 rounded-xl flex items-center justify-center text-lg">
-                  📜
+              {/* STAT CARDS */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 max-w-md">
+                <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-xl p-2.5 shadow-xs">
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase">TOTAL JURNAL</p>
+                  <p className="text-lg font-black text-slate-900 mt-0.5">{totalJurnal}</p>
                 </div>
+                <div className="bg-white/90 backdrop-blur-md border border-emerald-200 rounded-xl p-2.5 shadow-xs">
+                  <p className="text-[10px] font-extrabold text-emerald-700 uppercase">TERLAKSANA</p>
+                  <p className="text-lg font-black text-emerald-900 mt-0.5">{totalTerlaksana}</p>
+                </div>
+                <div className="bg-white/90 backdrop-blur-md border border-rose-200 rounded-xl p-2.5 shadow-xs">
+                  <p className="text-[10px] font-extrabold text-rose-700 uppercase">TERTUNDA</p>
+                  <p className="text-lg font-black text-rose-900 mt-0.5">{totalTertunda}</p>
+                </div>
+              </div>
+
+              {/* FILTER BAR REKAP */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 p-3 rounded-2xl shrink-0 shadow-xs">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Riwayat &amp; Rekapitulasi Jurnal Agenda</h2>
-                  <p className="text-xs text-slate-400">
-                    Rekapitulasi lengkap seluruh jurnal mengajar. Anda dapat mengedit, menyimpan pembaruan, atau menghapus entri.
-                  </p>
-                </div>
-              </div>
-
-              {/* STAT CARDS REKAPITULASI JURNAL */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-[#0d1322] border border-slate-800/80 rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TOTAL JURNAL</p>
-                  <p className="text-2xl font-extrabold text-white mt-1">{totalJurnal}</p>
-                </div>
-                <div className="bg-[#0d1322] border border-emerald-900/40 rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">TERLAKSANA</p>
-                  <p className="text-2xl font-extrabold text-emerald-400 mt-1">{totalTerlaksana}</p>
-                </div>
-                <div className="bg-[#0d1322] border border-amber-900/40 rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">TERTUNDA</p>
-                  <p className="text-2xl font-extrabold text-amber-400 mt-1">{totalTertunda}</p>
-                </div>
-              </div>
-
-              {/* FILTER BAR REKAPITULASI */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 bg-[#0d1322]/80 border border-slate-800/80 p-4 rounded-xl">
-                <div className="md:col-span-3">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    FILTER KELAS
-                  </label>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER KELAS</label>
                   <select
-                    value={filterKelas}
-                    onChange={(e) => setFilterKelas(e.target.value)}
-                    className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    value={filterKelasId}
+                    onChange={(e) => setFilterKelasId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
                   >
                     <option value="">Semua Kelas</option>
-                    <option value="Kelas VII A">Kelas VII A</option>
-                    <option value="Kelas VII B">Kelas VII B</option>
-                    <option value="Kelas VIII A">Kelas VIII A</option>
-                    <option value="Kelas VIII B">Kelas VIII B</option>
-                    <option value="Kelas IX A">Kelas IX A</option>
-                    <option value="Kelas IX B">Kelas IX B</option>
+                    {kelasList.map((k) => (
+                      <option key={k.id} value={k.id}>{k.nama}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="md:col-span-3">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    FILTER MAPEL
-                  </label>
+                <div>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER MAPEL</label>
                   <select
-                    value={filterMapel}
-                    onChange={(e) => setFilterMapel(e.target.value)}
-                    className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    value={filterMapelId}
+                    onChange={(e) => setFilterMapelId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
                   >
                     <option value="">Semua Mapel</option>
-                    <option value="Pendidikan Agama Islam dan Budi Pekerti">Pendidikan Agama Islam dan Budi Pekerti</option>
-                    <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
-                    <option value="Pembelajaran Berbasis Projek">Pembelajaran Berbasis Projek</option>
-                    <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                    <option value="Bahasa Inggris">Bahasa Inggris</option>
-                    <option value="Matematika (Umum)">Matematika (Umum)</option>
-                    <option value="Ilmu Pengetahuan Alam (IPA)">Ilmu Pengetahuan Alam (IPA)</option>
-                    <option value="Ilmu Pengetahuan Sosial (IPS)">Ilmu Pengetahuan Sosial (IPS)</option>
-                    <option value="Informatika">Informatika</option>
-                    <option value="Pendidikan Jasmani, Olahraga, dan Kesehatan">Pendidikan Jasmani, Olahraga, dan Kesehatan</option>
-                    <option value="Seni, Budaya dan Prakarya">Seni, Budaya dan Prakarya</option>
-                    <option value="Bahasa Lampung (Mulok)">Bahasa Lampung (Mulok)</option>
-                    <option value="Kejuruan Pertanian">Kejuruan Pertanian</option>
-                    <option value="Bimbingan dan Konseling (BP/BK)">Bimbingan dan Konseling (BP/BK)</option>
+                    {mapelList.map((m) => (
+                      <option key={m.id} value={m.id}>{m.nama}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="md:col-span-3">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    FILTER STATUS
-                  </label>
+                <div>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER STATUS</label>
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
                   >
                     <option value="">Semua Status</option>
                     <option value="Terlaksana">Terlaksana</option>
@@ -638,170 +661,133 @@ export default function AgendaMengajarPage() {
                   </select>
                 </div>
 
-                <div className="md:col-span-3">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    CARI MATERI
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-xs">
-                      🔍
-                    </span>
-                    <input
-                      type="text"
-                      value={searchMateri}
-                      onChange={(e) => setSearchMateri(e.target.value)}
-                      placeholder="Ketik materi..."
-                      className="w-full bg-[#111827] border border-slate-800 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">CARI MATERI</label>
+                  <input
+                    type="text"
+                    value={searchMateri}
+                    onChange={(e) => setSearchMateri(e.target.value)}
+                    placeholder="Materi..."
+                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* TABEL DATA REKAPITULASI JURNAL */}
-              <div className="overflow-x-auto rounded-xl border border-slate-800/80">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-[#0d1322] text-slate-400 border-b border-slate-800 font-bold uppercase tracking-wider">
-                      <th className="py-3 px-4 w-12 text-center">NO</th>
-                      <th className="py-3 px-4">TANGGAL</th>
-                      <th className="py-3 px-4">JAM</th>
-                      <th className="py-3 px-4">KELAS &amp; MAPEL</th>
-                      <th className="py-3 px-4">MATERI PEMBELAJARAN</th>
-                      <th className="py-3 px-4 text-center">STATUS</th>
-                      <th className="py-3 px-4 text-center">ABSEN</th>
-                      <th className="py-3 px-4 text-center w-24">AKSI</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                    {loadingRekap ? (
-                      <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400">
-                          Memuat data riwayat agenda...
-                        </td>
+              {/* TABEL REKAP */}
+              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
+                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
+                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                        <th className="py-2.5 px-3 w-12 text-center">NO</th>
+                        <th className="py-2.5 px-3">TANGGAL</th>
+                        <th className="py-2.5 px-3">JAM MENGAJAR</th>
+                        <th className="py-2.5 px-3">KELAS &amp; MAPEL</th>
+                        <th className="py-2.5 px-3">MATERI PEMBELAJARAN</th>
+                        <th className="py-2.5 px-3 text-center">STATUS</th>
+                        <th className="py-2.5 px-3 text-center">ABSEN</th>
+                        <th className="py-2.5 px-3 text-center w-20">AKSI</th>
                       </tr>
-                    ) : rekapList.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-20 text-center text-slate-500">
-                          Tidak ada data jurnal agenda ditemukan.
-                        </td>
-                      </tr>
-                    ) : (
-                      rekapList.map((item, index) => (
-                        <tr key={item.id || index} className="hover:bg-slate-800/40 transition">
-                          <td className="py-3 px-4 text-center font-medium text-slate-400">{index + 1}</td>
-                          <td className="py-3 px-4 font-mono text-slate-300">{item.tanggal}</td>
-                          <td className="py-3 px-4 font-mono text-slate-400">{item.jam_ke}</td>
-                          <td className="py-3 px-4">
-                            <span className="font-semibold text-white">{item.kelas}</span>
-                            <span className="block text-[10px] text-sky-400">{item.mapel}</span>
-                          </td>
-                          <td className="py-3 px-4 font-medium text-slate-200">{item.materi}</td>
-                          <td className="py-3 px-4 text-center">
-                            <span
-                              className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase ${
-                                item.status === 'Terlaksana'
-                                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50'
-                                  : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'
-                              }`}
-                            >
-                              {item.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center text-slate-400">{item.absen_siswa}</td>
-                          <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => handleDeleteJurnal(item.id)}
-                              className="bg-rose-950/60 text-rose-400 hover:bg-rose-900/80 p-1.5 rounded-lg border border-rose-800/50 transition cursor-pointer"
-                              title="Hapus Jurnal"
-                            >
-                              🗑️
-                            </button>
-                          </td>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 text-slate-800">
+                      {loadingRekap ? (
+                        <tr>
+                          <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">Memuat data rekap...</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : rekapList.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">Tidak ada data jurnal ditemukan.</td>
+                        </tr>
+                      ) : (
+                        rekapList.map((item, index) => (
+                          <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
+                            <td className="py-2 px-3 text-center font-bold text-slate-500">{index + 1}</td>
+                            <td className="py-2 px-3 font-mono font-bold text-slate-700">{item.tanggal}</td>
+                            <td className="py-2 px-3 font-bold text-indigo-900">{item.jam_ke}</td>
+                            <td className="py-2 px-3">
+                              <span className="font-extrabold text-slate-900">{item.kelas}</span>
+                              <span className="block text-[10px] font-bold text-emerald-800">{item.mapel}</span>
+                            </td>
+                            <td className="py-2 px-3 font-bold text-slate-800">{item.materi}</td>
+                            <td className="py-2 px-3 text-center">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                                  item.status === 'Terlaksana'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                }`}
+                              >
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center font-bold text-slate-600">{item.absen_siswa}</td>
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                onClick={() => handleDeleteJurnal(item.id)}
+                                className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
+                                title="Hapus Jurnal"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
             </div>
           )}
 
-          {/* BADGE COPYRIGHT TEKS NAMA MUZAINI AL KAHFI PERSIS DI BAWAH APLIKASI */}
-          <div className="pt-6 pb-2 flex justify-center">
-            <div className="bg-[#10192e] border border-slate-800/80 px-5 py-2 rounded-full text-center text-xs text-slate-400 shadow-md">
-              <span>Aplikasi Guru AI</span>
-              <span className="mx-2">•</span>
-              <span>Created by <strong className="text-sky-400 font-bold">MUZAINI AL KAHFI</strong></span>
-            </div>
-          </div>
-
         </main>
+
+        {/* FOOTER BADGE */}
+        <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
+          <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+            <span>Aplikasi Guru AI</span>
+            <span className="mx-2">•</span>
+            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+          </div>
+        </div>
+
       </div>
 
-      {/* BOTTOM NAVIGATION DOCK & FOOTER (KONDISIONAL ROLE) */}
-      <div className="border-t border-slate-800/80 bg-[#0d1322]/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50">
-        <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-          >
-            <span className="text-lg">🕒</span>
+      {/* BOTTOM NAVIGATION DOCK */}
+      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
+        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
+          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link
-              href="/siswa"
-              className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-            >
-              <span className="text-lg">👥</span>
+            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+              <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link
-              href="/guru"
-              className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-            >
-              <span className="text-lg">👨‍🏫</span>
+            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+              <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link
-            href="/jurnal"
-            className="flex flex-col items-center gap-1 text-xs text-sky-400 font-bold transition"
-          >
-            <span className="text-lg">🎓</span>
+          <Link href="/jurnal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-600 transition">
+            <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link
-            href="/ai"
-            className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-          >
-            <span className="text-lg">✨</span>
-            <span>AI Tools</span>
-          </Link>
-
-          <Link
-            href="/laporan"
-            className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-          >
-            <span className="text-lg">🖨️</span>
+          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
-
-        {/* Developer Attribution Sub-Footer */}
-        <div className="bg-[#070a12] py-2 text-center text-[11px] text-slate-500 border-t border-slate-900 flex items-center justify-center gap-2">
-          <span>Aplikasi Guru AI</span>
-          <span>•</span>
-          <span>Created by <strong className="text-slate-300 font-semibold">MUZAINI AL KAHFI</strong></span>
-        </div>
       </div>
+
     </div>
   )
 }

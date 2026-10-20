@@ -31,20 +31,17 @@ export default function DashboardPage() {
       // 1. AUTH GUARD: Cek apakah user sudah login
       const { data: { session } } = await supabase.auth.getSession()
       
-      // Jika TIDAK ADA sesi login, langsung lemparkan ke /login
       if (!session) {
         router.replace('/login')
         return
       }
 
-      // Ambil data user
       const user = session.user
       if (user) {
         const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'GURU'
         setUserDisplayName(nameFromMeta.toUpperCase())
       }
 
-      // Ambil data statistik dari Supabase
       const { count: countSiswa } = await supabase
         .from('siswa')
         .select('*', { count: 'exact', head: true })
@@ -90,7 +87,7 @@ export default function DashboardPage() {
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="min-h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden"
     >
-      {/* 1. FIXED BACKGROUND WATERMARK LOGO SCHOOL */}
+      {/* WATERMARK LOGO */}
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
         <img
           src="/logo-smp.jpg"
@@ -100,9 +97,8 @@ export default function DashboardPage() {
       </div>
 
       <div className="relative z-10">
-        {/* 2. HEADER TOPBAR GLASSMORPHISM (RESPONSIVE HP FIXED) */}
+        {/* HEADER TOPBAR */}
         <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xs gap-2">
-          {/* Sisi Kiri: Logo & Nama Sekolah */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
               <img
@@ -117,15 +113,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Sisi Kanan: Status, User, & Tombol Logout */}
           <div className="flex items-center gap-1.5 sm:gap-3">
-            {/* Sembunyikan badge Supabase Live di layar HP kecil agar tidak sempit */}
             <div className="hidden md:flex bg-emerald-100/80 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-full items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
               <span>Supabase Live</span>
             </div>
 
-            {/* User Chip */}
             <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                 {userDisplayName.charAt(0)}
@@ -136,7 +129,6 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* Tombol Logout (Selalu Terlihat di HP & Komputer) */}
             <button
               onClick={async () => {
                 await supabase.auth.signOut()
@@ -152,10 +144,10 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* 3. MAIN CONTENT AREA */}
+        {/* MAIN CONTENT AREA */}
         <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
 
-          {/* TOP STATS ROW */}
+          {/* STATISTIK TOP */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-gradient-to-br from-[#dbe2fe]/90 via-[#e0e7ff]/90 to-[#eef2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition">
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/80 border border-indigo-200 text-indigo-600 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-xs">
@@ -235,7 +227,31 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               
-              {/* 1. KELOLA MASTER SISWA */}
+              {/* KELOLA KELAS & WALI KELAS */}
+              {isOperator && (
+                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
+                      🏫
+                    </div>
+                    <span className="bg-white/80 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
+                      MANAJEMEN ROMBEL
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 text-base">Kelola Kelas &amp; Wali Kelas</h4>
+                    <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
+                      Atur rombongan belajar (Rombel), pemetaan kelas, dan penugasan guru wali kelas.
+                    </p>
+                  </div>
+                  <Link href="/kelas" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                    <span>Buka Fitur</span>
+                    <span>➔</span>
+                  </Link>
+                </div>
+              )}
+
+              {/* KELOLA MASTER SISWA */}
               {isOperator && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -259,7 +275,55 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 2. CETAK KARTU & QR CODE */}
+              {/* KELOLA MATA PELAJARAN (SEKARANG MENGARAH KE /mapel) */}
+              {isOperator && (
+                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
+                      📖
+                    </div>
+                    <span className="bg-white/80 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
+                      KURIKULUM
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 text-base">Kelola Mata Pelajaran</h4>
+                    <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
+                      Atur daftar mapel, semester, dan alokasi jam mengajar harian.
+                    </p>
+                  </div>
+                  <Link href="/mapel" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                    <span>Buka Fitur</span>
+                    <span>➔</span>
+                  </Link>
+                </div>
+              )}
+
+              {/* ADMINISTRASI & PERSURATAN TU */}
+              {isOperator && (
+                <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
+                      📑
+                    </div>
+                    <span className="bg-white/80 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
+                      TATA USAHA
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 text-base">Administrasi &amp; Persuratan TU</h4>
+                    <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
+                      Penerbitan surat keterangan aktif, surat mutasi, undangan wali, dan arsip resmi TU.
+                    </p>
+                  </div>
+                  <Link href="/administrasi" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                    <span>Buka Fitur</span>
+                    <span>➔</span>
+                  </Link>
+                </div>
+              )}
+
+              {/* CETAK KARTU & QR CODE */}
               {isOperator && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -276,36 +340,14 @@ export default function DashboardPage() {
                       Cetak kartu pelajar resmi dengan QR Code presensi terintegrasi.
                     </p>
                   </div>
-                  <Link href="/siswa" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                  <Link href="/kartu" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
                     <span>Buka Fitur</span>
                     <span>➔</span>
                   </Link>
                 </div>
               )}
 
-              {/* 3. KELOLA MATA PELAJARAN */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
-                    📖
-                  </div>
-                  <span className="bg-white/80 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
-                    KURIKULUM
-                  </span>
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-slate-900 text-base">Kelola Mata Pelajaran</h4>
-                  <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
-                    Atur daftar mapel, semester, dan alokasi jam mengajar harian.
-                  </p>
-                </div>
-                <Link href="/jadwal" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
-                  <span>Buka Fitur</span>
-                  <span>➔</span>
-                </Link>
-              </div>
-
-              {/* 4. JADWAL MENGAJAR */}
+              {/* JADWAL MENGAJAR */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -327,7 +369,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 5. SCAN & INPUT ABSENSI */}
+              {/* SCAN & INPUT ABSENSI */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -349,7 +391,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 6. INPUT PENILAIAN & LEGER */}
+              {/* INPUT PENILAIAN & LEGER */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -371,7 +413,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 7. AGENDA MENGAJAR GURU */}
+              {/* AGENDA MENGAJAR GURU */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -393,7 +435,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 8. BIMBINGAN GURU WALI */}
+              {/* BIMBINGAN GURU WALI */}
               {canAccessBimbingan && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -410,14 +452,14 @@ export default function DashboardPage() {
                       Pencatatan konseling, apresiasi siswa &amp; tindak lanjut orang tua.
                     </p>
                   </div>
-                  <Link href="/laporan" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                  <Link href="/bimbingan" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
                     <span>Buka Fitur</span>
                     <span>➔</span>
                   </Link>
                 </div>
               )}
 
-              {/* 9. MODUL AJAR DEEP LEARNING AI */}
+              {/* MODUL AJAR DEEP LEARNING AI */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -439,7 +481,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 10. ASISTEN CHATBOT GURU AI */}
+              {/* ASISTEN CHATBOT GURU AI */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -461,7 +503,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* 11. PUSAT LAPORAN PDF */}
+              {/* PUSAT LAPORAN PDF */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -475,28 +517,6 @@ export default function DashboardPage() {
                   <h4 className="font-extrabold text-slate-900 text-base">Pusat Laporan PDF</h4>
                   <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
                     Cetak rekapitulasi presensi, leger nilai &amp; jurnal resmi ke PDF.
-                  </p>
-                </div>
-                <Link href="/laporan" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
-                  <span>Buka Fitur</span>
-                  <span>➔</span>
-                </Link>
-              </div>
-
-              {/* 12. PENGATURAN & PROFIL */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
-                    ⚙️
-                  </div>
-                  <span className="bg-white/80 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
-                    PROFIL &amp; SEKOLAH
-                  </span>
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-slate-900 text-base">Pengaturan &amp; Profil</h4>
-                  <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
-                    Kelola profil guru, NIP, instansi sekolah, &amp; gambar tanda tangan.
                   </p>
                 </div>
                 <Link href="/laporan" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
@@ -520,7 +540,7 @@ export default function DashboardPage() {
         </main>
       </div>
 
-      {/* 4. BOTTOM NAVIGATION DOCK */}
+      {/* BOTTOM NAVIGATION DOCK */}
       <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg">
         <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
           <Link

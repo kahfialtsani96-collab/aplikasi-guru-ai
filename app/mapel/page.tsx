@@ -2,33 +2,59 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 interface Mapel {
-  id?: string
+  id?: string | number
+  kode_mapel: string
   nama_mapel: string
+  kelompok: string
+  tingkat: string
+  jumlah_jp: number
   semester: string
   tahun_ajaran: string
+  urutan: number
 }
 
 export default function KelolaMapelPage() {
-  const [userDisplayName, setUserDisplayName] = useState('GURU')
+  const router = useRouter()
+  const { isOperator, loading: loadingRole } = useAuthRole()
+
+  const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
+  
+  // State Form Lengkap
+  const [kodeMapel, setKodeMapel] = useState('')
   const [namaMapel, setNamaMapel] = useState('')
+  const [kelompok, setKelompok] = useState('Umum')
+  const [tingkat, setTingkat] = useState('VII')
+  const [jumlahJp, setJumlahJp] = useState<number>(2)
   const [semester, setSemester] = useState('Ganjil')
   const [tahunAjaran, setTahunAjaran] = useState('2026/2027')
+  const [urutan, setUrutan] = useState<number>(1)
+  
+  const [editingId, setEditingId] = useState<string | number | null>(null)
   const [mapelList, setMapelList] = useState<Mapel[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Guard Akses Operator
+  useEffect(() => {
+    if (!loadingRole && !isOperator) {
+      router.push('/')
+    }
+  }, [loadingRole, isOperator, router])
 
   useEffect(() => {
-    // Ambil data akun user dari Supabase Auth
     async function getUserData() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'GURU'
+        const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'OPERATOR'
         setUserDisplayName(nameFromMeta.toUpperCase())
       }
     }
@@ -36,14 +62,14 @@ export default function KelolaMapelPage() {
     fetchMapel()
   }, [])
 
-  // Ambil daftar mata pelajaran dari Supabase
+  // Fetch Daftar Mapel
   async function fetchMapel() {
     setLoading(true)
     try {
       const { data, error } = await supabase
         .from('mapel')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('urutan', { ascending: true })
 
       if (!error && data) {
         setMapelList(data)
@@ -55,95 +81,164 @@ export default function KelolaMapelPage() {
     }
   }
 
-  // Tambah Mata Pelajaran Baru
-  const handleTambahMapel = async (e: React.FormEvent) => {
+  const resetForm = () => {
+    setKodeMapel('')
+    setNamaMapel('')
+    setKelompok('Umum')
+    setTingkat('VII')
+    setJumlahJp(2)
+    setSemester('Ganjil')
+    setTahunAjaran('2026/2027')
+    setUrutan(mapelList.length + 1)
+    setEditingId(null)
+  }
+
+  // Simpan / Update Mapel
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!namaMapel.trim()) return
+    if (!kodeMapel.trim() || !namaMapel.trim()) {
+      alert('Kode dan Nama Mata Pelajaran wajib diisi!')
+      return
+    }
+
+    setLoading(true)
+    const payload = {
+      kode_mapel: kodeMapel.trim().toUpperCase(),
+      nama_mapel: namaMapel.trim(),
+      kelompok: kelompok,
+      tingkat: tingkat,
+      jumlah_jp: Number(jumlahJp) || 2,
+      semester: semester,
+      tahun_ajaran: tahunAjaran.trim(),
+      urutan: Number(urutan) || 1,
+    }
 
     try {
-      const { error } = await supabase.from('mapel').insert([
-        {
-          nama_mapel: namaMapel.trim(),
-          semester: semester,
-          tahun_ajaran: tahunAjaran.trim(),
-        },
-      ])
-
-      if (error) {
-        alert('Gagal menambah mata pelajaran: ' + error.message)
+      if (editingId) {
+        const { error } = await supabase.from('mapel').update(payload).eq('id', editingId)
+        if (!error) {
+          alert('Mata pelajaran berhasil diperbarui!')
+          resetForm()
+          fetchMapel()
+        } else {
+          alert('Gagal mengupdate mapel: ' + error.message)
+        }
       } else {
-        setNamaMapel('')
-        fetchMapel()
+        const { error } = await supabase.from('mapel').insert([payload])
+        if (!error) {
+          alert('Mata pelajaran berhasil ditambahkan!')
+          resetForm()
+          fetchMapel()
+        } else {
+          alert('Gagal menambah mapel: ' + error.message)
+        }
       }
     } catch (err: any) {
       alert('Error: ' + err.message)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // Hapus Mata Pelajaran
-  const handleDelete = async (id?: string) => {
+  const handleEdit = (item: Mapel) => {
+    if (!item.id) return
+    setEditingId(item.id)
+    setKodeMapel(item.kode_mapel || '')
+    setNamaMapel(item.nama_mapel || '')
+    setKelompok(item.kelompok || 'Umum')
+    setTingkat(item.tingkat || 'VII')
+    setJumlahJp(item.jumlah_jp || 2)
+    setSemester(item.semester || 'Ganjil')
+    setTahunAjaran(item.tahun_ajaran || '2026/2027')
+    setUrutan(item.urutan || 1)
+  }
+
+  const handleDelete = async (id?: string | number) => {
     if (!id || !confirm('Yakin ingin menghapus mata pelajaran ini?')) return
 
     try {
       const { error } = await supabase.from('mapel').delete().eq('id', id)
       if (!error) {
         setMapelList((prev) => prev.filter((item) => item.id !== id))
+      } else {
+        alert('Gagal menghapus mapel: ' + error.message)
       }
     } catch (err) {
       console.error('Error deleting mapel:', err)
     }
   }
 
+  const filteredMapel = mapelList.filter((m) =>
+    m.nama_mapel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.kode_mapel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.kelompok.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  if (loadingRole || !isOperator) {
+    return (
+      <div className="h-screen bg-[#E2E8F0] text-slate-700 p-8 flex items-center justify-center font-sans">
+        <div className="bg-white/90 backdrop-blur-md border border-slate-300 p-6 rounded-2xl text-center space-y-2 shadow-md">
+          <p className="text-slate-900 font-bold text-sm">Memeriksa Hak Akses Operator...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
-      <div>
-        {/* TOPBAR / HEADER */}
-        <header className="border-b border-slate-800/80 bg-[#0d1322]/90 backdrop-blur-md sticky top-0 z-50 px-6 py-3 flex items-center justify-between">
+    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
+      
+      {/* 1. WATERMARK LOGO */}
+      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
+        <img
+          src="/logo-smp.jpg"
+          alt="Watermark SMP Muna Mustofa"
+          className="w-[850px] h-[850px] object-contain max-w-none"
+        />
+      </div>
+
+      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+        
+        {/* 2. HEADER TOPBAR */}
+        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-400 hover:text-white p-2 rounded-lg transition">
+            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-amber-400 text-slate-950 rounded-xl flex items-center justify-center font-bold text-xl shadow-md shadow-amber-400/20">
-                🎓
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+                <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-base text-white leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-sky-400 font-medium mt-1">Kelola Mata Pelajaran</p>
+                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
+                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Kelola Master Mata Pelajaran</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <div className="bg-emerald-100/80 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
               <span>Supabase Live</span>
             </div>
 
-            <div className="bg-slate-800/80 border border-slate-700/60 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-semibold text-slate-200">
-              <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">
+            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex items-center gap-1">
-              <button className="bg-amber-400 text-slate-950 p-1.5 rounded-lg text-xs font-bold shadow-sm">
-                ☀️
-              </button>
-              <button className="text-slate-400 p-1.5 rounded-lg text-xs hover:text-white transition">
-                🌙
-              </button>
+              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+                Operator
+              </span>
             </div>
 
             <button
               onClick={async () => {
                 await supabase.auth.signOut()
-                window.location.href = '/login'
+                router.replace('/login')
               }}
-              className="bg-rose-950/40 border border-rose-800/50 hover:bg-rose-900/60 text-rose-400 p-2 rounded-xl transition"
+              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,183 +248,292 @@ export default function KelolaMapelPage() {
           </div>
         </header>
 
-        {/* MAIN CONTENT */}
-        <main className="max-w-6xl mx-auto p-6 space-y-6">
+        {/* 3. MAIN CONTENT CONTAINER */}
+        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
           
-          {/* MAIN CARD SECTION */}
-          <div className="bg-[#111827] border border-slate-800/80 rounded-2xl p-6 min-h-[480px] space-y-6 flex flex-col justify-between">
-            
-            <div className="space-y-6">
-              {/* Header Title */}
-              <div className="flex items-center gap-3 border-b border-slate-800/80 pb-5">
-                <div className="w-10 h-10 bg-purple-950/80 text-purple-400 rounded-xl flex items-center justify-center text-lg">
-                  📖
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white">Kelola Mata Pelajaran</h2>
-                  <p className="text-xs text-slate-400">
-                    Tambah dan kelola mata pelajaran yang diampu untuk semester berjalan.
-                  </p>
-                </div>
+          {/* PANEL FORM INPUT MAPEL LENGKAP */}
+          <form onSubmit={handleSubmit} className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 items-end">
+              
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  KODE MAPEL *
+                </label>
+                <input
+                  type="text"
+                  value={kodeMapel}
+                  onChange={(e) => setKodeMapel(e.target.value)}
+                  placeholder="MAT-VII"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 uppercase"
+                  required
+                />
               </div>
 
-              {/* Form Input Bar */}
-              <form
-                onSubmit={handleTambahMapel}
-                className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-[#0d1322]/80 border border-slate-800/80 p-4 rounded-xl"
-              >
-                <div className="md:col-span-5">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    NAMA MATA PELAJARAN *
-                  </label>
-                  <input
-                    type="text"
-                    value={namaMapel}
-                    onChange={(e) => setNamaMapel(e.target.value)}
-                    placeholder="Contoh: Matematika / Bahasa Indonesia"
-                    className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                    required
-                  />
-                </div>
+              <div className="md:col-span-4">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  NAMA MATA PELAJARAN *
+                </label>
+                <input
+                  type="text"
+                  value={namaMapel}
+                  onChange={(e) => setNamaMapel(e.target.value)}
+                  placeholder="Matematika / Bahasa Indonesia"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                  required
+                />
+              </div>
 
-                <div className="md:col-span-3">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    SEMESTER
-                  </label>
-                  <select
-                    value={semester}
-                    onChange={(e) => setSemester(e.target.value)}
-                    className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="Ganjil">Ganjil</option>
-                    <option value="Genap">Genap</option>
-                  </select>
-                </div>
+              <div className="md:col-span-3">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  KELOMPOK / KATEGORI
+                </label>
+                <select
+                  value={kelompok}
+                  onChange={(e) => setKelompok(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                >
+                  <option value="Umum">Umum (Muatan Nasional)</option>
+                  <option value="Muatan Lokal">Muatan Lokal (Mulok)</option>
+                  <option value="Ekstrakulikuler">Ekstrakulikuler</option>
+                  <option value="Bimbingan">Bimbingan Konseling</option>
+                </select>
+              </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    TAHUN AJARAN
-                  </label>
-                  <input
-                    type="text"
-                    value={tahunAjaran}
-                    onChange={(e) => setTahunAjaran(e.target.value)}
-                    placeholder="2026/2027"
-                    className="w-full bg-[#111827] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
+              <div className="md:col-span-3">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  TINGKAT / KELAS TARGET
+                </label>
+                <select
+                  value={tingkat}
+                  onChange={(e) => setTingkat(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                >
+                  <option value="VII">Kelas VII (Fase D)</option>
+                  <option value="VIII">Kelas VIII (Fase D)</option>
+                  <option value="IX">Kelas IX (Fase D)</option>
+                  <option value="Semua Tingkat">Semua Tingkat (VII-IX)</option>
+                </select>
+              </div>
 
-                <div className="md:col-span-2">
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 items-end pt-1">
+              
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  BEBAN (JP/MINGGU)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={jumlahJp}
+                  onChange={(e) => setJumlahJp(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  SEMESTER
+                </label>
+                <select
+                  value={semester}
+                  onChange={(e) => setSemester(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                >
+                  <option value="Ganjil">Semester Ganjil</option>
+                  <option value="Genap">Semester Genap</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  TAHUN AJARAN
+                </label>
+                <input
+                  type="text"
+                  value={tahunAjaran}
+                  onChange={(e) => setTahunAjaran(e.target.value)}
+                  placeholder="2026/2027"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                  URUTAN RAPOR
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={urutan}
+                  onChange={(e) => setUrutan(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="md:col-span-2 flex gap-1.5">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-1.5 rounded-xl text-xs transition shadow-xs cursor-pointer"
+                >
+                  {loading ? '...' : editingId ? 'Update' : '+ Simpan'}
+                </button>
+
+                {editingId && (
                   <button
-                    type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-1.5"
+                    type="button"
+                    onClick={resetForm}
+                    className="px-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-xs text-slate-700 font-bold rounded-xl transition cursor-pointer"
                   >
-                    <span>+ Tambah</span>
+                    Batal
                   </button>
-                </div>
-              </form>
-
-              {/* Table Data Mapel */}
-              <div className="overflow-x-auto rounded-xl border border-slate-800/80">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-[#0d1322] text-slate-400 border-b border-slate-800 font-bold uppercase tracking-wider">
-                      <th className="py-3 px-4 w-12 text-center">NO</th>
-                      <th className="py-3 px-4">MATA PELAJARAN</th>
-                      <th className="py-3 px-4 text-center">SEMESTER</th>
-                      <th className="py-3 px-4 text-center">TAHUN AJARAN</th>
-                      <th className="py-3 px-4 text-center w-24">AKSI</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-400">
-                          Memuat data mata pelajaran...
-                        </td>
-                      </tr>
-                    ) : mapelList.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-16 text-center text-slate-500">
-                          Belum ada mata pelajaran terdaftar.
-                        </td>
-                      </tr>
-                    ) : (
-                      mapelList.map((item, index) => (
-                        <tr key={item.id || index} className="hover:bg-slate-800/40 transition">
-                          <td className="py-3 px-4 text-center font-medium text-slate-400">{index + 1}</td>
-                          <td className="py-3 px-4 font-semibold text-white">{item.nama_mapel}</td>
-                          <td className="py-3 px-4 text-center">
-                            <span className="bg-slate-800 text-purple-300 px-2.5 py-1 rounded-md text-[11px] font-medium border border-slate-700/60">
-                              {item.semester}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono text-slate-300">{item.tahun_ajaran}</td>
-                          <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="bg-rose-950/60 text-rose-400 hover:bg-rose-900/80 p-1.5 rounded-lg border border-rose-800/50 transition"
-                              title="Hapus Mata Pelajaran"
-                            >
-                              🗑️
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                )}
               </div>
+
+            </div>
+          </form>
+
+          {/* PANEL TABEL REKAP MAPEL */}
+          <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
+            
+            {/* SEARCH BAR */}
+            <div className="flex items-center justify-between mb-2.5 shrink-0 gap-3">
+              <div className="relative flex-1 max-w-md">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="🔍 Cari Kode, Nama Mapel, atau Kelompok..."
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <button
+                onClick={fetchMapel}
+                className="text-xs bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-xl font-bold text-slate-700 transition cursor-pointer shrink-0"
+              >
+                🔄 Refresh Data
+              </button>
+            </div>
+
+            {/* TABEL DATA PRO */}
+            <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
+                  <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase tracking-wider text-[11px]">
+                    <th className="py-2.5 px-3 w-12 text-center">URUT</th>
+                    <th className="py-2.5 px-3">KODE</th>
+                    <th className="py-2.5 px-3">MATA PELAJARAN</th>
+                    <th className="py-2.5 px-3">KELOMPOK</th>
+                    <th className="py-2.5 px-3 text-center">TINGKAT</th>
+                    <th className="py-2.5 px-3 text-center">JP/MINGGU</th>
+                    <th className="py-2.5 px-3 text-center">PERIODE</th>
+                    <th className="py-2.5 px-3 text-center w-20">AKSI</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-800">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">
+                        Memuat data mata pelajaran...
+                      </td>
+                    </tr>
+                  ) : filteredMapel.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">
+                        Belum ada mata pelajaran terdaftar.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredMapel.map((item, index) => (
+                      <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
+                        <td className="py-2 px-3 text-center font-bold text-slate-500">{item.urutan || index + 1}</td>
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-900 whitespace-nowrap">{item.kode_mapel}</td>
+                        <td className="py-2 px-3 font-extrabold text-slate-900">{item.nama_mapel}</td>
+                        <td className="py-2 px-3 font-bold text-slate-700">{item.kelompok}</td>
+                        <td className="py-2 px-3 text-center font-bold text-indigo-800">{item.tingkat}</td>
+                        <td className="py-2 px-3 text-center font-extrabold text-emerald-800">{item.jumlah_jp} JP</td>
+                        <td className="py-2 px-3 text-center whitespace-nowrap">
+                          <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px] font-extrabold">
+                            {item.semester} ({item.tahun_ajaran})
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center space-x-1 whitespace-nowrap">
+                          <button
+                            onClick={() => handleEdit(item)}
+                            className="bg-amber-50 text-amber-700 hover:bg-amber-100 p-1.5 rounded-lg border border-amber-200 transition cursor-pointer"
+                            title="Edit Mapel"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
+                            title="Hapus Mapel"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
 
           </div>
 
         </main>
+
+        {/* 4. FOOTER BADGE */}
+        <div className="pb-16 pt-1 flex justify-center shrink-0">
+          <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+            <span>Aplikasi Guru AI</span>
+            <span className="mx-2">•</span>
+            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+          </div>
+        </div>
+
       </div>
 
-      {/* BOTTOM NAVIGATION DOCK & FOOTER */}
-      <div className="border-t border-slate-800/80 bg-[#0d1322]/95 backdrop-blur-md sticky bottom-0 z-50">
-        <div className="max-w-md mx-auto px-6 py-2.5 flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-          >
-            <span className="text-lg">🕒</span>
+      {/* 5. BOTTOM NAVIGATION DOCK */}
+      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0">
+        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
+          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
-          <Link
-            href="/siswa"
-            className="flex flex-col items-center gap-1 text-xs font-medium text-sky-400 transition"
-          >
-            <span className="text-lg">🎓</span>
+          {isOperator && (
+            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+              <span className="text-base">👥</span>
+              <span>Siswa</span>
+            </Link>
+          )}
+
+          {isOperator && (
+            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+              <span className="text-base">👨‍🏫</span>
+              <span>Guru</span>
+            </Link>
+          )}
+
+          <Link href="/jadwal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-600 transition">
+            <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link
-            href="/ai"
-            className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-          >
-            <span className="text-lg">✨</span>
-            <span>AI Tools</span>
-          </Link>
-
-          <Link
-            href="/laporan"
-            className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition"
-          >
-            <span className="text-lg">🖨️</span>
+          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
-
-        {/* Developer Attribution Sub-Footer */}
-        <div className="bg-[#070a12] py-2 text-center text-[11px] text-slate-500 border-t border-slate-900 flex items-center justify-center gap-2">
-          <span>Aplikasi Guru AI</span>
-          <span>•</span>
-          <span>Created by <strong className="text-slate-300 font-semibold">MUZAINI AL KAHFI</strong></span>
-        </div>
       </div>
+
     </div>
   )
 }

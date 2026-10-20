@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
@@ -9,81 +10,129 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+interface MapelItem {
+  id: number
+  nama_mapel: string
+  kode_mapel: string
+}
+
+interface KelasItem {
+  id: number
+  nama_kelas: string
+}
+
+interface GuruItem {
+  id?: number
+  nama_lengkap: string
+  email: string
+}
+
+interface MasterJamItem {
+  id: number
+  hari: string
+  jam_ke: number
+  waktu_mulai: string
+  waktu_selesai: string
+  keterangan: string
+}
+
 interface Jadwal {
-  id?: string
+  id?: number
   hari: string
   jam: string
-  kelas: string
-  mapel: string
+  jam_ke?: number | string
+  kelas_id?: number
+  mapel_id?: number
   guru_email?: string
+  kelas?: { nama_kelas: string } | string
+  mapel?: { nama_mapel: string; kode_mapel: string } | string
 }
 
 export default function JadwalMengajarPage() {
+  const router = useRouter()
+  const { isOperator, canAccessBimbingan } = useAuthRole()
+
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'kelola' | 'rekap'>('kelola')
-  
-  // Custom Hook Hak Akses
-  const { isOperator, canAccessBimbingan } = useAuthRole()
-  
-  // State Input & Kelola Jadwal
+
+  // Options dari DB
+  const [mapelList, setMapelList] = useState<MapelItem[]>([])
+  const [kelasList, setKelasList] = useState<KelasItem[]>([])
+  const [guruList, setGuruList] = useState<GuruItem[]>([])
+  const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
+
+  // State Form Input
   const [hari, setHari] = useState('Senin')
-  const [jam, setJam] = useState('07:30 - 09:00')
-  const [kelas, setKelas] = useState('')
-  const [mapel, setMapel] = useState('')
+  const [selectedJamKe, setSelectedJamKe] = useState<string>('1')
+  const [selectedKelasId, setSelectedKelasId] = useState<string>('')
+  const [selectedMapelId, setSelectedMapelId] = useState<string>('')
+  const [selectedGuruEmail, setSelectedGuruEmail] = useState<string>('')
+
   const [jadwalList, setJadwalList] = useState<Jadwal[]>([])
   const [loading, setLoading] = useState(false)
 
-  // State Filter Rekapitulasi Jadwal
+  // State Filter Rekap
   const [filterHari, setFilterHari] = useState('')
-  const [filterKelas, setFilterKelas] = useState('')
-  const [filterMapel, setFilterMapel] = useState('')
+  const [filterKelasId, setFilterKelasId] = useState('')
+  const [filterMapelId, setFilterMapelId] = useState('')
 
   useEffect(() => {
-    async function initUser() {
+    async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        setUserEmail(user.email || null)
-        const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'GURU'
+        const email = user.email || ''
+        setUserEmail(email)
+        setSelectedGuruEmail(email)
+        const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
         setUserDisplayName(nameFromMeta.toUpperCase())
-        
-        // Panggil fetchJadwal dengan email user
-        fetchJadwal(user.email)
+
+        fetchMasterData()
+        fetchJadwal(email, isOperator)
       }
     }
-    
-    initUser()
+    init()
+  }, [isOperator])
 
-    // Realtime Listener
-    const channel = supabase
-      .channel('realtime_jadwal')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal' }, () => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-          if (user?.email) fetchJadwal(user.email)
-        })
-      })
-      .subscribe()
+  async function fetchMasterData() {
+    const { data: dMapel } = await supabase.from('mapel').select('id, nama_mapel, kode_mapel').order('urutan', { ascending: true })
+    if (dMapel) setMapelList(dMapel)
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [])
+    const { data: dKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
+    if (dKelas) setKelasList(dKelas)
 
-  async function fetchJadwal(emailParam?: string | null) {
-    const activeEmail = emailParam || userEmail
-    if (!activeEmail) return
+    const { data: dGuru } = await supabase.from('guru').select('id, nama_lengkap, email').order('nama_lengkap', { ascending: true })
+    if (dGuru) setGuruList(dGuru)
 
+    const { data: dJam } = await supabase.from('master_jam').select('*').order('jam_ke', { ascending: true })
+    if (dJam) setMasterJamList(dJam)
+  }
+
+  async function fetchJadwal(emailParam?: string | null, operatorMode?: boolean) {
     setLoading(true)
     try {
-      // HANYA AMBIL DATA JADWAL SESUAI EMAIL GURU YANG LOGIN
-      const { data, error } = await supabase
+      let query = supabase
         .from('jadwal')
-        .select('*')
-        .eq('guru_email', activeEmail)
+        .select(`
+          id,
+          hari,
+          jam,
+          jam_ke,
+          kelas_id,
+          mapel_id,
+          guru_email,
+          kelas:kelas_id(nama_kelas),
+          mapel:mapel_id(nama_mapel, kode_mapel)
+        `)
         .order('id', { ascending: true })
 
+      if (!operatorMode && emailParam) {
+        query = query.eq('guru_email', emailParam)
+      }
+
+      const { data, error } = await query
       if (!error && data) {
-        setJadwalList(data)
+        setJadwalList(data as any)
       }
     } catch (err) {
       console.error('Error fetching jadwal:', err)
@@ -92,43 +141,74 @@ export default function JadwalMengajarPage() {
     }
   }
 
+  // Opsi jam dinamis sesuai hari
+  const jamOptionsForSelectedHari = masterJamList.filter((j) => j.hari === hari)
+
   const handleSimpan = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!kelas || !mapel) {
+    if (!selectedKelasId || !selectedMapelId) {
       alert('Silakan pilih Kelas dan Mata Pelajaran!')
       return
     }
 
-    if (!userEmail) {
-      alert('Sesi login tidak valid. Silakan login ulang.')
+    const targetEmail = isOperator ? selectedGuruEmail : userEmail
+    if (!targetEmail) {
+      alert('Email guru pengampu wajib dipilih/diisi!')
+      return
+    }
+
+    // Cari detail jam terpilih
+    const jamDetail = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(selectedJamKe))
+    const ketInfo = jamDetail?.keterangan && jamDetail.keterangan !== 'KBM' ? ` [${jamDetail.keterangan}]` : ''
+    
+    const formattedJamText = jamDetail 
+      ? `Jam Ke-${jamDetail.jam_ke} (${jamDetail.waktu_mulai.slice(0,5)} - ${jamDetail.waktu_selesai.slice(0,5)})${ketInfo}`
+      : `Jam Ke-${selectedJamKe}`
+
+    // Validasi Bentrok Jadwal
+    const bentrok = jadwalList.find(
+      (j) =>
+        j.hari === hari &&
+        Number(j.jam_ke) === Number(selectedJamKe) &&
+        Number(typeof j.kelas_id === 'number' ? j.kelas_id : 0) === Number(selectedKelasId)
+    )
+
+    if (bentrok) {
+      alert(`BENTROK JADWAL! Kelas tersebut sudah terisi pada ${hari}, Jam Ke-${selectedJamKe}.`)
       return
     }
 
     try {
-      // SIMPAN JADWAL DENGAN MENYERTAKAN GURU_EMAIL
+      const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+      const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
+
       const { error } = await supabase.from('jadwal').insert([
         {
           hari,
-          jam: jam.trim(),
-          kelas,
-          mapel,
-          guru_email: userEmail // <-- Menyimpan email penginput
+          jam: formattedJamText,
+          jam_ke: Number(selectedJamKe),
+          kelas_id: Number(selectedKelasId),
+          mapel_id: Number(selectedMapelId),
+          guru_email: targetEmail,
+          kelas: selectedKelasObj?.nama_kelas || '',
+          mapel: selectedMapelObj?.nama_mapel || '',
         },
       ])
 
       if (error) {
         alert('Gagal menyimpan jadwal: ' + error.message)
       } else {
-        setKelas('')
-        setMapel('')
-        fetchJadwal(userEmail)
+        alert('Jadwal berhasil ditambahkan!')
+        setSelectedKelasId('')
+        setSelectedMapelId('')
+        fetchJadwal(userEmail, isOperator)
       }
     } catch (err: any) {
       alert('Error: ' + err.message)
     }
   }
 
-  const handleDelete = async (id?: string) => {
+  const handleDelete = async (id?: number) => {
     if (!id || !confirm('Yakin ingin menghapus jadwal mengajar ini?')) return
 
     try {
@@ -141,54 +221,59 @@ export default function JadwalMengajarPage() {
     }
   }
 
-  // Filter List untuk Rekapitulasi
   const filteredRekapList = jadwalList.filter((item) => {
     const matchHari = !filterHari || item.hari === filterHari
-    const matchKelas = !filterKelas || item.kelas === filterKelas
-    const matchMapel = !filterMapel || item.mapel === filterMapel
+    const matchKelas = !filterKelasId || Number(item.kelas_id) === Number(filterKelasId)
+    const matchMapel = !filterMapelId || Number(item.mapel_id) === Number(filterMapelId)
     return matchHari && matchKelas && matchMapel
   })
 
-  // Hitung Akumulasi Statistik Rekapitulasi
-  const totalJadwal = filteredRekapList.length
-  const totalKelasDiajar = new Set(filteredRekapList.map(item => item.kelas)).size
-  const totalMapelDiajar = new Set(filteredRekapList.map(item => item.mapel)).size
-  const hariAktifMengajar = new Set(filteredRekapList.map(item => item.hari)).size
-
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative">
-      <div>
-        {/* TOPBAR / HEADER */}
-        <header className="bg-[#0b1222] border-b border-slate-800/80 px-6 py-3 flex items-center justify-between sticky top-0 z-50">
+    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
+      
+      {/* WATERMARK LOGO */}
+      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
+        <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
+      </div>
+
+      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+        
+        {/* HEADER TOPBAR */}
+        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-amber-400 text-slate-950 rounded-xl flex items-center justify-center font-black text-xl shadow-md shadow-amber-400/20">
-              🎓
-            </div>
-            <div>
-              <h1 className="font-bold text-base text-white leading-none">Aplikasi Guru AI</h1>
-              <p className="text-[11px] text-sky-400 font-medium mt-1">Jadwal Mengajar Guru</p>
+            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </Link>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+                <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
+                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Penjadwalan KBM Terintegrasi</p>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Supabase Live</span>
-            </div>
-
-            <div className="bg-[#121c33] border border-slate-700/80 text-slate-200 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold">
+            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
+              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+                {isOperator ? 'Operator' : 'Guru'}
+              </span>
             </div>
 
             <button
               onClick={async () => {
                 await supabase.auth.signOut()
-                window.location.href = '/login'
+                router.replace('/login')
               }}
-              className="bg-rose-950/40 border border-rose-800/50 hover:bg-rose-900/60 text-rose-400 p-2 rounded-xl transition cursor-pointer"
+              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -199,84 +284,101 @@ export default function JadwalMengajarPage() {
         </header>
 
         {/* SUB-NAVBAR AKADEMIK */}
-        <div className="bg-[#0b1222]/80 border-b border-slate-800/80 px-6 py-2.5 overflow-x-auto">
-          <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-medium">
-            <span className="text-sky-400 font-bold flex items-center gap-1 pr-2 border-r border-slate-800">
+        <div className="bg-slate-200/80 backdrop-blur-md border-b border-slate-300 px-6 py-2 shrink-0 overflow-x-auto print:hidden">
+          <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
+            <span className="text-indigo-900 font-black pr-2 border-r border-slate-300 flex items-center gap-1">
               🎓 Akademik:
             </span>
-            <Link href="/jadwal" className="bg-blue-600 text-white px-3.5 py-1.5 rounded-xl shadow-md font-semibold flex items-center gap-1.5">
+            <Link href="/jadwal" className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl shadow-xs font-extrabold flex items-center gap-1.5">
               <span>🕒</span> Jadwal Mengajar
             </Link>
-            <Link href="/absensi" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+            <Link href="/absensi" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
               <span>📋</span> Input Absensi
             </Link>
-            <Link href="/nilai" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+            <Link href="/nilai" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
               <span>⭐</span> Input Penilaian
             </Link>
-            <Link href="/jurnal" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+            <Link href="/jurnal" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
               <span>📓</span> Agenda Mengajar
             </Link>
-            
-            {/* TAB BIMBINGAN HANYA MUNCUL JIKA WALI KELAS / OPERATOR */}
             {canAccessBimbingan && (
-              <Link href="/bimbingan" className="bg-slate-800/60 text-slate-400 hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-700/60 transition flex items-center gap-1.5">
+              <Link href="/bimbingan" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
                 <span>💖</span> Bimbingan Guru Wali
               </Link>
             )}
           </div>
         </div>
 
-        {/* MAIN CONTENT */}
-        <main className="max-w-6xl mx-auto p-6 space-y-6">
+        {/* MAIN CONTENT AREA */}
+        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
           
           {/* TAB MODE BAR */}
-          <div className="grid grid-cols-2 bg-[#0d1527] p-1.5 rounded-2xl border border-slate-800 max-w-2xl text-xs font-bold">
+          <div className="flex items-center justify-between shrink-0 print:hidden">
+            <div className="grid grid-cols-2 bg-slate-200/90 p-1 rounded-xl border border-slate-300 max-w-md text-xs font-extrabold flex-1">
+              <button
+                onClick={() => setActiveTab('kelola')}
+                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === 'kelola' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                <span>🕒</span> Input &amp; Kelola Jadwal
+              </button>
+              <button
+                onClick={() => setActiveTab('rekap')}
+                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === 'rekap' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                <span>📜</span> Rekap &amp; Cetak
+              </button>
+            </div>
+
             <button
-              onClick={() => setActiveTab('kelola')}
-              className={`py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
-                activeTab === 'kelola' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={() => window.print()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer ml-3"
             >
-              <span>🕒</span> Tambah &amp; Kelola Jadwal
-            </button>
-            <button
-              onClick={() => setActiveTab('rekap')}
-              className={`py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
-                activeTab === 'rekap' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>📜</span> Riwayat &amp; Rekapitulasi Jadwal
+              <span>🖨️</span> Cetak PDF
             </button>
           </div>
 
-          {/* TAB CONTENT 1: TAMBAH & KELOLA JADWAL */}
+          {/* TAB 1: FORM INPUT & JADWAL SAYA */}
           {activeTab === 'kelola' && (
-            <div className="bg-[#0d1527] border border-slate-800/80 rounded-2xl p-6 min-h-[420px] space-y-6">
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 border-b border-slate-800/80 pb-5">
-                  <div className="w-10 h-10 bg-amber-950/80 text-amber-400 rounded-xl flex items-center justify-center text-lg">
-                    🕒
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Jadwal Mengajar Anda</h2>
-                    <p className="text-xs text-slate-400">
-                      Atur jam tatap muka harian per kelas dan mata pelajaran.
-                    </p>
-                  </div>
-                </div>
+            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+              
+              {/* FORM INPUT JADWAL */}
+              <form onSubmit={handleSimpan} className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  
+                  {isOperator && (
+                    <div className="sm:col-span-3">
+                      <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
+                        GURU PENGAMPU *
+                      </label>
+                      <select
+                        value={selectedGuruEmail}
+                        onChange={(e) => setSelectedGuruEmail(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                        required
+                      >
+                        <option value="">-- Pilih Guru --</option>
+                        {guruList.map((g) => (
+                          <option key={g.id} value={g.email}>{g.nama_lengkap}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
-                <form
-                  onSubmit={handleSimpan}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-[#070b14] border border-slate-800/80 p-4 rounded-xl"
-                >
-                  <div className="md:col-span-2">
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-2'}>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
                       HARI *
                     </label>
                     <select
                       value={hari}
-                      onChange={(e) => setHari(e.target.value)}
-                      className="w-full bg-[#0d1527] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                      onChange={(e) => {
+                        setHari(e.target.value)
+                        setSelectedJamKe('1')
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
                     >
                       <option value="Senin">Senin</option>
                       <option value="Selasa">Selasa</option>
@@ -287,177 +389,150 @@ export default function JadwalMengajarPage() {
                     </select>
                   </div>
 
-                  <div className="md:col-span-2">
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      JAM (WIB) *
+                  <div className={isOperator ? 'sm:col-span-3' : 'sm:col-span-3'}>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
+                      JAM PELAJARAN DINAMIS *
                     </label>
-                    <input
-                      type="text"
-                      value={jam}
-                      onChange={(e) => setJam(e.target.value)}
-                      placeholder="07:30 - 09:00"
-                      className="w-full bg-[#0d1527] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
-                      required
-                    />
+                    <select
+                      value={selectedJamKe}
+                      onChange={(e) => setSelectedJamKe(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                    >
+                      {jamOptionsForSelectedHari.length > 0 ? (
+                        jamOptionsForSelectedHari.map((j) => (
+                          <option key={j.id} value={j.jam_ke}>
+                            Jam Ke-{j.jam_ke} ({j.waktu_mulai.slice(0, 5)} - {j.waktu_selesai.slice(0, 5)}){j.keterangan !== 'KBM' ? ` [${j.keterangan}]` : ''}
+                          </option>
+                        ))
+                      ) : (
+                        [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                          <option key={num} value={num}>
+                            Jam Ke-{num}
+                          </option>
+                        ))
+                      )}
+                    </select>
                   </div>
 
-                  <div className="md:col-span-3">
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-3'}>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
                       KELAS *
                     </label>
                     <select
-                      value={kelas}
-                      onChange={(e) => setKelas(e.target.value)}
-                      className="w-full bg-[#0d1527] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                      value={selectedKelasId}
+                      onChange={(e) => setSelectedKelasId(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      required
                     >
-                      <option value="">Pilih Kelas</option>
-                      <option value="Kelas VII A">Kelas VII A</option>
-                      <option value="Kelas VII B">Kelas VII B</option>
-                      <option value="Kelas VIII A">Kelas VIII A</option>
-                      <option value="Kelas VIII B">Kelas VIII B</option>
-                      <option value="Kelas IX A">Kelas IX A</option>
-                      <option value="Kelas IX B">Kelas IX B</option>
+                      <option value="">-- Pilih Kelas --</option>
+                      {kelasList.map((k) => (
+                        <option key={k.id} value={k.id}>{k.nama_kelas}</option>
+                      ))}
                     </select>
                   </div>
 
-                  <div className="md:col-span-3">
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-3'}>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
                       MATA PELAJARAN *
                     </label>
                     <select
-                      value={mapel}
-                      onChange={(e) => setMapel(e.target.value)}
-                      className="w-full bg-[#0d1527] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                      value={selectedMapelId}
+                      onChange={(e) => setSelectedMapelId(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      required
                     >
-                      <option value="">Pilih Mapel</option>
-                      <option value="Pendidikan Agama Islam dan Budi Pekerti">Pendidikan Agama Islam dan Budi Pekerti</option>
-                      <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
-                      <option value="Pembelajaran Berbasis Projek">Pembelajaran Berbasis Projek</option>
-                      <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                      <option value="Bahasa Inggris">Bahasa Inggris</option>
-                      <option value="Matematika (Umum)">Matematika (Umum)</option>
-                      <option value="Ilmu Pengetahuan Alam (IPA)">Ilmu Pengetahuan Alam (IPA)</option>
-                      <option value="Ilmu Pengetahuan Sosial (IPS)">Ilmu Pengetahuan Sosial (IPS)</option>
-                      <option value="Informatika">Informatika</option>
-                      <option value="Pendidikan Jasmani, Olahraga, dan Kesehatan">Pendidikan Jasmani, Olahraga, dan Kesehatan</option>
-                      <option value="Seni, Budaya dan Prakarya">Seni, Budaya dan Prakarya</option>
-                      <option value="Bahasa Lampung (Mulok)">Bahasa Lampung (Mulok)</option>
-                      <option value="Kejuruan Pertanian">Kejuruan Pertanian</option>
-                      <option value="Bimbingan dan Konseling (BP/BK)">Bimbingan dan Konseling (BP/BK)</option>
+                      <option value="">-- Pilih Mapel --</option>
+                      {mapelList.map((m) => (
+                        <option key={m.id} value={m.id}>{m.nama_mapel} ({m.kode_mapel})</option>
+                      ))}
                     </select>
                   </div>
 
-                  <div className="md:col-span-2">
+                  <div className="sm:col-span-1">
                     <button
                       type="submit"
-                      className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-1.5 rounded-xl text-xs transition shadow-xs cursor-pointer"
                     >
-                      <span>+ Simpan</span>
+                      + Simpan
                     </button>
                   </div>
-                </form>
 
-                <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+                </div>
+              </form>
+
+              {/* TABEL JADWAL SAYA */}
+              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
+                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
                   <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-[#070b14] text-slate-400 border-b border-slate-800 font-bold uppercase tracking-wider">
-                        <th className="py-3 px-4">HARI</th>
-                        <th className="py-3 px-4">JAM MENGAJAR</th>
-                        <th className="py-3 px-4">KELAS</th>
-                        <th className="py-3 px-4">MATA PELAJARAN</th>
-                        <th className="py-3 px-4 text-center w-24">AKSI</th>
+                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
+                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                        <th className="py-2.5 px-3">HARI</th>
+                        <th className="py-2.5 px-3">JAM MENGAJAR</th>
+                        <th className="py-2.5 px-3">KELAS</th>
+                        <th className="py-2.5 px-3">MATA PELAJARAN</th>
+                        {isOperator && <th className="py-2.5 px-3">GURU PENGAMPU</th>}
+                        <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    <tbody className="divide-y divide-slate-200 text-slate-800">
                       {loading ? (
                         <tr>
-                          <td colSpan={5} className="py-12 text-center text-slate-400">
-                            Memuat data jadwal mengajar...
-                          </td>
+                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Memuat data jadwal...</td>
                         </tr>
                       ) : jadwalList.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-16 text-center text-slate-500">
-                            Belum ada jadwal mengajar.
-                          </td>
+                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Belum ada jadwal mengajar tersimpan.</td>
                         </tr>
                       ) : (
-                        jadwalList.map((item, index) => (
-                          <tr key={item.id || index} className="hover:bg-slate-800/40 transition">
-                            <td className="py-3 px-4 font-bold text-amber-400">{item.hari}</td>
-                            <td className="py-3 px-4 font-mono text-slate-300">{item.jam}</td>
-                            <td className="py-3 px-4 font-semibold text-white">
-                              <span className="bg-slate-900 text-slate-200 px-2.5 py-1 rounded-md text-[11px] font-medium border border-slate-800">
-                                {item.kelas}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 font-medium text-sky-300">{item.mapel}</td>
-                            <td className="py-3 px-4 text-center">
-                              <button
-                                onClick={() => handleDelete(item.id)}
-                                className="bg-rose-950/60 text-rose-400 hover:bg-rose-900/80 p-1.5 rounded-lg border border-rose-800/50 transition cursor-pointer"
-                                title="Hapus Jadwal"
-                              >
-                                🗑️
-                              </button>
-                            </td>
-                          </tr>
-                        ))
+                        jadwalList.map((item, index) => {
+                          const namaKelas = typeof item.kelas === 'object' ? item.kelas?.nama_kelas : item.kelas
+                          const namaMapel = typeof item.mapel === 'object' ? item.mapel?.nama_mapel : item.mapel
+                          return (
+                            <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
+                              <td className="py-2 px-3 font-extrabold text-amber-800">{item.hari}</td>
+                              <td className="py-2 px-3 font-bold text-slate-700">{item.jam}</td>
+                              <td className="py-2 px-3 font-extrabold text-slate-900">
+                                <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[11px]">
+                                  {namaKelas || '-'}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 font-extrabold text-indigo-950">{namaMapel || '-'}</td>
+                              {isOperator && (
+                                <td className="py-2 px-3 font-bold text-slate-700">{item.guru_email}</td>
+                              )}
+                              <td className="py-2 px-3 text-center print:hidden">
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
+                                  title="Hapus Jadwal"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })
                       )}
                     </tbody>
                   </table>
                 </div>
               </div>
+
             </div>
           )}
 
-          {/* TAB CONTENT 2: RIWAYAT & REKAPITULASI JADWAL */}
+          {/* TAB 2: REKAPITULASI & CETAK */}
           {activeTab === 'rekap' && (
-            <div className="bg-[#0d1527] border border-slate-800/80 rounded-2xl p-6 min-h-[480px] space-y-6">
+            <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
-              {/* Header Title Section */}
-              <div className="flex items-center gap-3 border-b border-slate-800/80 pb-5">
-                <div className="w-10 h-10 bg-indigo-950/80 text-indigo-400 rounded-xl flex items-center justify-center text-lg">
-                  📜
-                </div>
+              {/* FILTER BAR */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 p-3 rounded-2xl shrink-0 shadow-xs print:hidden">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Riwayat &amp; Rekapitulasi Jadwal Mengajar</h2>
-                  <p className="text-xs text-slate-400">
-                    Rekapitulasi lengkap jadwal tatap muka. Anda dapat mengedit, menyimpan pembaruan, atau menghapus entri jadwal.
-                  </p>
-                </div>
-              </div>
-
-              {/* STAT CARDS REKAPITULASI JADWAL */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-[#070b14] border border-slate-800/80 rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TOTAL JADWAL</p>
-                  <p className="text-2xl font-extrabold text-white mt-1">{totalJadwal}</p>
-                </div>
-                <div className="bg-[#070b14] border border-blue-900/40 rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">TOTAL KELAS DIAJAR</p>
-                  <p className="text-2xl font-extrabold text-blue-400 mt-1">{totalKelasDiajar}</p>
-                </div>
-                <div className="bg-[#070b14] border border-indigo-900/40 rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">TOTAL MAPEL DIAJAR</p>
-                  <p className="text-2xl font-extrabold text-indigo-400 mt-1">{totalMapelDiajar}</p>
-                </div>
-                <div className="bg-[#070b14] border border-amber-900/40 rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">HARI AKTIF MENGAJAR</p>
-                  <p className="text-2xl font-extrabold text-amber-400 mt-1">{hariAktifMengajar}</p>
-                </div>
-              </div>
-
-              {/* FILTER BAR 3 DROPDOWN */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-[#070b14] border border-slate-800/80 p-4 rounded-xl">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    FILTER HARI
-                  </label>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER HARI</label>
                   <select
                     value={filterHari}
                     onChange={(e) => setFilterHari(e.target.value)}
-                    className="w-full bg-[#0d1527] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
                   >
                     <option value="">Semua Hari</option>
                     <option value="Senin">Senin</option>
@@ -470,159 +545,140 @@ export default function JadwalMengajarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    FILTER KELAS
-                  </label>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER KELAS</label>
                   <select
-                    value={filterKelas}
-                    onChange={(e) => setFilterKelas(e.target.value)}
-                    className="w-full bg-[#0d1527] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    value={filterKelasId}
+                    onChange={(e) => setFilterKelasId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
                   >
                     <option value="">Semua Kelas</option>
-                    <option value="Kelas VII A">Kelas VII A</option>
-                    <option value="Kelas VII B">Kelas VII B</option>
-                    <option value="Kelas VIII A">Kelas VIII A</option>
-                    <option value="Kelas VIII B">Kelas VIII B</option>
-                    <option value="Kelas IX A">Kelas IX A</option>
-                    <option value="Kelas IX B">Kelas IX B</option>
+                    {kelasList.map((k) => (
+                      <option key={k.id} value={k.id}>{k.nama_kelas}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    FILTER MAPEL
-                  </label>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER MAPEL</label>
                   <select
-                    value={filterMapel}
-                    onChange={(e) => setFilterMapel(e.target.value)}
-                    className="w-full bg-[#0d1527] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    value={filterMapelId}
+                    onChange={(e) => setFilterMapelId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
                   >
                     <option value="">Semua Mapel</option>
-                    <option value="Pendidikan Agama Islam dan Budi Pekerti">Pendidikan Agama Islam dan Budi Pekerti</option>
-                    <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
-                    <option value="Pembelajaran Berbasis Projek">Pembelajaran Berbasis Projek</option>
-                    <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                    <option value="Bahasa Inggris">Bahasa Inggris</option>
-                    <option value="Matematika (Umum)">Matematika (Umum)</option>
-                    <option value="Ilmu Pengetahuan Alam (IPA)">Ilmu Pengetahuan Alam (IPA)</option>
-                    <option value="Ilmu Pengetahuan Sosial (IPS)">Ilmu Pengetahuan Sosial (IPS)</option>
-                    <option value="Informatika">Informatika</option>
-                    <option value="Pendidikan Jasmani, Olahraga, dan Kesehatan">Pendidikan Jasmani, Olahraga, dan Kesehatan</option>
-                    <option value="Seni, Budaya dan Prakarya">Seni, Budaya dan Prakarya</option>
-                    <option value="Bahasa Lampung (Mulok)">Bahasa Lampung (Mulok)</option>
-                    <option value="Kejuruan Pertanian">Kejuruan Pertanian</option>
-                    <option value="Bimbingan dan Konseling (BP/BK)">Bimbingan dan Konseling (BP/BK)</option>
+                    {mapelList.map((m) => (
+                      <option key={m.id} value={m.id}>{m.nama_mapel}</option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              {/* TABEL DATA REKAPITULASI JADWAL */}
-              <div className="overflow-x-auto rounded-xl border border-slate-800/80">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-[#070b14] text-slate-400 border-b border-slate-800 font-bold uppercase tracking-wider">
-                      <th className="py-3 px-4 w-12 text-center">NO</th>
-                      <th className="py-3 px-4">HARI</th>
-                      <th className="py-3 px-4">JAM MENGAJAR</th>
-                      <th className="py-3 px-4">KELAS</th>
-                      <th className="py-3 px-4">MATA PELAJARAN</th>
-                      <th className="py-3 px-4 text-center w-24">AKSI</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-400">
-                          Memuat data jadwal...
-                        </td>
+              {/* TABEL REKAP */}
+              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
+                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
+                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                        <th className="py-2.5 px-3 w-12 text-center">NO</th>
+                        <th className="py-2.5 px-3">HARI</th>
+                        <th className="py-2.5 px-3">JAM MENGAJAR</th>
+                        <th className="py-2.5 px-3">KELAS</th>
+                        <th className="py-2.5 px-3">MATA PELAJARAN</th>
+                        <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
                       </tr>
-                    ) : filteredRekapList.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-20 text-center text-slate-500">
-                          Tidak ada data jadwal ditemukan.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRekapList.map((item, index) => (
-                        <tr key={item.id || index} className="hover:bg-slate-800/40 transition">
-                          <td className="py-3 px-4 text-center font-medium text-slate-400">{index + 1}</td>
-                          <td className="py-3 px-4 font-bold text-amber-400">{item.hari}</td>
-                          <td className="py-3 px-4 font-mono text-slate-300">{item.jam}</td>
-                          <td className="py-3 px-4 font-semibold text-white">
-                            <span className="bg-slate-900 text-slate-200 px-2.5 py-1 rounded-md text-[11px] font-medium border border-slate-800">
-                              {item.kelas}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 font-medium text-sky-300">{item.mapel}</td>
-                          <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="bg-rose-950/60 text-rose-400 hover:bg-rose-900/80 p-1.5 rounded-lg border border-rose-800/50 transition cursor-pointer"
-                              title="Hapus Jadwal"
-                            >
-                              🗑️
-                            </button>
-                          </td>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 text-slate-800">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Memuat data jadwal...</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : filteredRekapList.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Tidak ada data jadwal ditemukan.</td>
+                        </tr>
+                      ) : (
+                        filteredRekapList.map((item, index) => {
+                          const namaKelas = typeof item.kelas === 'object' ? item.kelas?.nama_kelas : item.kelas
+                          const namaMapel = typeof item.mapel === 'object' ? item.mapel?.nama_mapel : item.mapel
+                          return (
+                            <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
+                              <td className="py-2 px-3 text-center font-bold text-slate-500">{index + 1}</td>
+                              <td className="py-2 px-3 font-extrabold text-amber-800">{item.hari}</td>
+                              <td className="py-2 px-3 font-bold text-slate-700">{item.jam}</td>
+                              <td className="py-2 px-3 font-extrabold text-slate-900">
+                                <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[11px]">
+                                  {namaKelas || '-'}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 font-extrabold text-indigo-950">{namaMapel || '-'}</td>
+                              <td className="py-2 px-3 text-center print:hidden">
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
+                                  title="Hapus Jadwal"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
             </div>
           )}
 
-          {/* BADGE COPYRIGHT FOOTER */}
-          <div className="pt-8 pb-4 flex justify-center">
-            <div className="bg-[#0b1222] border border-slate-800 px-6 py-2.5 rounded-full text-center text-xs text-slate-400 shadow-lg">
-              <span>Aplikasi Guru AI</span>
-              <span className="mx-2">•</span>
-              <span>Created by <strong className="text-sky-400 font-bold">MUZAINI AL KAHFI</strong></span>
-            </div>
-          </div>
-
         </main>
+
+        {/* FOOTER BADGE */}
+        <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
+          <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+            <span>Aplikasi Guru AI</span>
+            <span className="mx-2">•</span>
+            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+          </div>
+        </div>
+
       </div>
 
-      {/* BOTTOM NAVIGATION DOCK (KONDISIONAL ROLE) */}
-      <div className="border-t border-slate-800/80 bg-[#0b1222]/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50">
-        <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition">
-            <span className="text-lg">🕒</span>
+      {/* BOTTOM NAVIGATION DOCK */}
+      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
+        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
+          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition">
-              <span className="text-lg">👥</span>
+            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+              <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition">
-              <span className="text-lg">👨‍🏫</span>
+            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+              <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jadwal" className="flex flex-col items-center gap-1 text-xs font-bold text-sky-400 transition">
-            <span className="text-lg">🎓</span>
+          <Link href="/jadwal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-600 transition">
+            <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/ai" className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition">
-            <span className="text-lg">✨</span>
-            <span>AI Tools</span>
-          </Link>
-
-          <Link href="/laporan" className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition">
-            <span className="text-lg">🖨️</span>
+          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
+
     </div>
   )
 }
