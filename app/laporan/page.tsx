@@ -29,6 +29,17 @@ const DAFTAR_MAPEL = [
 export default function LaporanPage() {
   const [activeTab, setActiveTab] = useState<'pusat' | 'pengaturan'>('pusat')
   const [userDisplayName, setUserDisplayName] = useState('GURU')
+  const [currentDateStr, setCurrentDateStr] = useState('')
+
+  useEffect(() => {
+    setCurrentDateStr(
+      new Date().toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    )
+  }, [])
 
   // State Identitas Guru Pengampu
   const [namaGuru, setNamaGuru] = useState('Guru Pengampu')
@@ -107,7 +118,7 @@ export default function LaporanPage() {
             ${nipKepsek}
           </td>
           <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
-            ${kotaTtd}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br/>
+            ${kotaTtd}, ${currentDateStr}<br/>
             <strong>Guru Pengampu / Wali Kelas</strong><br/><br/><br/><br/><br/>
             <u><strong>${namaGuru}</strong></u><br/>
             NIP/NUPTK: ${nipGuru}
