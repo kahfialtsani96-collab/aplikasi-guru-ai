@@ -137,19 +137,27 @@ export default function CetakKartuPage() {
             <p>KARTU TANDA PELAJAR</p>
           </div>
         </div>
+
         <div class="card-body">
           <div class="photo">FOTO</div>
           <div class="details">
-            <p class="label">NAMA:</p>
+            <p class="label">NAMA SISWA</p>
             <p class="value-name">${siswa.nama_lengkap}</p>
-            <p class="info">NISN: <strong>${siswa.nisn}</strong></p>
-            <p class="info">KELAS: <strong>${cleanKelasNama}</strong></p>
+            <div class="info-row">
+              <span class="info-label">NISN</span>
+              <span class="info-val">: ${siswa.nisn}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">KELAS</span>
+              <span class="info-val">: ${cleanKelasNama}</span>
+            </div>
           </div>
         </div>
+
         <div class="card-footer">
           <div class="footer-info">
             <p class="qr-title">QR Presensi</p>
-            <p class="qr-sub">Sistem Otomatis</p>
+            <p class="qr-sub">Sistem Otomatis KBM</p>
           </div>
           <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${siswa.nisn}" alt="QR" class="qr-code" />
         </div>
@@ -164,125 +172,155 @@ export default function CetakKartuPage() {
           <style>
             @page {
               size: A4 portrait;
-              margin: 10mm;
+              margin: 10mm 12mm;
+            }
+            * {
+              box-sizing: border-box;
             }
             body { 
-              font-family: Arial, Helvetica, sans-serif; 
+              font-family: 'Segoe UI', Arial, sans-serif; 
               margin: 0;
               padding: 0;
-              background: #fff; 
+              background: #ffffff; 
               -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .grid { 
               display: grid; 
-              grid-template-columns: repeat(3, 1fr); 
-              gap: 12px; 
+              grid-template-columns: repeat(2, 85mm); 
+              gap: 8mm 10mm; 
+              justify-content: center;
             }
             .card { 
+              width: 85mm;
+              height: 54mm;
               border: 1.5px solid #065f46; 
-              border-radius: 10px; 
-              padding: 10px; 
+              border-radius: 6mm; 
+              padding: 2.5mm 3.5mm; 
               background: #ffffff; 
-              box-sizing: border-box;
               page-break-inside: avoid;
+              break-inside: avoid;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              overflow: hidden;
+              position: relative;
             }
             .card-header { 
               display: flex;
               align-items: center;
-              gap: 8px;
-              border-bottom: 1.5px solid #065f46; 
-              padding-bottom: 6px; 
-              margin-bottom: 8px; 
+              gap: 2.5mm;
+              border-b: 1px solid #065f46; 
+              padding-bottom: 1.5mm; 
             }
             .school-logo {
-              width: 26px;
-              height: 26px;
+              width: 7mm;
+              height: 7mm;
               object-fit: contain;
+              flex-shrink: 0;
             }
             .header-text {
               flex: 1;
             }
             .header-text h2 { 
               margin: 0; 
-              font-size: 10.5px; 
+              font-size: 8.5pt; 
               font-weight: 800; 
               color: #065f46; 
-              line-height: 1.1;
+              line-height: 1;
+              letter-spacing: 0.2px;
             }
             .header-text p { 
-              margin: 1px 0 0 0; 
-              font-size: 7.5px; 
+              margin: 0.8mm 0 0 0; 
+              font-size: 6pt; 
               color: #047857; 
               letter-spacing: 0.5px; 
               font-weight: 700; 
             }
             .card-body { 
               display: flex; 
-              gap: 8px; 
+              gap: 3mm; 
               align-items: center; 
+              margin-top: 1mm;
+              flex: 1;
             }
             .photo { 
-              width: 42px; 
-              height: 56px; 
+              width: 18mm; 
+              height: 24mm; 
               background: #f1f5f9; 
-              border: 1px solid #cbd5e1; 
-              border-radius: 5px; 
+              border: 1px solid #94a3b8; 
+              border-radius: 2mm; 
               display: flex; 
               align-items: center; 
               justify-content: center; 
-              font-size: 8px; 
-              color: #94a3b8; 
+              font-size: 6.5pt; 
+              color: #64748b; 
               font-weight: bold; 
               flex-shrink: 0;
             }
             .details { 
-              font-size: 9px; 
-              line-height: 1.3; 
+              font-size: 7.5pt; 
               color: #0f172a; 
               flex: 1;
+              overflow: hidden;
             }
             .details .label {
               margin: 0;
-              font-size: 7.5px;
+              font-size: 5.5pt;
               color: #64748b;
-              font-weight: 600;
+              font-weight: 700;
+              text-transform: uppercase;
             }
             .details .value-name {
-              margin: 0 0 3px 0;
-              font-size: 9.5px;
+              margin: 0.5mm 0 1.5mm 0;
+              font-size: 8.5pt;
               font-weight: 800;
               color: #0f172a;
               line-height: 1.1;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
             }
-            .details .info {
-              margin: 1px 0;
-              font-size: 8.5px;
-              color: #334155;
+            .info-row {
+              display: flex;
+              align-items: center;
+              font-size: 7pt;
+              margin-bottom: 0.8mm;
+            }
+            .info-label {
+              width: 10mm;
+              font-weight: 700;
+              color: #475569;
+            }
+            .info-val {
+              font-weight: 800;
+              color: #0f172a;
             }
             .card-footer { 
-              margin-top: 8px; 
               border-top: 1px dashed #a7f3d0; 
-              padding-top: 6px; 
+              padding-top: 1.5mm; 
               display: flex;
               align-items: center;
               justify-content: space-between;
             }
             .footer-info {
-              font-size: 8px;
+              font-size: 6.5pt;
             }
             .qr-title {
               margin: 0;
-              font-weight: 700;
-              color: #0f172a;
+              font-weight: 800;
+              color: #065f46;
+              font-size: 6.5pt;
             }
             .qr-sub {
               margin: 0;
-              font-size: 7px;
+              font-size: 5.5pt;
               color: #64748b;
             }
             .qr-code { 
-              width: 36px; 
-              height: 36px; 
+              width: 9mm; 
+              height: 9mm; 
+              flex-shrink: 0;
             }
           </style>
         </head>

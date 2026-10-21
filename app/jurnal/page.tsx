@@ -115,9 +115,24 @@ export default function AgendaMengajarPage() {
     if (data) setMasterJamList(data)
   }
 
-  // Auto-Fetch Kelas & Mapel yang diampu oleh Guru yang login
+  // Auto-Fetch Kelas & Mapel (Semua untuk Operator, Terbatas untuk Guru biasa)
   async function fetchJadwalGuru(email: string) {
     try {
+      // 1. JIKA OPERATOR: Ambil SEMUA Kelas & Mapel yang ada
+      if (isOperator) {
+        const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
+        const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
+
+        if (dataKelas) {
+          setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
+        }
+        if (dataMapel) {
+          setMapelList(dataMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
+        }
+        return
+      }
+
+      // 2. JIKA GURU BIASA: Hanya Ambil Sesuai Jadwal Mengajarnya
       const { data, error } = await supabase
         .from('jadwal')
         .select(`
@@ -209,6 +224,12 @@ export default function AgendaMengajarPage() {
     }
   }, [activeTab, filterKelasId, filterMapelId, filterStatus, searchMateri, userEmail])
 
+  useEffect(() => {
+    if (userEmail) {
+      fetchJadwalGuru(userEmail)
+    }
+  }, [isOperator, userEmail])
+  
   // Filter jam pelajaran berdasarkan hari yang terpilih
   const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
 

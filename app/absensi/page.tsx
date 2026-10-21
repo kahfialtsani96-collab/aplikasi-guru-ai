@@ -52,7 +52,7 @@ export default function AbsensiPage() {
   const [tanggal, setTanggal] = useState('')
   const [todayStr, setTodayStr] = useState('')
 
-  // Dynamic Options (Diampu oleh Guru yang Login)
+  // Dynamic Options
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
 
@@ -72,9 +72,11 @@ export default function AbsensiPage() {
   const [searchNama, setSearchNama] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
 
-  // QR Scanner Ref
-  const [scanMessage, setScanMessage] = useState<string | null>(null)
+  // QR Scanner Ref, Anti-Spam & Feedback State
+  const [scanStatus, setScanStatus] = useState<{ type: 'success' | 'warning' | 'error'; msg: string } | null>(null)
+  const [isScanning, setIsScanning] = useState(false)
   const qrScannerRef = useRef<any>(null)
+  const isCooldownRef = useRef<boolean>(false)
 
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0]
@@ -89,7 +91,6 @@ export default function AbsensiPage() {
         const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
         setUserDisplayName(nameFromMeta.toUpperCase())
 
-        // Fetch Kelas & Mapel yang diampu oleh Guru ini
         fetchJadwalGuru(email)
       }
     }
@@ -97,9 +98,30 @@ export default function AbsensiPage() {
     getUserData()
   }, [])
 
-  // Mengambil daftar Kelas & Mapel yang diampu guru dari tabel jadwal
+  // Fetch Jadwal Guru (Semua untuk Operator, Terbatas untuk Guru biasa)
   async function fetchJadwalGuru(email: string) {
     try {
+      // 1. JIKA OPERATOR: Ambil SEMUA Kelas & Mapel yang ada
+      if (isOperator) {
+        const { data: dataKelas } = await supabase
+          .from('kelas')
+          .select('id, nama_kelas')
+          .order('nama_kelas', { ascending: true })
+        const { data: dataMapel } = await supabase
+          .from('mapel')
+          .select('id, nama_mapel')
+          .order('nama_mapel', { ascending: true })
+
+        if (dataKelas) {
+          setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
+        }
+        if (dataMapel) {
+          setMapelList(dataMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
+        }
+        return
+      }
+
+      // 2. JIKA GURU BIASA: Hanya Ambil Sesuai Jadwal Mengajarnya
       const { data, error } = await supabase
         .from('jadwal')
         .select(`
@@ -111,7 +133,6 @@ export default function AbsensiPage() {
         .eq('guru_email', email)
 
       if (!error && data) {
-        // Extract unique kelas
         const uniqueKelasMap = new Map<number, string>()
         const uniqueMapelMap = new Map<number, string>()
 
@@ -135,7 +156,7 @@ export default function AbsensiPage() {
     }
   }
 
-  // Load Siswa berdasarkan Kelas ID terpilih
+  // Load Siswa Terurut Abjad (A-Z) & Kosongkan Map Status Absensi
   useEffect(() => {
     async function fetchSiswa() {
       if (!selectedKelasId) {
@@ -150,15 +171,12 @@ export default function AbsensiPage() {
           .from('siswa')
           .select('id, nisn, nama_lengkap, kelas_id')
           .eq('kelas_id', Number(selectedKelasId))
-          .order('nama_lengkap', { ascending: true })
+          .order('nama_lengkap', { ascending: true }) // Urut Abjad A-Z
 
         if (!error && data) {
           setSiswaList(data)
-          const initialMap: StatusAbsensiMap = {}
-          data.forEach((s) => {
-            if (s.id) initialMap[String(s.id)] = 'HADIR'
-          })
-          setAbsensiMap(initialMap)
+          // Default awal status kosong (Belum Absen)
+          setAbsensiMap({})
         } else {
           setSiswaList([])
         }
@@ -203,28 +221,62 @@ export default function AbsensiPage() {
         }).catch(() => {})
       }
     }
-  }, [modeInput, activeTab, siswaList])
+  }, [modeInput, activeTab, siswaList, absensiMap])
 
+  // Logika Anti-Spam & Pemindaian QR
   const handleQRScanned = (scannedText: string) => {
     const textClean = scannedText.trim()
+
+    // 1. Cooldown Anti-Spam Frame Kamera
+    if (isCooldownRef.current) return
+    isCooldownRef.current = true
+
+    // Indikator Loading Brief
+    setIsScanning(true)
+
     const targetSiswa = siswaList.find(
       (s) => s.nisn === textClean || String(s.id) === textClean
     )
 
     if (targetSiswa && targetSiswa.id) {
-      setAbsensiMap((prev) => ({
-        ...prev,
-        [String(targetSiswa.id)]: 'HADIR',
-      }))
-      setScanMessage(`✅ Berhasil: ${targetSiswa.nama_lengkap} (HADIR)`)
+      const sId = String(targetSiswa.id)
+      const currentStatus = absensiMap[sId]
+
+      // 2. CEK ANTI-SPAM: Jika Siswa Sudah Terdata HADIR
+      if (currentStatus === 'HADIR') {
+        setScanStatus({
+          type: 'warning',
+          msg: `⚠️ ${targetSiswa.nama_lengkap} SUDAH TERDATA HADIR!`
+        })
+      } else {
+        // 3. SET HADIR & PINDAHKAN SISWA KE TABEL BUKTI
+        setAbsensiMap((prev) => ({
+          ...prev,
+          [sId]: 'HADIR',
+        }))
+        setScanStatus({
+          type: 'success',
+          msg: `✅ BERHASIL: ${targetSiswa.nama_lengkap} (HADIR)`
+        })
+      }
     } else {
-      setScanMessage(`⚠️ Siswa dengan NISN/ID: "${textClean}" tidak ditemukan di kelas ini.`)
+      setScanStatus({
+        type: 'error',
+        msg: `❌ NISN/ID: "${textClean}" Tidak Ditemukan di Kelas Ini!`
+      })
     }
 
-    setTimeout(() => setScanMessage(null), 3500)
+    setTimeout(() => {
+      setIsScanning(false)
+    }, 300)
+
+    setTimeout(() => {
+      isCooldownRef.current = false
+      setScanStatus(null)
+    }, 2200)
   }
 
-  // Load Rekapitulasi Absensi
+  // Fetch Rekap
   const fetchRekap = async () => {
     if (!userEmail) return
 
@@ -261,21 +313,26 @@ export default function AbsensiPage() {
     }
   }, [activeTab, filterKelasId, filterMapelId, filterTanggal, searchNama, userEmail])
 
-  const handleHadirSemua = () => {
-    const updatedMap: StatusAbsensiMap = {}
-    siswaList.forEach((s) => {
-      if (s.id) updatedMap[String(s.id)] = 'HADIR'
+  useEffect(() => {
+    if (userEmail) {
+      fetchJadwalGuru(userEmail)
+    }
+  }, [isOperator, userEmail])
+  
+  // Ubah Status Siswa Manual
+  const handleStatusChange = (siswaId: string, status: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA' | '') => {
+    setAbsensiMap((prev) => {
+      const next = { ...prev }
+      if (status === '') {
+        delete next[siswaId]
+      } else {
+        next[siswaId] = status
+      }
+      return next
     })
-    setAbsensiMap(updatedMap)
   }
 
-  const handleStatusChange = (siswaId: string, status: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA') => {
-    setAbsensiMap((prev) => ({
-      ...prev,
-      [siswaId]: status,
-    }))
-  }
-
+  // Simpan Absensi ke Supabase
   const handleSimpanAbsensi = async () => {
     if (!selectedKelasId || !selectedMapelId || !tanggal) {
       alert('Silakan pilih Tanggal, Kelas, dan Mata Pelajaran terlebih dahulu!')
@@ -292,12 +349,20 @@ export default function AbsensiPage() {
       return
     }
 
+    // Hanya simpan siswa yang sudah diberi status (Hadir/Izin/Sakit/Alpa)
+    const processedSiswa = siswaList.filter((s) => absensiMap[String(s.id)])
+
+    if (processedSiswa.length === 0) {
+      alert('Belum ada siswa yang di-absen (QR maupun Manual).')
+      return
+    }
+
     setSaving(true)
     try {
       const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
 
-      const rowsToInsert = siswaList.map((siswa) => ({
+      const rowsToInsert = processedSiswa.map((siswa) => ({
         tanggal,
         kelas_id: Number(selectedKelasId),
         mapel_id: Number(selectedMapelId),
@@ -306,7 +371,7 @@ export default function AbsensiPage() {
         mapel: selectedMapelObj?.nama || '',
         nama_siswa: siswa.nama_lengkap,
         nisn: siswa.nisn || '',
-        status: absensiMap[String(siswa.id)] || 'HADIR',
+        status: absensiMap[String(siswa.id)],
         guru_email: userEmail
       }))
 
@@ -317,7 +382,9 @@ export default function AbsensiPage() {
       if (error) {
         alert('Gagal menyimpan absensi: ' + error.message)
       } else {
-        alert('Data absensi harian berhasil disimpan!')
+        alert(`Berhasil menyimpan presensi ${processedSiswa.length} siswa!`)
+        // Opsional: Buka rekap setelah simpan
+        setActiveTab('rekap')
       }
     } catch (err: any) {
       alert('Terjadi kesalahan: ' + err.message)
@@ -325,6 +392,10 @@ export default function AbsensiPage() {
       setSaving(false)
     }
   }
+
+  // Pemisahan Daftar Siswa
+  const siswaBelumAbsen = siswaList.filter((s) => !absensiMap[String(s.id)])
+  const siswaSudahAbsen = siswaList.filter((s) => absensiMap[String(s.id)])
 
   // Statistik Rekapitulasi
   const totalData = rekapList.length
@@ -443,11 +514,11 @@ export default function AbsensiPage() {
           {activeTab === 'input' && (
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
-              {/* FILTER BAR INPUT */}
+              {/* FILTER & SIMPAN BAR UTAMA (DITARUH DI ATAS) */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden">
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
                   
-                  <div className="sm:col-span-3">
+                  <div className="sm:col-span-2">
                     <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">TANGGAL *</label>
                     <input
                       type="date"
@@ -472,7 +543,7 @@ export default function AbsensiPage() {
                     </select>
                   </div>
 
-                  <div className="sm:col-span-4">
+                  <div className="sm:col-span-3">
                     <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">MAPEL DIAJAR *</label>
                     <select
                       value={selectedMapelId}
@@ -486,147 +557,221 @@ export default function AbsensiPage() {
                     </select>
                   </div>
 
-                  <div className="sm:col-span-2 flex items-center gap-1">
+                  <div className="sm:col-span-2">
                     <button
                       type="button"
                       onClick={() => setModeInput(modeInput === 'manual' ? 'qr' : 'manual')}
                       className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold py-1.5 px-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                     >
-                      <span>{modeInput === 'manual' ? '📷 QR' : '✍️ Manual'}</span>
+                      <span>{modeInput === 'manual' ? '📷 Mode QR' : '✍️ Mode Manual'}</span>
+                    </button>
+                  </div>
+
+                  {/* TOMBOL SIMPAN UTAMA DI ATAS */}
+                  <div className="sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={handleSimpanAbsensi}
+                      disabled={saving || !selectedKelasId || !selectedMapelId}
+                      className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-black py-1.5 px-3 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>💾</span> {saving ? 'Simpan...' : 'Simpan Presensi'}
                     </button>
                   </div>
 
                 </div>
               </div>
 
-              {/* PANEL QR SCANNER KAMERA */}
+              {/* PANEL QR SCANNER KAMERA WITH LOADING & ANTI-SPAM TOAST */}
               {modeInput === 'qr' && (
-                <div className="bg-white/90 backdrop-blur-md border border-indigo-200 rounded-2xl p-4 flex flex-col items-center justify-center space-y-3 shrink-0 shadow-xs">
+                <div className="bg-white/90 backdrop-blur-md border border-indigo-200 rounded-2xl p-4 flex flex-col items-center justify-center space-y-3 shrink-0 shadow-xs relative">
                   <h3 className="text-xs font-extrabold text-indigo-900 uppercase flex items-center gap-2">
                     <span>📷</span> Arahkan QR Code Kartu Pelajar ke Kamera
                   </h3>
-                  <div className="w-full max-w-xs overflow-hidden rounded-2xl border-2 border-indigo-600 shadow-md bg-black">
+                  
+                  <div className="w-full max-w-xs overflow-hidden rounded-2xl border-2 border-indigo-600 shadow-md bg-black relative">
                     <div id="reader" className="w-full"></div>
+                    {isScanning && (
+                      <div className="absolute inset-0 bg-emerald-500/20 backdrop-blur-xs flex items-center justify-center">
+                        <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    )}
                   </div>
-                  {scanMessage && (
-                    <div className="bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-900">
-                      {scanMessage}
+
+                  {scanStatus && (
+                    <div
+                      className={`px-4 py-2 rounded-xl text-xs font-extrabold border shadow-sm transition-all animate-bounce ${
+                        scanStatus.type === 'success'
+                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                          : scanStatus.type === 'warning'
+                          ? 'bg-amber-100 text-amber-900 border-amber-300'
+                          : 'bg-rose-100 text-rose-900 border-rose-300'
+                      }`}
+                    >
+                      {scanStatus.msg}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* TABEL INPUT SISWA */}
-              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between pb-2">
-                  <span className="text-xs font-extrabold text-indigo-950">
-                    Daftar Siswa ({siswaList.length} orang)
-                  </span>
-                  {selectedKelasId && selectedMapelId && siswaList.length > 0 && (
-                    <button
-                      onClick={handleHadirSemua}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-3 py-1 rounded-xl text-xs transition shadow-xs cursor-pointer"
-                    >
-                      👤 Hadir Semua
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
-                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
-                        <th className="py-2.5 px-3 w-12 text-center">NO</th>
-                        <th className="py-2.5 px-3">NAMA LENGKAP SISWA</th>
-                        <th className="py-2.5 px-3 text-center w-20">HADIR</th>
-                        <th className="py-2.5 px-3 text-center w-20">IZIN</th>
-                        <th className="py-2.5 px-3 text-center w-20">SAKIT</th>
-                        <th className="py-2.5 px-3 text-center w-20">ALPA</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 text-slate-800">
-                      {!selectedKelasId || !selectedMapelId ? (
-                        <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">
-                            Silakan pilih Tanggal, Kelas, dan Mata Pelajaran di atas.
-                          </td>
-                        </tr>
-                      ) : loadingSiswa ? (
-                        <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Memuat data siswa...</td>
-                        </tr>
-                      ) : siswaList.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Belum ada siswa terdaftar di kelas ini.</td>
-                        </tr>
-                      ) : (
-                        siswaList.map((siswa, index) => {
-                          const sId = String(siswa.id)
-                          const currentStatus = absensiMap[sId] || 'HADIR'
-                          return (
-                            <tr key={sId || index} className="hover:bg-indigo-50/60 transition">
-                              <td className="py-2 px-3 text-center font-bold text-slate-500">{index + 1}</td>
-                              <td className="py-2 px-3 font-extrabold text-slate-900">
-                                {siswa.nama_lengkap}
-                                <span className="block text-[10px] text-slate-500 font-mono font-normal">
-                                  NISN: {siswa.nisn || '-'}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                <input
-                                  type="radio"
-                                  name={`status-${sId}`}
-                                  checked={currentStatus === 'HADIR'}
-                                  onChange={() => handleStatusChange(sId, 'HADIR')}
-                                  className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                                />
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                <input
-                                  type="radio"
-                                  name={`status-${sId}`}
-                                  checked={currentStatus === 'IZIN'}
-                                  onChange={() => handleStatusChange(sId, 'IZIN')}
-                                  className="w-4 h-4 accent-amber-600 cursor-pointer"
-                                />
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                <input
-                                  type="radio"
-                                  name={`status-${sId}`}
-                                  checked={currentStatus === 'SAKIT'}
-                                  onChange={() => handleStatusChange(sId, 'SAKIT')}
-                                  className="w-4 h-4 accent-indigo-600 cursor-pointer"
-                                />
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                <input
-                                  type="radio"
-                                  name={`status-${sId}`}
-                                  checked={currentStatus === 'ALPA'}
-                                  onChange={() => handleStatusChange(sId, 'ALPA')}
-                                  className="w-4 h-4 accent-rose-600 cursor-pointer"
-                                />
-                              </td>
-                            </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {selectedKelasId && selectedMapelId && siswaList.length > 0 && (
-                  <div className="flex justify-end pt-2 shrink-0">
-                    <button
-                      onClick={handleSimpanAbsensi}
-                      disabled={saving}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-5 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <span>💾</span> {saving ? 'Menyimpan...' : 'Simpan Presensi'}
-                    </button>
+              {/* DUA TABEL TERPISAH (BELUM ABSEN VS SUDAH ABSEN) */}
+              <div className="flex-1 flex flex-col sm:flex-row gap-3 min-h-0">
+                
+                {/* TABEL 1 (ATAS/KIRI): SISWA BELUM ABSEN */}
+                <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3 flex-1 flex flex-col min-h-0 shadow-xs">
+                  <div className="flex items-center justify-between pb-2">
+                    <span className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                      1. Belum Absen ({siswaBelumAbsen.length} Orang)
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-bold">Urut A–Z</span>
                   </div>
-                )}
+
+                  <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
+                        <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[10px]">
+                          <th className="py-2 px-2.5 w-8 text-center">NO</th>
+                          <th className="py-2 px-2.5">NAMA LENGKAP SISWA</th>
+                          <th className="py-2 px-2.5 text-center w-36">INPUT MANUAL</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
+                        {!selectedKelasId || !selectedMapelId ? (
+                          <tr>
+                            <td colSpan={3} className="py-10 text-center text-slate-500 font-medium">
+                              Silakan pilih Tanggal, Kelas, dan Mapel.
+                            </td>
+                          </tr>
+                        ) : loadingSiswa ? (
+                          <tr>
+                            <td colSpan={3} className="py-10 text-center text-slate-500 font-medium">Memuat daftar siswa...</td>
+                          </tr>
+                        ) : siswaBelumAbsen.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-10 text-center text-emerald-800 font-extrabold">
+                              🎉 Semua siswa sudah terabsen!
+                            </td>
+                          </tr>
+                        ) : (
+                          siswaBelumAbsen.map((siswa, index) => {
+                            const sId = String(siswa.id)
+                            return (
+                              <tr key={sId} className="hover:bg-indigo-50/60 transition">
+                                <td className="py-1.5 px-2.5 text-center font-bold text-slate-400">{index + 1}</td>
+                                <td className="py-1.5 px-2.5 font-extrabold text-slate-900">
+                                  {siswa.nama_lengkap}
+                                  <span className="block text-[9px] text-slate-400 font-mono font-normal">
+                                    NISN: {siswa.nisn || '-'}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-2.5 text-center">
+                                  <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
+                                    <button
+                                      onClick={() => handleStatusChange(sId, 'HADIR')}
+                                      className="px-1.5 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300"
+                                    >
+                                      H
+                                    </button>
+                                    <button
+                                      onClick={() => handleStatusChange(sId, 'IZIN')}
+                                      className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300"
+                                    >
+                                      I
+                                    </button>
+                                    <button
+                                      onClick={() => handleStatusChange(sId, 'SAKIT')}
+                                      className="px-1.5 py-0.5 rounded bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-300"
+                                    >
+                                      S
+                                    </button>
+                                    <button
+                                      onClick={() => handleStatusChange(sId, 'ALPA')}
+                                      className="px-1.5 py-0.5 rounded bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300"
+                                    >
+                                      A
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* TABEL 2 (BAWAH/KANAN): SISWA SUDAH TERABSEN */}
+                <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3 flex-1 flex flex-col min-h-0 shadow-xs">
+                  <div className="flex items-center justify-between pb-2">
+                    <span className="text-xs font-extrabold text-emerald-900 uppercase flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                      2. Sudah Terabsen ({siswaSudahAbsen.length} Orang)
+                    </span>
+                    <span className="text-[10px] text-emerald-800 font-bold">Siap Disimpan</span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
+                        <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[10px]">
+                          <th className="py-2 px-2.5 w-8 text-center">NO</th>
+                          <th className="py-2 px-2.5">NAMA LENGKAP SISWA</th>
+                          <th className="py-2 px-2.5 text-center w-24">STATUS</th>
+                          <th className="py-2 px-2.5 text-center w-10">BATAL</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
+                        {siswaSudahAbsen.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-10 text-center text-slate-400 font-medium">
+                              Belum ada siswa yang di-scan QR atau diisi manual.
+                            </td>
+                          </tr>
+                        ) : (
+                          siswaSudahAbsen.map((siswa, index) => {
+                            const sId = String(siswa.id)
+                            const st = absensiMap[sId]
+                            return (
+                              <tr key={sId} className="hover:bg-indigo-50/60 transition">
+                                <td className="py-1.5 px-2.5 text-center font-bold text-slate-400">{index + 1}</td>
+                                <td className="py-1.5 px-2.5 font-extrabold text-slate-900">
+                                  {siswa.nama_lengkap}
+                                </td>
+                                <td className="py-1.5 px-2.5 text-center">
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                      st === 'HADIR'
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                        : st === 'IZIN'
+                                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                        : st === 'SAKIT'
+                                        ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                                        : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                    }`}
+                                  >
+                                    {st}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-2.5 text-center">
+                                  <button
+                                    onClick={() => handleStatusChange(sId, '')}
+                                    className="text-rose-500 hover:text-rose-700 font-bold p-0.5"
+                                    title="Batalkan & Kembalikan ke Belum Absen"
+                                  >
+                                    ✕
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
               </div>
 
             </div>

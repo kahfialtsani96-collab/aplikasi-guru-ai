@@ -68,16 +68,13 @@ export default function LaporanPage() {
         const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
         setUserDisplayName(nameFromMeta.toUpperCase())
 
-        // Fetch data profil guru dari tabel database 'guru'
         fetchProfilGuru(email, nameFromMeta)
-        // Fetch Master Kelas & Mapel
-        fetchMasterData(email)
+        fetchMasterData()
       }
     }
     getUserData()
   }, [])
 
-  // Auto-Fetch data resmi Guru dari database
   async function fetchProfilGuru(email: string, defaultName: string) {
     try {
       const { data } = await supabase
@@ -97,8 +94,7 @@ export default function LaporanPage() {
     }
   }
 
-  // Fetch Master Kelas & Mapel dari DB
-  async function fetchMasterData(email: string) {
+  async function fetchMasterData() {
     try {
       const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
       const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
@@ -114,7 +110,6 @@ export default function LaporanPage() {
     }
   }
 
-  // TEMPLATE HTML KOP SURAT SEKOLAH
   const headerKopHTML = `
     <div style="text-align: center; margin-bottom: 20px; font-family: 'Times New Roman', serif; color: #000;">
       <div style="font-size: 18pt; font-weight: bold; font-family: 'Traditional Arabic', 'Amiri', serif; line-height: 1.2; margin-bottom: 4px;">
@@ -141,7 +136,6 @@ export default function LaporanPage() {
     </div>
   `
 
-  // TEMPLATE TANDA TANGAN PENGESAHAN
   const footerTtdHTML = `
     <div style="margin-top: 40px; font-family: 'Times New Roman', serif; font-size: 11pt; page-break-inside: avoid; color: #000;">
       <table style="width: 100%; border: none;">
@@ -163,7 +157,6 @@ export default function LaporanPage() {
     </div>
   `
 
-  // FUNGSI PRINT UTAMA
   const handlePrintDocument = async (jenis: string) => {
     let judulDoc = 'LAPORAN AKADEMIK'
     let contentBody = ''
@@ -177,11 +170,11 @@ export default function LaporanPage() {
       const { data: siswaData } = await querySiswa
 
       let queryAbsensi = supabase.from('absensi').select('*')
-      if (!isOperator && userEmail) queryAbsensi = queryAbsensi.eq('guru_email', userEmail)
+      if (filterKelasAbsensi) queryAbsensi = queryAbsensi.eq('kelas_id', Number(filterKelasAbsensi))
       const { data: absensiData } = await queryAbsensi
 
       const rekapSiswa = (siswaData || []).map(siswa => {
-        const riwayat = (absensiData || []).filter(a => a.siswa_id === siswa.id)
+        const riwayat = (absensiData || []).filter(a => Number(a.siswa_id) === Number(siswa.id))
         return {
           nisn: siswa.nisn || '-',
           nama: siswa.nama_lengkap,
@@ -237,7 +230,7 @@ export default function LaporanPage() {
       const { data: siswaData } = await querySiswa
 
       let queryNilai = supabase.from('nilai').select('*')
-      if (!isOperator && userEmail) queryNilai = queryNilai.eq('guru_email', userEmail)
+      if (filterKelasLeger) queryNilai = queryNilai.eq('kelas_id', Number(filterKelasLeger))
       const { data: nilaiData } = await queryNilai
 
       const rekapLeger = (siswaData || []).map(siswa => {
@@ -298,7 +291,6 @@ export default function LaporanPage() {
       judulDoc = `JURNAL AGENDA MENGAJAR HARIAN GURU ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
 
       let queryAgenda = supabase.from('jurnal_agenda').select('*').order('created_at', { ascending: false })
-      if (!isOperator && userEmail) queryAgenda = queryAgenda.eq('guru_email', userEmail)
       if (filterKelasJurnal) queryAgenda = queryAgenda.eq('kelas_id', Number(filterKelasJurnal))
 
       const { data: agendaData } = await queryAgenda
@@ -362,8 +354,8 @@ export default function LaporanPage() {
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
                       <td style="border: 1px solid #000; padding: 5px;">${b.nama_siswa || 'Siswa'}</td>
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${b.kelas || '-'}</td>
-                      <td style="border: 1px solid #000; padding: 5px;">${b.permasalahan || '-'}</td>
-                      <td style="border: 1px solid #000; padding: 5px;">${b.tindak_lanjut || '-'}</td>
+                      <td style="border: 1px solid #000; padding: 5px;">${b.masalah || '-'}</td>
+                      <td style="border: 1px solid #000; padding: 5px;">${b.solusi || b.keterangan_hukuman || '-'}</td>
                     </tr>
                   `).join('')
                 : `<tr><td colspan="5" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada catatan bimbingan guru wali tersimpan.</td></tr>`
@@ -379,9 +371,13 @@ export default function LaporanPage() {
   // 1. CETAK RIWAYAT HARIAN ABSENSI
   const handlePrintRiwayatAbsensi = async () => {
     let query = supabase.from('absensi').select('*').order('tanggal', { ascending: false })
-    if (!isOperator && userEmail) query = query.eq('guru_email', userEmail)
-    if (tanggalAbsensi) query = query.eq('tanggal', tanggalAbsensi)
-    if (kelasRiwayatAbsensi) query = query.eq('kelas_id', Number(kelasRiwayatAbsensi))
+
+    if (tanggalAbsensi && tanggalAbsensi.trim() !== '') {
+      query = query.eq('tanggal', tanggalAbsensi.trim())
+    }
+    if (kelasRiwayatAbsensi) {
+      query = query.eq('kelas_id', Number(kelasRiwayatAbsensi))
+    }
 
     const { data: absensiData } = await query
     const selectedK = kelasList.find(k => k.id === Number(kelasRiwayatAbsensi))
@@ -425,7 +421,6 @@ export default function LaporanPage() {
   // 2. CETAK RIWAYAT INPUT NILAI AKADEMIK
   const handlePrintRiwayatNilai = async () => {
     let query = supabase.from('nilai').select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))').order('created_at', { ascending: false })
-    if (!isOperator && userEmail) query = query.eq('guru_email', userEmail)
     if (kelasNilai) query = query.eq('kelas_id', Number(kelasNilai))
     if (mapelNilai) query = query.eq('mapel_id', Number(mapelNilai))
 
@@ -472,7 +467,6 @@ export default function LaporanPage() {
     executePrint(judulDoc, contentBody)
   }
 
-  // HELPER BUKA WINDOW PRINT
   const executePrint = (judulDoc: string, contentBody: string) => {
     const printWindow = window.open('', '_blank')
     if (printWindow) {
@@ -505,14 +499,12 @@ export default function LaporanPage() {
   return (
     <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
       
-      {/* WATERMARK LOGO */}
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         
-        {/* HEADER TOPBAR */}
         <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden">
           <div className="flex items-center gap-3">
             <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
@@ -557,7 +549,6 @@ export default function LaporanPage() {
           </div>
         </header>
 
-        {/* SUB-HEADER TAB SWITCHER */}
         <div className="bg-slate-200/80 backdrop-blur-md border-b border-slate-300 px-6 py-2 shrink-0 overflow-x-auto print:hidden">
           <div className="max-w-6xl mx-auto flex items-center gap-2 text-xs font-bold">
             <span className="text-indigo-900 font-black pr-2 border-r border-slate-300 flex items-center gap-1">
@@ -582,14 +573,11 @@ export default function LaporanPage() {
           </div>
         </div>
 
-        {/* MAIN CONTENT AREA */}
         <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 overflow-y-auto space-y-4">
 
-          {/* TAB 1: PUSAT LAPORAN */}
           {activeTab === 'pusat' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
               
-              {/* CARD 1: CETAK PDF ABSENSI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -621,7 +609,6 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* CARD 2: CETAK PDF LEGER NILAI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -653,7 +640,6 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* CARD 3: JURNAL AGENDA MENGAJAR */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -685,7 +671,6 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* CARD 4: CATATAN BIMBINGAN WALI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -717,7 +702,6 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* CARD 5: RIWAYAT HARIAN ABSENSI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -760,7 +744,6 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* CARD 6: RIWAYAT INPUT NILAI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -810,12 +793,10 @@ export default function LaporanPage() {
             </div>
           )}
 
-          {/* TAB 2: PENGATURAN PROFIL & KOP SEKOLAH */}
           {activeTab === 'pengaturan' && (
             <div className="space-y-4 pb-12">
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* IDENTITAS GURU */}
                 <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-2xl p-4 space-y-3 shadow-xs">
                   <h3 className="font-extrabold text-indigo-950 text-xs uppercase border-b border-slate-200 pb-2">
                     IDENTITAS GURU PENGAMPU (TTD LAPORAN)
@@ -842,7 +823,6 @@ export default function LaporanPage() {
                   </div>
                 </div>
 
-                {/* IDENTITAS KEPALA SEKOLAH */}
                 <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-2xl p-4 space-y-3 shadow-xs">
                   <h3 className="font-extrabold text-indigo-950 text-xs uppercase border-b border-slate-200 pb-2">
                     IDENTITAS KEPALA SEKOLAH
@@ -870,7 +850,6 @@ export default function LaporanPage() {
                 </div>
               </div>
 
-              {/* IDENTITAS SEKOLAH & KOP SURAT */}
               <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-2xl p-4 space-y-3 shadow-xs">
                 <h3 className="font-extrabold text-indigo-950 text-xs uppercase border-b border-slate-200 pb-2">
                   IDENTITAS SEKOLAH &amp; KOP SURAT
@@ -929,7 +908,6 @@ export default function LaporanPage() {
 
         </main>
 
-        {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
           <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
             <span>Aplikasi Guru AI</span>
@@ -940,7 +918,6 @@ export default function LaporanPage() {
 
       </div>
 
-      {/* BOTTOM NAVIGATION DOCK */}
       <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
           <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
