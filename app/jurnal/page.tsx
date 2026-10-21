@@ -56,7 +56,8 @@ export default function AgendaMengajarPage() {
   // State Input Jurnal Agenda
   const [tanggal, setTanggal] = useState('')
   const [hari, setHari] = useState('Senin')
-  const [selectedJamKe, setSelectedJamKe] = useState('1')
+  const [jamMulai, setJamMulai] = useState('1')
+  const [jamSelesai, setJamSelesai] = useState('1')
   const [selectedKelasId, setSelectedKelasId] = useState('')
   const [selectedMapelId, setSelectedMapelId] = useState('')
   const [materi, setMateri] = useState('')
@@ -91,12 +92,16 @@ export default function AgendaMengajarPage() {
       }
     }
 
-    const todayObj = new Date()
-    const todayStr = todayObj.toISOString().split('T')[0]
+    // Presisi Zona Waktu Indonesia (WIB)
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const todayStr = `${year}-${month}-${day}`
     setTanggal(todayStr)
 
     // Deteksi Hari
-    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][todayObj.getDay()]
+    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][now.getDay()]
     if (namaHari !== 'Jumat') {
       setHari(namaHari)
     }
@@ -225,12 +230,21 @@ export default function AgendaMengajarPage() {
       const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
 
-      // Format teks Jam Ke dinamis sesuai master_jam
-      const jamDetail = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(selectedJamKe))
-      const ketInfo = jamDetail?.keterangan && jamDetail.keterangan !== 'KBM' ? ` [${jamDetail.keterangan}]` : ''
-      const jamFormattedText = jamDetail
-        ? `Jam Ke-${jamDetail.jam_ke} (${jamDetail.waktu_mulai.slice(0, 5)} - ${jamDetail.waktu_selesai.slice(0, 5)})${ketInfo}`
-        : `Jam Ke-${selectedJamKe}`
+      // Kalkulasi Jam Berlanjut / Jam Blok
+      const startJamObj = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(jamMulai))
+      const endJamObj = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(jamSelesai))
+
+      let jamFormattedText = `Jam Ke-${jamMulai}`
+      if (startJamObj && endJamObj) {
+        const wMulai = startJamObj.waktu_mulai.slice(0, 5)
+        const wSelesai = endJamObj.waktu_selesai.slice(0, 5)
+        
+        if (Number(jamMulai) === Number(jamSelesai)) {
+          jamFormattedText = `Jam Ke-${jamMulai} (${wMulai} - ${wSelesai})`
+        } else {
+          jamFormattedText = `Jam Ke-${jamMulai} s/d ${jamSelesai} (${wMulai} - ${wSelesai})`
+        }
+      }
 
       const { error } = await supabase.from('jurnal_agenda').insert([
         {
@@ -254,6 +268,9 @@ export default function AgendaMengajarPage() {
         alert('Jurnal agenda mengajar berhasil disimpan!')
         setMateri('')
         setKeterangan('')
+        setSelectedKelasId('')
+        setSelectedMapelId('')
+        setAbsenSiswa('Nihil')
         fetchJurnal(userEmail)
       }
     } catch (err: any) {
@@ -419,7 +436,8 @@ export default function AgendaMengajarPage() {
                       value={hari}
                       onChange={(e) => {
                         setHari(e.target.value)
-                        setSelectedJamKe('1')
+                        setJamMulai('1')
+                        setJamSelesai('1')
                       }}
                       className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
                     >
@@ -432,25 +450,50 @@ export default function AgendaMengajarPage() {
                     </select>
                   </div>
 
+                  {/* JAM BLOK: MULAI S/D SELESAI */}
                   <div className="sm:col-span-3">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">JAM MENGAJAR DINAMIS *</label>
-                    <select
-                      value={selectedJamKe}
-                      onChange={(e) => setSelectedJamKe(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
-                    >
-                      {jamOptionsForHari.length > 0 ? (
-                        jamOptionsForHari.map((j) => (
-                          <option key={j.id} value={j.jam_ke}>
-                            Jam Ke-{j.jam_ke} ({j.waktu_mulai.slice(0, 5)} - {j.waktu_selesai.slice(0, 5)}){j.keterangan !== 'KBM' ? ` [${j.keterangan}]` : ''}
-                          </option>
-                        ))
-                      ) : (
-                        [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
-                          <option key={num} value={num}>Jam Ke-{num}</option>
-                        ))
-                      )}
-                    </select>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">JAM MENGAJAR *</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <select
+                        value={jamMulai}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setJamMulai(val)
+                          if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      >
+                        {jamOptionsForHari.length > 0 ? (
+                          jamOptionsForHari.map((j) => (
+                            <option key={j.id} value={j.jam_ke}>Jam Ke-{j.jam_ke}</option>
+                          ))
+                        ) : (
+                          [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                            <option key={num} value={num}>Jam Ke-{num}</option>
+                          ))
+                        )}
+                      </select>
+
+                      <select
+                        value={jamSelesai}
+                        onChange={(e) => setJamSelesai(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      >
+                        {jamOptionsForHari.length > 0 ? (
+                          jamOptionsForHari
+                            .filter((j) => j.jam_ke >= Number(jamMulai))
+                            .map((j) => (
+                              <option key={j.id} value={j.jam_ke}>s/d Ke-{j.jam_ke}</option>
+                            ))
+                        ) : (
+                          [1, 2, 3, 4, 5, 6, 7, 8]
+                            .filter((num) => num >= Number(jamMulai))
+                            .map((num) => (
+                              <option key={num} value={num}>s/d Ke-{num}</option>
+                            ))
+                        )}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="sm:col-span-2">
