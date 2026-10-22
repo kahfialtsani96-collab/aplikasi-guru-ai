@@ -157,7 +157,7 @@ export default function PenilaianPage() {
           if (selectedMapelId) {
             const { data: existingNilai } = await supabase
               .from('nilai')
-              .select(`siswa_id, ${jenisPenilaian}`)
+              .select('*')
               .eq('kelas_id', Number(selectedKelasId))
               .eq('mapel_id', Number(selectedMapelId))
               .eq('semester', selectedSemester)
@@ -166,7 +166,7 @@ export default function PenilaianPage() {
             const initialMap: NilaiMap = {}
             data.forEach((s) => {
               const matched = (existingNilai || []).find((n: Record<string, any>) => Number(n.siswa_id) === Number(s.id))
-              const val = matched ? matched[jenisPenilaian] : undefined
+              const val = matched ? (matched as Record<string, any>)[jenisPenilaian] : undefined
               initialMap[String(s.id)] = val !== undefined && val !== null ? Number(val) : ''
             })
             setNilaiInputMap(initialMap)
