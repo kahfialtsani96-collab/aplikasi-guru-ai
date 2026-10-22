@@ -54,7 +54,11 @@ export default function PenilaianPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
 
-  // Dynamic Options (Diampu oleh Guru yang Login)
+  // Global Filter Periode Akademik
+  const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
+  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
+
+  // Dynamic Options
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
 
@@ -83,43 +87,52 @@ export default function PenilaianPage() {
         const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
         setUserDisplayName(nameFromMeta.toUpperCase())
 
-        fetchJadwalGuru(email)
+        fetchOptions(email)
       }
     }
     getUserData()
-  }, [])
+  }, [isOperator])
 
-  // Auto-Fetch Kelas & Mapel dari Jadwal Mengajar Guru
-  async function fetchJadwalGuru(email: string) {
+  async function fetchOptions(email: string) {
     try {
-      const { data, error } = await supabase
-        .from('jadwal')
-        .select(`
-          kelas_id,
-          mapel_id,
-          kelas:kelas_id(id, nama_kelas),
-          mapel:mapel_id(id, nama_mapel)
-        `)
-        .eq('guru_email', email)
+      if (isOperator) {
+        // Operator mengambil seluruh Master Kelas & Mapel
+        const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
+        const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
 
-      if (!error && data) {
-        const uniqueKelasMap = new Map<number, string>()
-        const uniqueMapelMap = new Map<number, string>()
+        if (dataKelas) setKelasList(dataKelas.map(k => ({ id: k.id, nama: k.nama_kelas })))
+        if (dataMapel) setMapelList(dataMapel.map(m => ({ id: m.id, nama: m.nama_mapel })))
+      } else {
+        // Guru mengambil Kelas & Mapel dari Jadwal Mengajar miliknya
+        const { data, error } = await supabase
+          .from('jadwal')
+          .select(`
+            kelas_id,
+            mapel_id,
+            kelas:kelas_id(id, nama_kelas),
+            mapel:mapel_id(id, nama_mapel)
+          `)
+          .eq('guru_email', email)
 
-        data.forEach((item: any) => {
-          if (item.kelas && item.kelas.id) {
-            uniqueKelasMap.set(item.kelas.id, item.kelas.nama_kelas)
-          }
-          if (item.mapel && item.mapel.id) {
-            uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
-          }
-        })
+        if (!error && data) {
+          const uniqueKelasMap = new Map<number, string>()
+          const uniqueMapelMap = new Map<number, string>()
 
-        setKelasList(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama })))
-        setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
+          data.forEach((item: any) => {
+            if (item.kelas && item.kelas.id) {
+              uniqueKelasMap.set(item.kelas.id, item.kelas.nama_kelas)
+            }
+            if (item.mapel && item.mapel.id) {
+              uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
+            }
+          })
+
+          setKelasList(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama })))
+          setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
+        }
       }
     } catch (err) {
-      console.error('Error fetching jadwal guru:', err)
+      console.error('Error fetching options:', err)
     }
   }
 
@@ -142,11 +155,28 @@ export default function PenilaianPage() {
 
         if (!error && data) {
           setSiswaList(data)
-          const initialMap: NilaiMap = {}
-          data.forEach((s) => {
-            if (s.id) initialMap[String(s.id)] = ''
-          })
-          setNilaiInputMap(initialMap)
+          
+          // Ambil nilai yang sudah ada di database untuk periode aktif
+          if (selectedMapelId) {
+            const { data: existingNilai } = await supabase
+              .from('nilai')
+              .select('siswa_id, ' + jenisPenilaian)
+              .eq('kelas_id', Number(selectedKelasId))
+              .eq('mapel_id', Number(selectedMapelId))
+              .eq('semester', selectedSemester)
+              .eq('tahun_ajaran', selectedTahunAjaran)
+
+            const initialMap: NilaiMap = {}
+            data.forEach((s) => {
+              const matched = (existingNilai || []).find(n => Number(n.siswa_id) === Number(s.id))
+              initialMap[String(s.id)] = matched && matched[jenisPenilaian] !== undefined && matched[jenisPenilaian] !== null ? matched[jenisPenilaian] : ''
+            })
+            setNilaiInputMap(initialMap)
+          } else {
+            const initialMap: NilaiMap = {}
+            data.forEach((s) => { initialMap[String(s.id)] = '' })
+            setNilaiInputMap(initialMap)
+          }
         } else {
           setSiswaList([])
         }
@@ -160,19 +190,22 @@ export default function PenilaianPage() {
     if (activeTab === 'input') {
       fetchSiswa()
     }
-  }, [selectedKelasId, activeTab])
+  }, [selectedKelasId, selectedMapelId, jenisPenilaian, selectedSemester, selectedTahunAjaran, activeTab])
 
-  // Fetch Rekapitulasi Nilai milik Guru yang Login
+  // Fetch Rekapitulasi Nilai
   const fetchRekap = async () => {
-    if (!userEmail) return
-
     setLoadingRekap(true)
     try {
       let query = supabase
         .from('nilai')
         .select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))')
-        .eq('guru_email', userEmail)
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
         .order('created_at', { ascending: false })
+
+      if (!isOperator && userEmail) {
+        query = query.eq('guru_email', userEmail)
+      }
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
       if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
@@ -193,10 +226,10 @@ export default function PenilaianPage() {
   }
 
   useEffect(() => {
-    if (activeTab === 'rekap' && userEmail) {
+    if (activeTab === 'rekap') {
       fetchRekap()
     }
-  }, [activeTab, filterKelasId, filterMapelId, searchNama, userEmail])
+  }, [activeTab, filterKelasId, filterMapelId, searchNama, selectedSemester, selectedTahunAjaran, userEmail, isOperator])
 
   const handleNilaiChange = (siswaId: string, value: string) => {
     const num = value === '' ? '' : Math.min(100, Math.max(0, Number(value)))
@@ -226,7 +259,7 @@ export default function PenilaianPage() {
     try {
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
 
-      const rowsToInsert = siswaList
+      const rowsToUpsert = siswaList
         .filter((siswa) => siswa.id && nilaiInputMap[String(siswa.id)] !== '')
         .map((siswa) => ({
           siswa_id: siswa.id,
@@ -234,21 +267,27 @@ export default function PenilaianPage() {
           mapel_id: Number(selectedMapelId),
           mata_pelajaran: selectedMapelObj?.nama || '',
           [jenisPenilaian]: Number(nilaiInputMap[String(siswa.id)]),
-          semester: 'Ganjil',
-          tahun_ajaran: '2026/2027',
+          semester: selectedSemester,
+          tahun_ajaran: selectedTahunAjaran,
           guru_email: userEmail
         }))
 
-      if (rowsToInsert.length === 0) {
+      if (rowsToUpsert.length === 0) {
         alert('Silakan isi minimal satu nilai siswa!')
         setSaving(false)
         return
       }
 
-      const { error } = await supabase.from('nilai').insert(rowsToInsert)
+      const { error } = await supabase.from('nilai').upsert(rowsToUpsert, { onConflict: 'siswa_id,mapel_id,semester,tahun_ajaran' })
 
       if (error) {
-        alert('Gagal menyimpan nilai: ' + error.message)
+        // Fallback jika belum ada constraint unik di Supabase
+        const { error: insertErr } = await supabase.from('nilai').insert(rowsToUpsert)
+        if (insertErr) {
+          alert('Gagal menyimpan nilai: ' + insertErr.message)
+        } else {
+          alert('Data nilai akademik berhasil disimpan!')
+        }
       } else {
         alert('Data nilai akademik berhasil disimpan!')
       }
@@ -264,14 +303,12 @@ export default function PenilaianPage() {
   return (
     <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
       
-      {/* WATERMARK LOGO */}
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         
-        {/* HEADER TOPBAR */}
         <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden">
           <div className="flex items-center gap-3">
             <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
@@ -291,6 +328,19 @@ export default function PenilaianPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs">
+              <span className="text-slate-500 text-[10px] uppercase">Periode:</span>
+              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+                <option value="Ganjil">Ganjil</option>
+                <option value="Genap">Genap</option>
+              </select>
+              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+                <option value="2025/2026">2025/2026</option>
+                <option value="2026/2027">2026/2027</option>
+                <option value="2027/2028">2027/2028</option>
+              </select>
+            </div>
+
             <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
@@ -316,7 +366,6 @@ export default function PenilaianPage() {
           </div>
         </header>
 
-        {/* SUB-NAVBAR AKADEMIK */}
         <div className="bg-slate-200/80 backdrop-blur-md border-b border-slate-300 px-6 py-2 shrink-0 overflow-x-auto print:hidden">
           <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
             <span className="text-indigo-900 font-black pr-2 border-r border-slate-300 flex items-center gap-1">
@@ -342,10 +391,8 @@ export default function PenilaianPage() {
           </div>
         </div>
 
-        {/* MAIN CONTENT AREA */}
         <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
           
-          {/* TAB MODE BAR */}
           <div className="flex items-center justify-between shrink-0 print:hidden">
             <div className="grid grid-cols-2 bg-slate-200/90 p-1 rounded-xl border border-slate-300 max-w-md text-xs font-extrabold flex-1">
               <button
@@ -367,11 +414,9 @@ export default function PenilaianPage() {
             </div>
           </div>
 
-          {/* TAB 1: INPUT NILAI */}
           {activeTab === 'input' && (
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
-              {/* FILTER BAR INPUT */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden">
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
                   
@@ -419,7 +464,6 @@ export default function PenilaianPage() {
                 </div>
               </div>
 
-              {/* TABEL INPUT SISWA */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
                 <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
                   <table className="w-full text-left border-collapse text-xs">
@@ -492,11 +536,9 @@ export default function PenilaianPage() {
             </div>
           )}
 
-          {/* TAB 2: REKAPITULASI */}
           {activeTab === 'rekap' && (
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
-              {/* STAT CARDS */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 max-w-sm">
                 <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-xl p-2.5 shadow-xs">
                   <p className="text-[10px] font-extrabold text-slate-500 uppercase">TOTAL ENTRI NILAI</p>
@@ -504,7 +546,6 @@ export default function PenilaianPage() {
                 </div>
               </div>
 
-              {/* FILTER BAR REKAP */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 p-3 rounded-2xl shrink-0 shadow-xs">
                 <div>
                   <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER KELAS</label>
@@ -546,7 +587,6 @@ export default function PenilaianPage() {
                 </div>
               </div>
 
-              {/* TABEL REKAP */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
                 <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
                   <table className="w-full text-left border-collapse text-xs">
@@ -615,7 +655,6 @@ export default function PenilaianPage() {
 
         </main>
 
-        {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
           <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
             <span>Aplikasi Guru AI</span>
@@ -626,7 +665,6 @@ export default function PenilaianPage() {
 
       </div>
 
-      {/* BOTTOM NAVIGATION DOCK */}
       <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
           <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">

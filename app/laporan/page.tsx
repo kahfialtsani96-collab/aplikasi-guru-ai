@@ -15,20 +15,32 @@ interface OptionItem {
   nama: string
 }
 
+interface SiswaItem {
+  id: number
+  nama_lengkap: string
+  nisn?: string
+  kelas_id?: number
+}
+
 export default function LaporanPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
 
   const [activeTab, setActiveTab] = useState<'pusat' | 'pengaturan'>('pusat')
   const [userDisplayName, setUserDisplayName] = useState('GURU')
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [, setUserEmail] = useState<string | null>(null)
   const [currentDateStr, setCurrentDateStr] = useState('')
 
-  // Master Options dari Database
+  // Master Options
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
+  const [siswaList, setSiswaList] = useState<SiswaItem[]>([])
 
-  // State Identitas Penandatangan & Kop Surat
+  // Global Filter Periode Akademik
+  const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
+  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
+
+  // Identitas TTD & Kop
   const [namaGuru, setNamaGuru] = useState('Guru Pengampu')
   const [nipGuru, setNipGuru] = useState('-')
   const [namaKepsek, setNamaKepsek] = useState('SULASTRI, S.Pd., Gr.')
@@ -39,15 +51,19 @@ export default function LaporanPage() {
   const [alamatSekolah, setAlamatSekolah] = useState('Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376')
   const [kotaTtd, setKotaTtd] = useState('Gisting')
 
-  // State Filter Cetak Laporan
+  // Filter Cetak
   const [filterKelasAbsensi, setFilterKelasAbsensi] = useState('')
   const [filterKelasLeger, setFilterKelasLeger] = useState('')
   const [filterKelasJurnal, setFilterKelasJurnal] = useState('')
   const [filterKelasBimbingan, setFilterKelasBimbingan] = useState('')
-  
+
+  // Rapor Per Siswa
+  const [filterKelasRapor, setFilterKelasRapor] = useState('')
+  const [selectedSiswaRapor, setSelectedSiswaRapor] = useState('')
+
+  // Riwayat
   const [tanggalAbsensi, setTanggalAbsensi] = useState('')
   const [kelasRiwayatAbsensi, setKelasRiwayatAbsensi] = useState('')
-  
   const [kelasNilai, setKelasNilai] = useState('')
   const [mapelNilai, setMapelNilai] = useState('')
 
@@ -98,13 +114,11 @@ export default function LaporanPage() {
     try {
       const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
       const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
+      const { data: dataSiswa } = await supabase.from('siswa').select('id, nama_lengkap, nisn, kelas_id').order('nama_lengkap', { ascending: true })
 
-      if (dataKelas) {
-        setKelasList(dataKelas.map(k => ({ id: k.id, nama: k.nama_kelas })))
-      }
-      if (dataMapel) {
-        setMapelList(dataMapel.map(m => ({ id: m.id, nama: m.nama_mapel })))
-      }
+      if (dataKelas) setKelasList(dataKelas.map(k => ({ id: k.id, nama: k.nama_kelas })))
+      if (dataMapel) setMapelList(dataMapel.map(m => ({ id: m.id, nama: m.nama_mapel })))
+      if (dataSiswa) setSiswaList(dataSiswa)
     } catch (err) {
       console.error('Error fetching master data:', err)
     }
@@ -157,19 +171,33 @@ export default function LaporanPage() {
     </div>
   `
 
+  // EXPORT KE EXCEL (CSV)
+  const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
+    const csvContent = 'data:text/csv;charset=utf-8,' 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `${filename}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // CETAK CETAK UTAMA (REKAP KELAS)
   const handlePrintDocument = async (jenis: string) => {
     let judulDoc = 'LAPORAN AKADEMIK'
     let contentBody = ''
 
     if (jenis === 'absensi') {
       const selectedK = kelasList.find(k => k.id === Number(filterKelasAbsensi))
-      judulDoc = `LAPORAN REKAPITULASI PRESENSI SISWA ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
+      judulDoc = `LAPORAN REKAPITULASI PRESENSI SISWA ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} - SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}`
       
       let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
       if (filterKelasAbsensi) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasAbsensi))
       const { data: siswaData } = await querySiswa
 
-      let queryAbsensi = supabase.from('absensi').select('*')
+      let queryAbsensi = supabase.from('absensi').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
       if (filterKelasAbsensi) queryAbsensi = queryAbsensi.eq('kelas_id', Number(filterKelasAbsensi))
       const { data: absensiData } = await queryAbsensi
 
@@ -187,7 +215,8 @@ export default function LaporanPage() {
       })
 
       contentBody = `
-        <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 15px;">${judulDoc}</h3>
+        <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 5px;">${judulDoc}</h3>
+        <p style="text-align: center; font-size: 10pt; margin-bottom: 15px;">Semester: <b>${selectedSemester}</b> | Tahun Ajaran: <b>${selectedTahunAjaran}</b></p>
         <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
           <thead>
             <tr style="background-color: #f2f2f2;">
@@ -223,13 +252,13 @@ export default function LaporanPage() {
       `
     } else if (jenis === 'leger') {
       const selectedK = kelasList.find(k => k.id === Number(filterKelasLeger))
-      judulDoc = `LEGER NILAI AKADEMIK SISWA ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
+      judulDoc = `LEGER NILAI AKADEMIK SISWA ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} - SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}`
 
       let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
       if (filterKelasLeger) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasLeger))
       const { data: siswaData } = await querySiswa
 
-      let queryNilai = supabase.from('nilai').select('*')
+      let queryNilai = supabase.from('nilai').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
       if (filterKelasLeger) queryNilai = queryNilai.eq('kelas_id', Number(filterKelasLeger))
       const { data: nilaiData } = await queryNilai
 
@@ -254,7 +283,8 @@ export default function LaporanPage() {
       })
 
       contentBody = `
-        <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 15px;">${judulDoc}</h3>
+        <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 5px;">${judulDoc}</h3>
+        <p style="text-align: center; font-size: 10pt; margin-bottom: 15px;">Semester: <b>${selectedSemester}</b> | Tahun Ajaran: <b>${selectedTahunAjaran}</b></p>
         <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
           <thead>
             <tr style="background-color: #f2f2f2;">
@@ -288,9 +318,9 @@ export default function LaporanPage() {
       `
     } else if (jenis === 'jurnal') {
       const selectedK = kelasList.find(k => k.id === Number(filterKelasJurnal))
-      judulDoc = `JURNAL AGENDA MENGAJAR HARIAN GURU ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
+      judulDoc = `JURNAL AGENDA MENGAJAR HARIAN GURU ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} - SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}`
 
-      let queryAgenda = supabase.from('jurnal_agenda').select('*').order('created_at', { ascending: false })
+      let queryAgenda = supabase.from('jurnal_agenda').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('created_at', { ascending: false })
       if (filterKelasJurnal) queryAgenda = queryAgenda.eq('kelas_id', Number(filterKelasJurnal))
 
       const { data: agendaData } = await queryAgenda
@@ -368,16 +398,128 @@ export default function LaporanPage() {
     executePrint(judulDoc, contentBody)
   }
 
-  // 1. CETAK RIWAYAT HARIAN ABSENSI
-  const handlePrintRiwayatAbsensi = async () => {
-    let query = supabase.from('absensi').select('*').order('tanggal', { ascending: false })
+  // CETAK RAPOR INDIVIDU PER SISWA
+  const handlePrintRaporSiswa = async () => {
+    if (!selectedSiswaRapor) {
+      alert('Pilih siswa terlebih dahulu untuk mencetak Lembar Rapor!')
+      return
+    }
 
-    if (tanggalAbsensi && tanggalAbsensi.trim() !== '') {
-      query = query.eq('tanggal', tanggalAbsensi.trim())
-    }
-    if (kelasRiwayatAbsensi) {
-      query = query.eq('kelas_id', Number(kelasRiwayatAbsensi))
-    }
+    const targetSiswa = siswaList.find(s => s.id === Number(selectedSiswaRapor))
+    if (!targetSiswa) return
+
+    const { data: kelasSiswa } = await supabase.from('kelas').select('nama_kelas').eq('id', targetSiswa.kelas_id || 0).single()
+    const { data: nilaiSiswa } = await supabase.from('nilai').select('*').eq('siswa_id', targetSiswa.id).eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
+    const { data: absensiSiswa } = await supabase.from('absensi').select('status').eq('siswa_id', targetSiswa.id).eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
+
+    const hadir = (absensiSiswa || []).filter(a => a.status === 'HADIR').length
+    const sakit = (absensiSiswa || []).filter(a => a.status === 'SAKIT').length
+    const izin = (absensiSiswa || []).filter(a => a.status === 'IZIN').length
+    const alpa = (absensiSiswa || []).filter(a => a.status === 'ALPA').length
+
+    const judulDoc = `LAPORAN HASIL BELAJAR (RAPOR) SISWA - ${targetSiswa.nama_lengkap.toUpperCase()}`
+
+    const contentBody = `
+      <h2 style="text-align: center; text-transform: uppercase; margin-bottom: 20px; font-size: 14pt;">LAPORAN HASIL BELAJAR SISWA (RAPOR)</h2>
+      
+      <table style="width: 100%; border: none; font-size: 10.5pt; margin-bottom: 20px;">
+        <tr>
+          <td style="width: 15%; border: none;"><b>Nama Siswa</b></td>
+          <td style="width: 35%; border: none;">: ${targetSiswa.nama_lengkap}</td>
+          <td style="width: 15%; border: none;"><b>Kelas</b></td>
+          <td style="width: 35%; border: none;">: ${kelasSiswa?.nama_kelas || '-'}</td>
+        </tr>
+        <tr>
+          <td style="border: none;"><b>NISN</b></td>
+          <td style="border: none;">: ${targetSiswa.nisn || '-'}</td>
+          <td style="border: none;"><b>Semester</b></td>
+          <td style="border: none;">: ${selectedSemester} / ${selectedTahunAjaran}</td>
+        </tr>
+      </table>
+
+      <h4 style="margin-bottom: 8px;">A. CAPAIAN AKADEMIK MATA PELAJARAN</h4>
+      <table style="width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px;">
+        <thead>
+          <tr style="background-color: #f2f2f2;">
+            <th style="border: 1px solid #000; padding: 6px;">No</th>
+            <th style="border: 1px solid #000; padding: 6px;">Mata Pelajaran</th>
+            <th style="border: 1px solid #000; padding: 6px;">Tugas</th>
+            <th style="border: 1px solid #000; padding: 6px;">UTS</th>
+            <th style="border: 1px solid #000; padding: 6px;">UAS</th>
+            <th style="border: 1px solid #000; padding: 6px;">Nilai Akhir</th>
+            <th style="border: 1px solid #000; padding: 6px;">Predikat</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            mapelList.map((mapel, idx) => {
+              const rowN = (nilaiSiswa || []).find(n => n.mata_pelajaran === mapel.nama) || {}
+              const t = rowN.nilai_tugas ?? 0
+              const u = rowN.nilai_uts ?? 0
+              const a = rowN.nilai_uas ?? 0
+              const komps = [t, u, a].filter(v => v > 0)
+              const avg = komps.length > 0 ? (komps.reduce((x, y) => x + y, 0) / komps.length).toFixed(1) : '-'
+              const predikat = avg !== '-' ? (Number(avg) >= 85 ? 'Sangat Baik (A)' : Number(avg) >= 75 ? 'Baik (B)' : 'Cukup (C)') : '-'
+
+              return `
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${mapel.nama}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${rowN.nilai_tugas ?? '-'}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${rowN.nilai_uts ?? '-'}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${rowN.nilai_uas ?? '-'}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">${avg}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${predikat}</td>
+                </tr>
+              `
+            }).join('')
+          }
+        </tbody>
+      </table>
+
+      <h4 style="margin-bottom: 8px;">B. REKAPITULASI KEHADIRAN SISWA</h4>
+      <table style="width: 50%; border-collapse: collapse; font-size: 10pt;">
+        <tr><td style="border: 1px solid #000; padding: 5px;">Hadir (H)</td><td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">${hadir} Hari</td></tr>
+        <tr><td style="border: 1px solid #000; padding: 5px;">Sakit (S)</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">${sakit} Hari</td></tr>
+        <tr><td style="border: 1px solid #000; padding: 5px;">Izin (I)</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">${izin} Hari</td></tr>
+        <tr><td style="border: 1px solid #000; padding: 5px;">Alpa (A)</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">${alpa} Hari</td></tr>
+      </table>
+    `
+
+    executePrint(judulDoc, contentBody)
+  }
+
+  // EXPORT LEGER KE EXCEL
+  const handleExportLegerExcel = async () => {
+    let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
+    if (filterKelasLeger) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasLeger))
+    const { data: siswaData } = await querySiswa
+
+    let queryNilai = supabase.from('nilai').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
+    if (filterKelasLeger) queryNilai = queryNilai.eq('kelas_id', Number(filterKelasLeger))
+    const { data: nilaiData } = await queryNilai
+
+    const rows = (siswaData || []).map((s, idx) => {
+      const listN = (nilaiData || []).filter(n => Number(n.siswa_id) === Number(s.id))
+      const n = listN.length > 0 ? listN[listN.length - 1] : {}
+      const tugas = n.nilai_tugas ?? 0
+      const uts = n.nilai_uts ?? 0
+      const uas = n.nilai_uas ?? 0
+      const komps = [tugas, uts, uas].filter(v => v > 0)
+      const avg = komps.length > 0 ? (komps.reduce((a, b) => a + b, 0) / komps.length).toFixed(1) : '0.0'
+
+      return [idx + 1, s.nama_lengkap, s.kelas?.nama_kelas || '-', n.nilai_tugas ?? 0, n.nilai_uts ?? 0, n.nilai_uas ?? 0, avg]
+    })
+
+    downloadCSV(`Leger_Nilai_${selectedSemester}_${selectedTahunAjaran.replace('/', '-')}`, ['No', 'Nama Siswa', 'Kelas', 'Tugas', 'UTS', 'UAS', 'Rata-Rata'], rows)
+  }
+
+  // RIWAYAT HARIAN ABSENSI
+  const handlePrintRiwayatAbsensi = async () => {
+    let query = supabase.from('absensi').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('tanggal', { ascending: false })
+
+    if (tanggalAbsensi && tanggalAbsensi.trim() !== '') query = query.eq('tanggal', tanggalAbsensi.trim())
+    if (kelasRiwayatAbsensi) query = query.eq('kelas_id', Number(kelasRiwayatAbsensi))
 
     const { data: absensiData } = await query
     const selectedK = kelasList.find(k => k.id === Number(kelasRiwayatAbsensi))
@@ -418,9 +560,9 @@ export default function LaporanPage() {
     executePrint(judulDoc, contentBody)
   }
 
-  // 2. CETAK RIWAYAT INPUT NILAI AKADEMIK
+  // RIWAYAT INPUT NILAI
   const handlePrintRiwayatNilai = async () => {
-    let query = supabase.from('nilai').select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))').order('created_at', { ascending: false })
+    let query = supabase.from('nilai').select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('created_at', { ascending: false })
     if (kelasNilai) query = query.eq('kelas_id', Number(kelasNilai))
     if (mapelNilai) query = query.eq('mapel_id', Number(mapelNilai))
 
@@ -447,7 +589,7 @@ export default function LaporanPage() {
         <tbody>
           ${
             (nilaiData || []).length > 0
-              ? nilaiData!.map((n: any, idx) => `
+              ? nilaiData!.map((n: { created_at?: string; siswa?: { nama_lengkap?: string }; mata_pelajaran?: string; nilai_tugas?: number; nilai_uts?: number; nilai_uas?: number }, idx: number) => `
                   <tr>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.created_at ? new Date(n.created_at).toLocaleDateString('id-ID') : '-'}</td>
@@ -498,13 +640,11 @@ export default function LaporanPage() {
 
   return (
     <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
-      
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
-        
         <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden">
           <div className="flex items-center gap-3">
             <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
@@ -524,6 +664,19 @@ export default function LaporanPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs">
+              <span className="text-slate-500 text-[10px] uppercase">Periode:</span>
+              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+                <option value="Ganjil">Ganjil</option>
+                <option value="Genap">Genap</option>
+              </select>
+              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+                <option value="2025/2026">2025/2026</option>
+                <option value="2026/2027">2026/2027</option>
+                <option value="2027/2028">2027/2028</option>
+              </select>
+            </div>
+
             <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
@@ -574,10 +727,63 @@ export default function LaporanPage() {
         </div>
 
         <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 overflow-y-auto space-y-4">
-
           {activeTab === 'pusat' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
               
+              {/* CETAK RAPOR INDIVIDU SISWA */}
+              <div className="md:col-span-2 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 text-white rounded-2xl p-4 shadow-md space-y-3">
+                <div className="flex items-center gap-2 font-extrabold text-sm">
+                  <span>🎓</span>
+                  <h3>Cetak Lembar Rapor Hasil Belajar (Per Siswa)</h3>
+                </div>
+                <p className="text-xs text-emerald-100 font-medium">Cetak lembar Rapor resmi individu siswa lengkap dengan nilai seluruh mapel &amp; rekap kehadiran.</p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">1. PILIH KELAS</label>
+                    <select
+                      value={filterKelasRapor}
+                      onChange={(e) => {
+                        setFilterKelasRapor(e.target.value)
+                        setSelectedSiswaRapor('')
+                      }}
+                      className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none"
+                    >
+                      <option value="">Pilih Kelas</option>
+                      {kelasList.map((k) => (
+                        <option key={k.id} value={k.id}>{k.nama}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">2. PILIH SISWA</label>
+                    <select
+                      value={selectedSiswaRapor}
+                      onChange={(e) => setSelectedSiswaRapor(e.target.value)}
+                      disabled={!filterKelasRapor}
+                      className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none disabled:bg-slate-200"
+                    >
+                      <option value="">Pilih Siswa</option>
+                      {siswaList
+                        .filter(s => Number(s.kelas_id) === Number(filterKelasRapor))
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>{s.nama_lengkap} (NISN: {s.nisn || '-'})</option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handlePrintRaporSiswa}
+                  disabled={!selectedSiswaRapor}
+                  className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-slate-400 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>🖨️</span> Cetak Lembar Rapor Siswa
+                </button>
+              </div>
+
+              {/* ABSENSI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -609,6 +815,7 @@ export default function LaporanPage() {
                 </button>
               </div>
 
+              {/* LEGER NILAI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -632,14 +839,23 @@ export default function LaporanPage() {
                   </select>
                 </div>
 
-                <button
-                  onClick={() => handlePrintDocument('leger')}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>🖨️</span> Cetak PDF Leger Nilai
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handlePrintDocument('leger')}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>🖨️</span> Cetak PDF
+                  </button>
+                  <button
+                    onClick={handleExportLegerExcel}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>📊</span> Export Excel
+                  </button>
+                </div>
               </div>
 
+              {/* JURNAL AGENDA */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -671,6 +887,7 @@ export default function LaporanPage() {
                 </button>
               </div>
 
+              {/* BIMBINGAN WALI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -702,6 +919,7 @@ export default function LaporanPage() {
                 </button>
               </div>
 
+              {/* RIWAYAT PRESENSI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -744,6 +962,7 @@ export default function LaporanPage() {
                 </button>
               </div>
 
+              {/* RIWAYAT NILAI */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
                 <div>
                   <div className="flex items-center gap-2 text-indigo-950 font-extrabold text-sm mb-1">
@@ -795,7 +1014,6 @@ export default function LaporanPage() {
 
           {activeTab === 'pengaturan' && (
             <div className="space-y-4 pb-12">
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-2xl p-4 space-y-3 shadow-xs">
                   <h3 className="font-extrabold text-indigo-950 text-xs uppercase border-b border-slate-200 pb-2">
@@ -902,10 +1120,8 @@ export default function LaporanPage() {
                   <span>💾</span> Simpan Pengaturan
                 </button>
               </div>
-
             </div>
           )}
-
         </main>
 
         <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
@@ -915,7 +1131,6 @@ export default function LaporanPage() {
             <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
           </div>
         </div>
-
       </div>
 
       <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
@@ -950,7 +1165,6 @@ export default function LaporanPage() {
           </Link>
         </div>
       </div>
-
     </div>
   )
 }

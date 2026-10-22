@@ -33,6 +33,8 @@ interface AbsensiRecord {
   nama_siswa: string
   status: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA'
   guru_email?: string
+  semester?: string
+  tahun_ajaran?: string
 }
 
 interface StatusAbsensiMap {
@@ -48,6 +50,10 @@ export default function AbsensiPage() {
 
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
   const [modeInput, setModeInput] = useState<'manual' | 'qr'>('manual')
+
+  // Global Filter Periode Akademik
+  const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
+  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
 
   const [tanggal, setTanggal] = useState('')
   const [todayStr, setTodayStr] = useState('')
@@ -101,7 +107,6 @@ export default function AbsensiPage() {
   // Fetch Jadwal Guru (Semua untuk Operator, Terbatas untuk Guru biasa)
   async function fetchJadwalGuru(email: string) {
     try {
-      // 1. JIKA OPERATOR: Ambil SEMUA Kelas & Mapel yang ada
       if (isOperator) {
         const { data: dataKelas } = await supabase
           .from('kelas')
@@ -112,16 +117,11 @@ export default function AbsensiPage() {
           .select('id, nama_mapel')
           .order('nama_mapel', { ascending: true })
 
-        if (dataKelas) {
-          setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
-        }
-        if (dataMapel) {
-          setMapelList(dataMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
-        }
+        if (dataKelas) setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
+        if (dataMapel) setMapelList(dataMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
         return
       }
 
-      // 2. JIKA GURU BIASA: Hanya Ambil Sesuai Jadwal Mengajarnya
       const { data, error } = await supabase
         .from('jadwal')
         .select(`
@@ -145,18 +145,15 @@ export default function AbsensiPage() {
           }
         })
 
-        const kArr: OptionItem[] = Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama }))
-        const mArr: OptionItem[] = Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama }))
-
-        setKelasList(kArr)
-        setMapelList(mArr)
+        setKelasList(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama })))
+        setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
       }
     } catch (err) {
       console.error('Error fetching jadwal guru:', err)
     }
   }
 
-  // Load Siswa Terurut Abjad (A-Z) & Kosongkan Map Status Absensi
+  // Load Siswa Terurut Abjad (A-Z) & Baca Absensi yang Sudah Ada
   useEffect(() => {
     async function fetchSiswa() {
       if (!selectedKelasId) {
@@ -171,12 +168,32 @@ export default function AbsensiPage() {
           .from('siswa')
           .select('id, nisn, nama_lengkap, kelas_id')
           .eq('kelas_id', Number(selectedKelasId))
-          .order('nama_lengkap', { ascending: true }) // Urut Abjad A-Z
+          .order('nama_lengkap', { ascending: true })
 
         if (!error && data) {
           setSiswaList(data)
-          // Default awal status kosong (Belum Absen)
-          setAbsensiMap({})
+
+          // Load data absensi yang sudah tersimpan untuk tanggal, mapel, semester & tahun ajaran ini
+          if (selectedMapelId && tanggal) {
+            const { data: existingAbsensi } = await supabase
+              .from('absensi')
+              .select('siswa_id, status')
+              .eq('kelas_id', Number(selectedKelasId))
+              .eq('mapel_id', Number(selectedMapelId))
+              .eq('tanggal', tanggal)
+              .eq('semester', selectedSemester)
+              .eq('tahun_ajaran', selectedTahunAjaran)
+
+            const initialMap: StatusAbsensiMap = {}
+            if (existingAbsensi) {
+              existingAbsensi.forEach((a) => {
+                if (a.siswa_id) initialMap[String(a.siswa_id)] = a.status
+              })
+            }
+            setAbsensiMap(initialMap)
+          } else {
+            setAbsensiMap({})
+          }
         } else {
           setSiswaList([])
         }
@@ -190,7 +207,7 @@ export default function AbsensiPage() {
     if (activeTab === 'input') {
       fetchSiswa()
     }
-  }, [selectedKelasId, activeTab])
+  }, [selectedKelasId, selectedMapelId, tanggal, selectedSemester, selectedTahunAjaran, activeTab])
 
   // QR Scanner Implementation
   useEffect(() => {
@@ -227,11 +244,9 @@ export default function AbsensiPage() {
   const handleQRScanned = (scannedText: string) => {
     const textClean = scannedText.trim()
 
-    // 1. Cooldown Anti-Spam Frame Kamera
     if (isCooldownRef.current) return
     isCooldownRef.current = true
 
-    // Indikator Loading Brief
     setIsScanning(true)
 
     const targetSiswa = siswaList.find(
@@ -242,14 +257,12 @@ export default function AbsensiPage() {
       const sId = String(targetSiswa.id)
       const currentStatus = absensiMap[sId]
 
-      // 2. CEK ANTI-SPAM: Jika Siswa Sudah Terdata HADIR
       if (currentStatus === 'HADIR') {
         setScanStatus({
           type: 'warning',
           msg: `⚠️ ${targetSiswa.nama_lengkap} SUDAH TERDATA HADIR!`
         })
       } else {
-        // 3. SET HADIR & PINDAHKAN SISWA KE TABEL BUKTI
         setAbsensiMap((prev) => ({
           ...prev,
           [sId]: 'HADIR',
@@ -278,15 +291,18 @@ export default function AbsensiPage() {
 
   // Fetch Rekap
   const fetchRekap = async () => {
-    if (!userEmail) return
-
     setLoadingRekap(true)
     try {
       let query = supabase
         .from('absensi')
         .select('*')
-        .eq('guru_email', userEmail)
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
         .order('tanggal', { ascending: false })
+
+      if (!isOperator && userEmail) {
+        query = query.eq('guru_email', userEmail)
+      }
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
       if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
@@ -308,10 +324,10 @@ export default function AbsensiPage() {
   }
 
   useEffect(() => {
-    if (activeTab === 'rekap' && userEmail) {
+    if (activeTab === 'rekap') {
       fetchRekap()
     }
-  }, [activeTab, filterKelasId, filterMapelId, filterTanggal, searchNama, userEmail])
+  }, [activeTab, filterKelasId, filterMapelId, filterTanggal, searchNama, selectedSemester, selectedTahunAjaran, userEmail, isOperator])
 
   useEffect(() => {
     if (userEmail) {
@@ -319,7 +335,6 @@ export default function AbsensiPage() {
     }
   }, [isOperator, userEmail])
   
-  // Ubah Status Siswa Manual
   const handleStatusChange = (siswaId: string, status: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA' | '') => {
     setAbsensiMap((prev) => {
       const next = { ...prev }
@@ -349,7 +364,6 @@ export default function AbsensiPage() {
       return
     }
 
-    // Hanya simpan siswa yang sudah diberi status (Hadir/Izin/Sakit/Alpa)
     const processedSiswa = siswaList.filter((s) => absensiMap[String(s.id)])
 
     if (processedSiswa.length === 0) {
@@ -362,7 +376,7 @@ export default function AbsensiPage() {
       const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
 
-      const rowsToInsert = processedSiswa.map((siswa) => ({
+      const rowsToUpsert = processedSiswa.map((siswa) => ({
         tanggal,
         kelas_id: Number(selectedKelasId),
         mapel_id: Number(selectedMapelId),
@@ -372,18 +386,19 @@ export default function AbsensiPage() {
         nama_siswa: siswa.nama_lengkap,
         nisn: siswa.nisn || '',
         status: absensiMap[String(siswa.id)],
+        semester: selectedSemester,
+        tahun_ajaran: selectedTahunAjaran,
         guru_email: userEmail
       }))
 
       const { error } = await supabase
         .from('absensi')
-        .upsert(rowsToInsert, { onConflict: 'siswa_id,tanggal,mapel_id' })
+        .upsert(rowsToUpsert, { onConflict: 'siswa_id,tanggal,mapel_id' })
 
       if (error) {
         alert('Gagal menyimpan absensi: ' + error.message)
       } else {
         alert(`Berhasil menyimpan presensi ${processedSiswa.length} siswa!`)
-        // Opsional: Buka rekap setelah simpan
         setActiveTab('rekap')
       }
     } catch (err: any) {
@@ -393,11 +408,9 @@ export default function AbsensiPage() {
     }
   }
 
-  // Pemisahan Daftar Siswa
   const siswaBelumAbsen = siswaList.filter((s) => !absensiMap[String(s.id)])
   const siswaSudahAbsen = siswaList.filter((s) => absensiMap[String(s.id)])
 
-  // Statistik Rekapitulasi
   const totalData = rekapList.length
   const totalHadir = rekapList.filter(item => item.status === 'HADIR').length
   const totalIzin = rekapList.filter(item => item.status === 'IZIN').length
@@ -407,7 +420,6 @@ export default function AbsensiPage() {
   return (
     <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
       
-      {/* WATERMARK LOGO */}
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
@@ -434,6 +446,26 @@ export default function AbsensiPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* DROPDOWN PERIODE DINAMIS */}
+            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs">
+              <span className="text-slate-500 text-[10px] uppercase">Periode:</span>
+              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+                <option value="Ganjil">Ganjil</option>
+                <option value="Genap">Genap</option>
+              </select>
+              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+                {Array.from({ length: 10 }, (_, i) => {
+                  const startYear = 2024 + i
+                  const tahunOption = `${startYear}/${startYear + 1}`
+                  return (
+                    <option key={tahunOption} value={tahunOption}>
+                      {tahunOption}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+
             <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
@@ -488,7 +520,6 @@ export default function AbsensiPage() {
         {/* MAIN CONTENT AREA */}
         <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
           
-          {/* TAB MODE BAR */}
           <div className="flex items-center justify-between shrink-0 print:hidden">
             <div className="grid grid-cols-2 bg-slate-200/90 p-1 rounded-xl border border-slate-300 max-w-md text-xs font-extrabold flex-1">
               <button
@@ -510,11 +541,9 @@ export default function AbsensiPage() {
             </div>
           </div>
 
-          {/* TAB 1: INPUT ABSENSI */}
           {activeTab === 'input' && (
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
-              {/* FILTER & SIMPAN BAR UTAMA (DITARUH DI ATAS) */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden">
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
                   
@@ -567,7 +596,6 @@ export default function AbsensiPage() {
                     </button>
                   </div>
 
-                  {/* TOMBOL SIMPAN UTAMA DI ATAS */}
                   <div className="sm:col-span-2">
                     <button
                       type="button"
@@ -582,7 +610,6 @@ export default function AbsensiPage() {
                 </div>
               </div>
 
-              {/* PANEL QR SCANNER KAMERA WITH LOADING & ANTI-SPAM TOAST */}
               {modeInput === 'qr' && (
                 <div className="bg-white/90 backdrop-blur-md border border-indigo-200 rounded-2xl p-4 flex flex-col items-center justify-center space-y-3 shrink-0 shadow-xs relative">
                   <h3 className="text-xs font-extrabold text-indigo-900 uppercase flex items-center gap-2">
@@ -614,10 +641,8 @@ export default function AbsensiPage() {
                 </div>
               )}
 
-              {/* DUA TABEL TERPISAH (BELUM ABSEN VS SUDAH ABSEN) */}
               <div className="flex-1 flex flex-col sm:flex-row gap-3 min-h-0">
                 
-                {/* TABEL 1 (ATAS/KIRI): SISWA BELUM ABSEN */}
                 <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3 flex-1 flex flex-col min-h-0 shadow-xs">
                   <div className="flex items-center justify-between pb-2">
                     <span className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
@@ -702,7 +727,6 @@ export default function AbsensiPage() {
                   </div>
                 </div>
 
-                {/* TABEL 2 (BAWAH/KANAN): SISWA SUDAH TERABSEN */}
                 <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3 flex-1 flex flex-col min-h-0 shadow-xs">
                   <div className="flex items-center justify-between pb-2">
                     <span className="text-xs font-extrabold text-emerald-900 uppercase flex items-center gap-1.5">
@@ -777,11 +801,9 @@ export default function AbsensiPage() {
             </div>
           )}
 
-          {/* TAB 2: REKAPITULASI */}
           {activeTab === 'rekap' && (
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
-              {/* STAT CARDS */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 shrink-0">
                 <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-xl p-2.5 shadow-xs">
                   <p className="text-[10px] font-extrabold text-slate-500 uppercase">TOTAL DATA</p>
@@ -805,7 +827,6 @@ export default function AbsensiPage() {
                 </div>
               </div>
 
-              {/* FILTER BAR REKAP */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 p-3 rounded-2xl shrink-0 shadow-xs">
                 <div>
                   <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER KELAS</label>
@@ -857,7 +878,6 @@ export default function AbsensiPage() {
                 </div>
               </div>
 
-              {/* TABEL REKAP */}
               <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
                 <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
                   <table className="w-full text-left border-collapse text-xs">
@@ -931,7 +951,6 @@ export default function AbsensiPage() {
 
         </main>
 
-        {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
           <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
             <span>Aplikasi Guru AI</span>
@@ -942,7 +961,6 @@ export default function AbsensiPage() {
 
       </div>
 
-      {/* BOTTOM NAVIGATION DOCK */}
       <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
           <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
