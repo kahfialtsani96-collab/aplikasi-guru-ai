@@ -28,7 +28,6 @@ export default function DashboardPage() {
     async function fetchDataFromSupabase() {
       setIsLoading(true)
 
-      // 1. AUTH GUARD: Cek apakah user sudah login
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
@@ -42,32 +41,25 @@ export default function DashboardPage() {
         setUserDisplayName(nameFromMeta.toUpperCase())
       }
 
-      const { count: countSiswa } = await supabase
-        .from('siswa')
-        .select('*', { count: 'exact', head: true })
-      if (countSiswa !== null) setTotalSiswa(countSiswa)
-
-      const { count: countKelas } = await supabase
-        .from('kelas')
-        .select('*', { count: 'exact', head: true })
-      if (countKelas !== null) setTotalKelas(countKelas)
-
-      const { count: countGuru } = await supabase
-        .from('guru')
-        .select('*', { count: 'exact', head: true })
-      if (countGuru !== null) setTotalGuru(countGuru)
-
+      // Optimasi: Load hitungan statistik secara paralel
       const todayStr = new Date().toISOString().split('T')[0]
-      const { data: absensiToday } = await supabase
-        .from('absensi')
-        .select('status')
-        .eq('tanggal', todayStr)
 
-      if (absensiToday && absensiToday.length > 0) {
-        const jumlahHadir = absensiToday.filter(
+      const [resSiswa, resKelas, resGuru, resAbsensi] = await Promise.all([
+        supabase.from('siswa').select('*', { count: 'exact', head: true }),
+        supabase.from('kelas').select('*', { count: 'exact', head: true }),
+        supabase.from('guru').select('*', { count: 'exact', head: true }),
+        supabase.from('absensi').select('status').eq('tanggal', todayStr)
+      ])
+
+      if (resSiswa.count !== null) setTotalSiswa(resSiswa.count)
+      if (resKelas.count !== null) setTotalKelas(resKelas.count)
+      if (resGuru.count !== null) setTotalGuru(resGuru.count)
+
+      if (resAbsensi.data && resAbsensi.data.length > 0) {
+        const jumlahHadir = resAbsensi.data.filter(
           a => a.status?.toUpperCase() === 'HADIR'
         ).length
-        const totalAbsen = absensiToday.length
+        const totalAbsen = resAbsensi.data.length
         const persen = Math.round((jumlahHadir / totalAbsen) * 100)
         setPersentaseHadir(`${persen}%`)
       } else {
@@ -87,7 +79,6 @@ export default function DashboardPage() {
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="min-h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden"
     >
-      {/* WATERMARK LOGO */}
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
         <img
           src="/logo-smp.jpg"
@@ -97,7 +88,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="relative z-10">
-        {/* HEADER TOPBAR */}
         <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xs gap-2">
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
@@ -144,7 +134,6 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* MAIN CONTENT AREA */}
         <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
 
           {/* STATISTIK TOP */}
@@ -227,7 +216,6 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               
-              {/* KELOLA KELAS & WALI KELAS */}
               {isOperator && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -251,7 +239,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* KELOLA MASTER SISWA */}
               {isOperator && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -275,7 +262,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* KELOLA MATA PELAJARAN (SEKARANG MENGARAH KE /mapel) */}
               {isOperator && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -299,7 +285,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* ADMINISTRASI & PERSURATAN TU */}
               {isOperator && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -323,7 +308,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* CETAK KARTU & QR CODE */}
               {isOperator && (
                 <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
@@ -369,7 +353,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {/* SCAN & INPUT ABSENSI */}
+              {/* SCAN & INPUT ABSENSI (SUDAH DIPERBAIKI ROUTE-NYA) */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -385,13 +369,13 @@ export default function DashboardPage() {
                     Pencatatan presensi harian manual &amp; scan QR Code kamera otomatis.
                   </p>
                 </div>
-                <Link href="/jadwal" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                <Link href="/absensi" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
                   <span>Buka Fitur</span>
                   <span>➔</span>
                 </Link>
               </div>
 
-              {/* INPUT PENILAIAN & LEGER */}
+              {/* INPUT PENILAIAN & LEGER (SUDAH DIPERBAIKI ROUTE-NYA) */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -407,13 +391,13 @@ export default function DashboardPage() {
                     Rekap nilai harian, UTS, UAS, kalkulasi otomatis &amp; leger siswa.
                   </p>
                 </div>
-                <Link href="/jadwal" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                <Link href="/nilai" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
                   <span>Buka Fitur</span>
                   <span>➔</span>
                 </Link>
               </div>
 
-              {/* AGENDA MENGAJAR GURU */}
+              {/* AGENDA MENGAJAR GURU (SUDAH DIPERBAIKI ROUTE-NYA) */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
@@ -429,7 +413,7 @@ export default function DashboardPage() {
                     Jurnal harian KBM, keterlaksanaan materi &amp; catatan kehadiran.
                   </p>
                 </div>
-                <Link href="/jadwal" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
+                <Link href="/jurnal" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
                   <span>Buka Fitur</span>
                   <span>➔</span>
                 </Link>
@@ -458,50 +442,6 @@ export default function DashboardPage() {
                   </Link>
                 </div>
               )}
-
-              {/* MODUL AJAR DEEP LEARNING AI */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
-                    ✨
-                  </div>
-                  <span className="bg-white/80 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
-                    FITUR UNGGULAN AI
-                  </span>
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-slate-900 text-base">Modul Ajar Deep Learning AI</h4>
-                  <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
-                    Generator RPP Deep Learning Kurikulum Merdeka (hingga 5 pertemuan).
-                  </p>
-                </div>
-                <Link href="/ai" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
-                  <span>Buka Fitur</span>
-                  <span>➔</span>
-                </Link>
-              </div>
-
-              {/* ASISTEN CHATBOT GURU AI */}
-              <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200 text-indigo-700 flex items-center justify-center text-xl shadow-xs">
-                    🤖
-                  </div>
-                  <span className="bg-white/80 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
-                    ASISTEN AI
-                  </span>
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-slate-900 text-base">Asisten Chatbot Guru AI</h4>
-                  <p className="text-xs text-slate-700 font-medium mt-1.5 leading-relaxed">
-                    Konsultan pedagogi AI, pembuat soal HOTS, &amp; draf narasi rapor.
-                  </p>
-                </div>
-                <Link href="/ai" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-800 hover:text-indigo-950 transition">
-                  <span>Buka Fitur</span>
-                  <span>➔</span>
-                </Link>
-              </div>
 
               {/* PUSAT LAPORAN PDF */}
               <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-400 hover:shadow-md transition">
