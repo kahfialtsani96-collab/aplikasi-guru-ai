@@ -35,11 +35,11 @@ interface NilaiRecord {
   tahun_ajaran?: string
   guru_email?: string
   siswa?: {
-    nama_lengkap: string
+    nama_lengkap?: string
     kelas?: {
-      nama_kelas: string
+      nama_kelas?: string
     }
-  }
+  } | null
 }
 
 interface NilaiMap {
@@ -85,7 +85,7 @@ export default function PenilaianPage() {
         const email = user.email || ''
         setUserEmail(email)
         const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
-        setUserDisplayName(nameFromMeta.toUpperCase())
+        setUserDisplayName(String(nameFromMeta).toUpperCase())
 
         fetchOptions(email)
       }
@@ -96,14 +96,12 @@ export default function PenilaianPage() {
   async function fetchOptions(email: string) {
     try {
       if (isOperator) {
-        // Operator mengambil seluruh Master Kelas & Mapel
         const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
         const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
 
-        if (dataKelas) setKelasList(dataKelas.map(k => ({ id: k.id, nama: k.nama_kelas })))
-        if (dataMapel) setMapelList(dataMapel.map(m => ({ id: m.id, nama: m.nama_mapel })))
+        if (dataKelas) setKelasList(dataKelas.map((k: Record<string, any>) => ({ id: Number(k.id), nama: String(k.nama_kelas) })))
+        if (dataMapel) setMapelList(dataMapel.map((m: Record<string, any>) => ({ id: Number(m.id), nama: String(m.nama_mapel) })))
       } else {
-        // Guru mengambil Kelas & Mapel dari Jadwal Mengajar miliknya
         const { data, error } = await supabase
           .from('jadwal')
           .select(`
@@ -118,12 +116,12 @@ export default function PenilaianPage() {
           const uniqueKelasMap = new Map<number, string>()
           const uniqueMapelMap = new Map<number, string>()
 
-          data.forEach((item: any) => {
+          data.forEach((item: Record<string, any>) => {
             if (item.kelas && item.kelas.id) {
-              uniqueKelasMap.set(item.kelas.id, item.kelas.nama_kelas)
+              uniqueKelasMap.set(Number(item.kelas.id), String(item.kelas.nama_kelas))
             }
             if (item.mapel && item.mapel.id) {
-              uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
+              uniqueMapelMap.set(Number(item.mapel.id), String(item.mapel.nama_mapel))
             }
           })
 
@@ -156,11 +154,10 @@ export default function PenilaianPage() {
         if (!error && data) {
           setSiswaList(data)
           
-          // Ambil nilai yang sudah ada di database untuk periode aktif
           if (selectedMapelId) {
             const { data: existingNilai } = await supabase
               .from('nilai')
-              .select('siswa_id, ' + jenisPenilaian)
+              .select(`siswa_id, ${jenisPenilaian}`)
               .eq('kelas_id', Number(selectedKelasId))
               .eq('mapel_id', Number(selectedMapelId))
               .eq('semester', selectedSemester)
@@ -168,8 +165,9 @@ export default function PenilaianPage() {
 
             const initialMap: NilaiMap = {}
             data.forEach((s) => {
-              const matched = (existingNilai || []).find(n => Number(n.siswa_id) === Number(s.id))
-              initialMap[String(s.id)] = matched && matched[jenisPenilaian] !== undefined && matched[jenisPenilaian] !== null ? matched[jenisPenilaian] : ''
+              const matched = (existingNilai || []).find((n: Record<string, any>) => Number(n.siswa_id) === Number(s.id))
+              const val = matched ? matched[jenisPenilaian] : undefined
+              initialMap[String(s.id)] = val !== undefined && val !== null ? Number(val) : ''
             })
             setNilaiInputMap(initialMap)
           } else {
@@ -214,7 +212,7 @@ export default function PenilaianPage() {
       const { data, error } = await query
 
       if (!error && data) {
-        setRekapList(data as any)
+        setRekapList(data as unknown as NilaiRecord[])
       } else {
         setRekapList([])
       }
@@ -281,7 +279,6 @@ export default function PenilaianPage() {
       const { error } = await supabase.from('nilai').upsert(rowsToUpsert, { onConflict: 'siswa_id,mapel_id,semester,tahun_ajaran' })
 
       if (error) {
-        // Fallback jika belum ada constraint unik di Supabase
         const { error: insertErr } = await supabase.from('nilai').insert(rowsToUpsert)
         if (insertErr) {
           alert('Gagal menyimpan nilai: ' + insertErr.message)
