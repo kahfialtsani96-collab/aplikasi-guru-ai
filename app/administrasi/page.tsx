@@ -81,7 +81,7 @@ export default function AdministrasiTUPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'OPERATOR'
-        setUserDisplayName(nameFromMeta.toUpperCase())
+        setUserDisplayName(String(nameFromMeta).toUpperCase())
       }
     }
     getUserData()
@@ -119,12 +119,19 @@ export default function AdministrasiTUPage() {
   const fetchSmartOptions = async () => {
     const { data: dataSiswa } = await supabase.from('siswa').select('id, nama_lengkap, nisn').order('nama_lengkap')
     if (dataSiswa) {
-      setSiswaOptions(dataSiswa.map((s: any) => ({ id: s.id, nama: s.nama_lengkap, extraInfo: `NISN: ${s.nisn || '-'}` })))
+      setSiswaOptions(dataSiswa.map((s: Record<string, any>) => ({ 
+        id: Number(s.id), 
+        nama: String(s.nama_lengkap || ''), 
+        extraInfo: `NISN: ${s.nisn || '-'}` 
+      })))
     }
 
-    const { data: dataGuru } = await supabase.from('guru').select('id, nama_lengkap').order('nama_lengkap')
+    const { data: dataGuru } = await supabase.from('guru').select('id, nama_guru').order('nama_guru')
     if (dataGuru) {
-      setGuruOptions(dataGuru.map((g: any) => ({ id: g.id, nama: g.nama_lengkap })))
+      setGuruOptions(dataGuru.map((g: Record<string, any>) => ({ 
+        id: Number(g.id), 
+        nama: String(g.nama_guru || g.nama_lengkap || '') 
+      })))
     }
   }
 
@@ -173,7 +180,7 @@ export default function AdministrasiTUPage() {
       if (response.ok) {
         const resData = await response.json()
         if (resData.result) {
-          setKeterangan(resData.result.trim())
+          setKeterangan(String(resData.result).trim())
         }
       } else {
         alert('Gagal menghubungi AI Server.')
@@ -458,7 +465,7 @@ export default function AdministrasiTUPage() {
         <main className="max-w-7xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 min-h-0">
             
-            {/* FORM INPUT SURAT - EXPANDED FIELD (5 COLUMNS) */}
+            {/* FORM INPUT SURAT */}
             <form onSubmit={handleSubmit} className="lg:col-span-5 p-5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl flex flex-col justify-between shadow-xs h-full overflow-hidden">
               <div className="space-y-3 overflow-y-auto pr-1 flex-1">
                 <div className="flex items-center gap-2 border-b border-indigo-200/80 pb-2">
@@ -536,7 +543,6 @@ export default function AdministrasiTUPage() {
                   />
                 </div>
 
-                {/* KOTAK NARASI AI LEBIH TINGGI DENGAN TOMBOL EDIT FOKUS */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider">4. Keterangan / Narasi Surat</label>
@@ -606,7 +612,7 @@ export default function AdministrasiTUPage() {
               </div>
             </form>
 
-            {/* TABEL ARSIP SURAT (7 COLUMNS) */}
+            {/* TABEL ARSIP SURAT */}
             <div className="lg:col-span-7 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden">
               <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2.5 shrink-0 gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
@@ -728,7 +734,7 @@ export default function AdministrasiTUPage() {
                 </h3>
                 <button
                   onClick={() => setIsModalEditorOpen(false)}
-                  className="text-white hover:bg-white/20 rounded-lg p-1 transition"
+                  className="text-white hover:bg-white/20 rounded-lg p-1 transition cursor-pointer"
                 >
                   ✕
                 </button>
