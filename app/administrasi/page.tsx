@@ -27,6 +27,14 @@ interface OptionItem {
   extraInfo?: string
 }
 
+const KODE_SURAT_MAP: Record<string, string> = {
+  'Surat Keterangan Aktif Siswa': '421',
+  'Surat Mutasi Siswa': '422',
+  'Surat Undangan Orang Tua/Wali': '005',
+  'Surat Tugas Guru': '800',
+  'Surat Keputusan Kepala Sekolah': '188',
+}
+
 export default function AdministrasiTUPage() {
   const router = useRouter()
   const { isOperator, loading: loadingRole } = useAuthRole()
@@ -39,23 +47,29 @@ export default function AdministrasiTUPage() {
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
   
   // State Form
-  const [nomorSurat, setNomorSurat] = useState('')
   const [jenisSurat, setJenisSurat] = useState('Surat Keterangan Aktif Siswa')
   const [penerima, setPenerima] = useState('')
   const [keterangan, setKeterangan] = useState('')
+  const [nomorSurat, setNomorSurat] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Smart Form State (Siswa / Guru Auto-Select)
+  // Modal Editor Narasi AI
+  const [isModalEditorOpen, setIsModalEditorOpen] = useState(false)
+
+  // Toggle Opsi Cetak
+  const [includeTTD, setIncludeTTD] = useState(true)
+  const [includeStempel, setIncludeStempel] = useState(true)
+
+  // Smart Form Options
   const [siswaOptions, setSiswaOptions] = useState<OptionItem[]>([])
   const [guruOptions, setGuruOptions] = useState<OptionItem[]>([])
   const [selectedEntityId, setSelectedEntityId] = useState('')
 
-  // State AI Generator
+  // AI Generator State
   const [isAiGenerating, setIsAiGenerating] = useState(false)
 
-  // Guard Hak Akses Operator
   useEffect(() => {
     if (!loadingRole && !isOperator) {
       router.push('/')
@@ -78,16 +92,39 @@ export default function AdministrasiTUPage() {
     fetchSurat()
   }, [selectedSemester, selectedTahunAjaran])
 
-  // Fetch Siswa dan Guru untuk Auto-Select Form
+  useEffect(() => {
+    if (!editingId && jenisSurat) {
+      generateAutoNomorSurat(jenisSurat)
+    }
+  }, [jenisSurat, selectedTahunAjaran, editingId])
+
+  const generateAutoNomorSurat = async (jenis: string) => {
+    const kodeKlasifikasi = KODE_SURAT_MAP[jenis] || '421'
+    const tahun = selectedTahunAjaran.split('/')[0] || '2026'
+
+    const { count, error } = await supabase
+      .from('surat_administrasi')
+      .select('id', { count: 'exact', head: true })
+      .eq('jenis_surat', jenis)
+      .eq('tahun_ajaran', selectedTahunAjaran)
+
+    if (!error) {
+      const nextIndex = (count || 0) + 1
+      const formattedIndex = String(nextIndex).padStart(3, '0')
+      const autoNomor = `${kodeKlasifikasi}/${formattedIndex}/SMP-MM/${tahun}`
+      setNomorSurat(autoNomor)
+    }
+  }
+
   const fetchSmartOptions = async () => {
     const { data: dataSiswa } = await supabase.from('siswa').select('id, nama_lengkap, nisn').order('nama_lengkap')
     if (dataSiswa) {
       setSiswaOptions(dataSiswa.map((s: any) => ({ id: s.id, nama: s.nama_lengkap, extraInfo: `NISN: ${s.nisn || '-'}` })))
     }
 
-    const { data: dataGuru } = await supabase.from('guru').select('id, nama_guru').order('nama_guru')
+    const { data: dataGuru } = await supabase.from('guru').select('id, nama_lengkap').order('nama_lengkap')
     if (dataGuru) {
-      setGuruOptions(dataGuru.map((g: any) => ({ id: g.id, nama: g.nama_guru })))
+      setGuruOptions(dataGuru.map((g: any) => ({ id: g.id, nama: g.nama_lengkap })))
     }
   }
 
@@ -106,15 +143,14 @@ export default function AdministrasiTUPage() {
   }
 
   const resetForm = () => {
-    setNomorSurat('')
     setJenisSurat('Surat Keterangan Aktif Siswa')
     setPenerima('')
     setKeterangan('')
     setSelectedEntityId('')
     setEditingId(null)
+    generateAutoNomorSurat('Surat Keterangan Aktif Siswa')
   }
 
-  // Generasi Narasi Surat Menggunakan API AI Mercury/Gemini
   const handleGenerateAiNarasi = async () => {
     if (!keterangan.trim()) {
       alert('Ketik poin/maksud singkat pada kolom Keterangan terlebih dahulu agar AI dapat merangkai narasi!')
@@ -123,7 +159,7 @@ export default function AdministrasiTUPage() {
 
     setIsAiGenerating(true)
     try {
-      const promptText = `Buatkan narasi formal dan santun untuk ${jenisSurat} yang ditujukan kepada ${penerima || 'Penerima'}. Keperluan / Poin Maksud: ${keterangan}. Buat dalam 1-2 paragraf resmi tanpa salam pembuka berlebihan.`
+      const promptText = `Buatkan narasi formal dan santun untuk ${jenisSurat} yang ditujukan kepada ${penerima || 'Penerima'}. Keperluan / Poin Maksud: ${keterangan}. Buat dalam 1-2 paragraf resmi tanpa salam pembuka berlebihan, dan murni hanya isi narasi surat saja.`
       
       const response = await fetch('/api/gemini', {
         method: 'POST',
@@ -191,10 +227,10 @@ export default function AdministrasiTUPage() {
 
   const handleEdit = (surat: SuratAdministrasi) => {
     setEditingId(surat.id)
-    setNomorSurat(surat.nomor_surat)
     setJenisSurat(surat.jenis_surat)
     setPenerima(surat.penerima)
     setKeterangan(surat.keterangan || '')
+    setNomorSurat(surat.nomor_surat)
   }
 
   const handleDelete = async (id: number) => {
@@ -204,89 +240,131 @@ export default function AdministrasiTUPage() {
     else alert('Gagal menghapus surat: ' + error.message)
   }
 
-  // CETAK SURAT RESMI PDF DENGAN KOP SEKOLAH
   const handlePrintSurat = (surat: SuratAdministrasi) => {
+    let rawNarasi = surat.keterangan || ''
+    
+    if (rawNarasi.includes('### 💡 Catatan') || rawNarasi.includes('Catatan Pedagogi') || rawNarasi.includes('Catatan Praktis') || rawNarasi.includes('Dokumen ini dibuat secara otomatis')) {
+      rawNarasi = rawNarasi.split(/### 💡 Catatan|Catatan Pedagogi|Catatan Praktis|Dokumen ini dibuat secara otomatis/i)[0]
+    }
+
+    const cleanNarasi = rawNarasi
+      .replace(/#{1,6}\s?/g, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/---/g, '')
+      .replace(/Paragraf \d+:\s?[^\n]+/gi, '')
+      .replace(/\*Dokumen ini dibuat secara otomatis.*?\*/gi, '')
+      .trim()
+
+    let namaPenerima = surat.penerima
+    let nisnPenerima = '-'
+    const nisnMatch = surat.penerima.match(/(.*?)\s*\(NISN:\s*([\d-]+)\)/i)
+    if (nisnMatch) {
+      namaPenerima = nisnMatch[1].trim()
+      nisnPenerima = nisnMatch[2].trim()
+    }
+
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    const headerKop = `
-      <div style="text-align: center; margin-bottom: 20px; font-family: 'Times New Roman', serif; color: #000;">
-        <div style="font-size: 18pt; font-weight: bold; font-family: 'Traditional Arabic', 'Amiri', serif; line-height: 1.2; margin-bottom: 4px;">
-          المعهد الإسلامي منى مصطفى
-        </div>
-        <h3 style="margin: 0; font-size: 11pt; text-transform: uppercase; font-weight: bold;">
-          YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG
-        </h3>
-        <h1 style="margin: 2px 0; font-size: 16pt; text-transform: uppercase; font-weight: bold;">
-          SMP MUNA MUSTOFA
-        </h1>
-        <h4 style="margin: 0; font-size: 10.5pt; text-transform: uppercase; font-weight: bold;">
-          CAMPANG KECAMATAN GISTING KAB. TANGGAMUS
-        </h4>
-        <p style="margin: 2px 0; font-size: 9.5pt; font-weight: bold;">
-          NPSN: 71407877 SK IZIN OPERASIONAL : 503/029/IPO/VIII/36/2026
-        </p>
-        <div style="border-top: 1.5px solid #000; margin-top: 6px; padding-top: 4px; font-size: 9.5pt; font-style: italic;">
-          Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376
-        </div>
-        <div style="border-bottom: 1px solid #000; margin-top: 4px;"></div>
-      </div>
-    `
-
-    const bodySurat = `
-      <div style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
-        <h3 style="margin: 0; text-decoration: underline; text-transform: uppercase; font-size: 13pt;">${surat.jenis_surat}</h3>
-        <p style="margin: 4px 0 0 0; font-size: 11pt;">Nomor: ${surat.nomor_surat}</p>
-      </div>
-
-      <div style="font-size: 11pt; line-height: 1.6; text-align: justify;">
-        <p>Yang bertanda tangan di bawah ini Kepala SMP Muna Mustofa Gisting Tanggamus, menerangkan bahwa:</p>
-        <table style="width: 100%; border: none; margin: 15px 0;">
-          <tr>
-            <td style="width: 25%; border: none; vertical-align: top;">Nama / Ditujukan</td>
-            <td style="width: 3%; border: none; vertical-align: top;">:</td>
-            <td style="border: none; vertical-align: top;"><b>${surat.penerima}</b></td>
-          </tr>
-          <tr>
-            <td style="border: none; vertical-align: top;">Keperluan / Catatan</td>
-            <td style="border: none; vertical-align: top;">:</td>
-            <td style="border: none; vertical-align: top;">${surat.keterangan || '-'}</td>
-          </tr>
-          <tr>
-            <td style="border: none; vertical-align: top;">Periode Akademik</td>
-            <td style="border: none; vertical-align: top;">:</td>
-            <td style="border: none; vertical-align: top;">Semester ${surat.semester || selectedSemester} / TA ${surat.tahun_ajaran || selectedTahunAjaran}</td>
-          </tr>
-        </table>
-        <p>Demikian surat keterangan ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.</p>
-      </div>
-
-      <div style="margin-top: 60px; text-align: right; font-size: 11pt; page-break-inside: avoid;">
-        <p style="margin: 0;">Gisting, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-        <p style="margin: 5px 0 0 0;">Kepala SMP Muna Mustofa,</p>
-        <br/><br/><br/><br/>
-        <p style="margin: 0;"><u><b>SULASTRI, S.Pd., Gr.</b></u></p>
-        <p style="margin: 0; font-size: 10pt;">NUPTK. 6337763664131233</p>
-      </div>
-    `
-
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
           <title>${surat.jenis_surat} - ${surat.nomor_surat}</title>
           <style>
-            @page { margin: 2cm; size: A4; }
-            body { font-family: 'Times New Roman', Times, serif; color: #000; }
+            @page { size: A4 portrait; margin: 15mm 20mm; }
+            * { box-sizing: border-box; }
+            body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.5; color: #000; margin: 0; padding: 0; }
+            
+            .kop-header { text-align: center; border-bottom: 3px double #000; padding-bottom: 2mm; margin-bottom: 5mm; position: relative; }
+            .kop-logo { position: absolute; left: 0; top: 0; width: 22mm; height: 22mm; object-fit: contain; }
+            .kop-arab { font-size: 14pt; margin: 0; font-family: 'Traditional Arabic', 'Amiri', serif; font-weight: bold; }
+            .kop-yayasan { font-size: 10.5pt; font-weight: bold; margin: 0; text-transform: uppercase; }
+            .kop-sekolah { font-size: 16pt; font-weight: bold; margin: 1mm 0; text-transform: uppercase; }
+            .kop-alamat { font-size: 9pt; margin: 0; font-style: italic; }
+
+            .title-area { text-align: center; margin: 5mm 0 4mm 0; }
+            .title-area h2 { font-size: 12.5pt; font-weight: bold; text-decoration: underline; margin: 0; text-transform: uppercase; }
+            .title-area p { font-size: 10.5pt; margin: 1mm 0 0 0; }
+
+            .content-area { margin-top: 4mm; text-align: justify; }
+            .identity-table { margin: 3mm 0 3mm 6mm; width: 95%; font-size: 11pt; }
+            .identity-table td { padding: 1mm 0; vertical-align: top; }
+
+            .ttd-container { margin-top: 8mm; float: right; width: 70mm; text-align: left; page-break-inside: avoid; }
+            .signature-box { height: 20mm; position: relative; display: flex; align-items: center; margin: 1mm 0; }
+            .stamp-img { height: 22mm; position: absolute; left: -8mm; top: -2mm; z-index: 1; opacity: 0.85; }
+            .signature-img { height: 18mm; z-index: 2; position: relative; }
+            .clear { clear: both; }
           </style>
         </head>
         <body>
-          ${headerKop}
-          ${bodySurat}
+          <div class="kop-header">
+            <img src="/logo-smp.jpg" alt="Logo" class="kop-logo" />
+            <p class="kop-arab">المعهد الإسلامي منى مصطفى</p>
+            <p class="kop-yayasan">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
+            <p class="kop-sekolah">SMP MUNA MUSTOFA</p>
+            <p class="kop-alamat">CAMPANG KECAMATAN GISTING KABUPATEN TANGGAMUS</p>
+            <p class="kop-alamat">NPSN: 71407877 | SK IZIN OPERASIONAL: 503/029/IPO/VIII/36/2026</p>
+            <p class="kop-alamat">Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+          </div>
+
+          <div class="title-area">
+            <h2>${surat.jenis_surat.toUpperCase()}</h2>
+            <p>Nomor: ${surat.nomor_surat}</p>
+          </div>
+
+          <div class="content-area">
+            <p>Yang bertanda tangan di bawah ini Kepala SMP Muna Mustofa Gisting Tanggamus, menerangkan bahwa:</p>
+            
+            <table class="identity-table">
+              <tr>
+                <td width="30%">Nama / Ditujukan</td>
+                <td width="3%">:</td>
+                <td><b>${namaPenerima}</b></td>
+              </tr>
+              ${nisnPenerima !== '-' ? `
+                <tr>
+                  <td>NISN</td>
+                  <td>:</td>
+                  <td>${nisnPenerima}</td>
+                </tr>
+              ` : ''}
+              <tr>
+                <td>Periode Akademik</td>
+                <td>:</td>
+                <td>Semester ${surat.semester || selectedSemester} / TA ${surat.tahun_ajaran || selectedTahunAjaran}</td>
+              </tr>
+            </table>
+
+            <p style="margin-top: 4mm; white-space: pre-line;">${cleanNarasi}</p>
+
+            <p style="margin-top: 4mm;">Demikian surat keterangan ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.</p>
+          </div>
+
+          <div class="ttd-container">
+            <p style="margin:0;">Gisting, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br/>
+            Kepala SMP Muna Mustofa,</p>
+            
+            <div class="signature-box">
+              ${includeStempel ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img" />` : ''}
+              ${includeTTD ? `<img src="/ttd-kepsek.png" alt="TTD" class="signature-img" />` : ''}
+            </div>
+
+            <p style="margin:0;"><b><u>SULASTRI, S.Pd., Gr.</u></b><br/>
+            NUPTK. 6337763664131233</p>
+          </div>
+          <div class="clear"></div>
         </body>
       </html>
     `)
+
     printWindow.document.close()
-    setTimeout(() => { printWindow.print() }, 500)
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 300)
   }
 
   const filteredSurat = suratList.filter(
@@ -336,7 +414,6 @@ export default function AdministrasiTUPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* DROPDOWN PERIODE AKADEMIK */}
             <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs">
               <span className="text-slate-500 text-[10px] uppercase">Periode:</span>
               <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
@@ -378,13 +455,13 @@ export default function AdministrasiTUPage() {
         </header>
 
         {/* MAIN CONTAINER */}
-        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-1 min-h-0">
+        <main className="max-w-7xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 min-h-0">
             
-            {/* FORM INPUT SURAT */}
-            <form onSubmit={handleSubmit} className="p-5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl flex flex-col justify-between shadow-xs h-full">
-              <div className="space-y-3.5 overflow-y-auto pr-1">
-                <div className="flex items-center gap-2 border-b border-indigo-200/80 pb-2.5">
+            {/* FORM INPUT SURAT - EXPANDED FIELD (5 COLUMNS) */}
+            <form onSubmit={handleSubmit} className="lg:col-span-5 p-5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl flex flex-col justify-between shadow-xs h-full overflow-hidden">
+              <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+                <div className="flex items-center gap-2 border-b border-indigo-200/80 pb-2">
                   <span className="text-indigo-800 text-base">📑</span>
                   <h3 className="font-extrabold text-slate-900 text-sm">
                     {editingId ? 'Edit Arsip Surat' : 'Buat / Registrasi Surat TU'}
@@ -392,19 +469,7 @@ export default function AdministrasiTUPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">Nomor Surat Resmi *</label>
-                  <input
-                    type="text"
-                    value={nomorSurat}
-                    onChange={(e) => setNomorSurat(e.target.value)}
-                    placeholder="Contoh: 421/001/SMP-MM/2026"
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">Jenis Surat *</label>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">1. Jenis Surat *</label>
                   <select
                     value={jenisSurat}
                     onChange={(e) => {
@@ -421,10 +486,9 @@ export default function AdministrasiTUPage() {
                   </select>
                 </div>
 
-                {/* AUTO-SELECT SISWA ATAU GURU DARIPADA KETIK MANUAL */}
                 {jenisSurat.includes('Siswa') ? (
                   <div>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">Pilih Siswa (Auto-Select) *</label>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">2. Pilih Siswa *</label>
                     <select
                       value={selectedEntityId}
                       onChange={(e) => {
@@ -442,7 +506,7 @@ export default function AdministrasiTUPage() {
                   </div>
                 ) : jenisSurat.includes('Guru') ? (
                   <div>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">Pilih Guru (Auto-Select) *</label>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">2. Pilih Guru *</label>
                     <select
                       value={selectedEntityId}
                       onChange={(e) => {
@@ -461,7 +525,7 @@ export default function AdministrasiTUPage() {
                 ) : null}
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">Penerima / Ditujukan Kepada *</label>
+                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">3. Penerima / Ditujukan Kepada *</label>
                   <input
                     type="text"
                     value={penerima}
@@ -472,30 +536,56 @@ export default function AdministrasiTUPage() {
                   />
                 </div>
 
+                {/* KOTAK NARASI AI LEBIH TINGGI DENGAN TOMBOL EDIT FOKUS */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider">Keterangan / Narasi Surat</label>
-                    <button
-                      type="button"
-                      onClick={handleGenerateAiNarasi}
-                      disabled={isAiGenerating}
-                      className="text-[10px] bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black px-2.5 py-0.5 rounded-md transition shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                    >
-                      <span>✨</span>
-                      <span>{isAiGenerating ? 'AI Menyusun...' : 'Buat via AI'}</span>
-                    </button>
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider">4. Keterangan / Narasi Surat</label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsModalEditorOpen(true)}
+                        className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-2 py-0.5 rounded-md transition shadow-xs cursor-pointer"
+                        title="Buka Editor Layar Penuh"
+                      >
+                        🔍 Layar Penuh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateAiNarasi}
+                        disabled={isAiGenerating}
+                        className="text-[10px] bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black px-2.5 py-0.5 rounded-md transition shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <span>✨</span>
+                        <span>{isAiGenerating ? 'AI Menyusun...' : 'Buat via AI'}</span>
+                      </button>
+                    </div>
                   </div>
                   <textarea
-                    rows={4}
+                    rows={8}
                     value={keterangan}
                     onChange={(e) => setKeterangan(e.target.value)}
-                    placeholder="Tulis maksud singkat lalu klik 'Buat via AI' untuk narasi resmi..."
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-600 resize-none"
+                    placeholder="Tulis maksud singkat lalu klik 'Buat via AI' untuk merangkai narasi..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-600 leading-relaxed resize-y"
+                  />
+                </div>
+
+                <div className="bg-indigo-50/80 p-2.5 rounded-xl border border-indigo-200/80">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider">5. Nomor Surat Resmi *</label>
+                    <span className="text-[9px] bg-indigo-200 text-indigo-900 font-black px-1.5 py-0.2 rounded">Auto / Editable</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={nomorSurat}
+                    onChange={(e) => setNomorSurat(e.target.value)}
+                    placeholder="Contoh: 421/001/SMP-MM/2026"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:border-indigo-600"
+                    required
                   />
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-3 mt-2 border-t border-indigo-200/60">
+              <div className="flex gap-2 pt-2 mt-2 border-t border-indigo-200/60 shrink-0">
                 <button
                   type="submit"
                   disabled={loading}
@@ -516,12 +606,34 @@ export default function AdministrasiTUPage() {
               </div>
             </form>
 
-            {/* TABEL DAFTAR ARSIP SURAT */}
-            <div className="lg:col-span-2 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden">
-              <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2.5 shrink-0 gap-3">
+            {/* TABEL ARSIP SURAT (7 COLUMNS) */}
+            <div className="lg:col-span-7 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden">
+              <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2.5 shrink-0 gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="text-indigo-800 text-base">📂</span>
                   <h3 className="font-extrabold text-slate-900 text-sm">Arsip Surat Keluar TU</h3>
+                </div>
+
+                <div className="flex items-center gap-3 bg-white border border-slate-300 px-3 py-1 rounded-xl text-xs font-bold text-slate-700 shadow-xs">
+                  <span className="text-[10px] text-slate-500 uppercase">Cetak:</span>
+                  <label className="flex items-center gap-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={includeTTD}
+                      onChange={(e) => setIncludeTTD(e.target.checked)}
+                      className="rounded accent-indigo-600"
+                    />
+                    <span>TTD</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={includeStempel}
+                      onChange={(e) => setIncludeStempel(e.target.checked)}
+                      className="rounded accent-indigo-600"
+                    />
+                    <span>Stempel</span>
+                  </label>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -530,7 +642,7 @@ export default function AdministrasiTUPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="🔍 Cari No. / Penerima..."
-                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 w-44"
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 w-40"
                   />
                   <button
                     onClick={fetchSurat}
@@ -605,6 +717,44 @@ export default function AdministrasiTUPage() {
 
           </div>
         </main>
+
+        {/* MODAL EDITOR NARASI LAYAR PENUH */}
+        {isModalEditorOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh] overflow-hidden">
+              <div className="px-5 py-3.5 bg-indigo-900 text-white flex items-center justify-between">
+                <h3 className="font-extrabold text-sm flex items-center gap-2">
+                  <span>📝</span> Editor Fokus Narasi Surat
+                </h3>
+                <button
+                  onClick={() => setIsModalEditorOpen(false)}
+                  className="text-white hover:bg-white/20 rounded-lg p-1 transition"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-5 flex-1 flex flex-col space-y-3">
+                <p className="text-xs text-slate-600 font-medium">
+                  Sunting dan sesuaikan teks narasi surat resmi di bawah ini dengan nyaman.
+                </p>
+                <textarea
+                  value={keterangan}
+                  onChange={(e) => setKeterangan(e.target.value)}
+                  className="w-full flex-1 min-h-[300px] border border-slate-300 rounded-xl p-4 text-sm text-slate-900 font-medium leading-relaxed focus:outline-none focus:border-indigo-600 resize-none font-serif"
+                  placeholder="Ketik atau edit narasi surat..."
+                />
+              </div>
+              <div className="px-5 py-3 bg-slate-100 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  onClick={() => setIsModalEditorOpen(false)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+                >
+                  Selesai Menyunting
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0">
