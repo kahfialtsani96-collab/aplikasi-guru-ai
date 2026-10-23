@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -42,6 +43,16 @@ export default function KelolaMapelPage() {
   const [mapelList, setMapelList] = useState<Mapel[]>([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+
+  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+    }
+  }, [])
 
   // Guard Akses Operator
   useEffect(() => {
@@ -176,19 +187,28 @@ export default function KelolaMapelPage() {
 
   if (loadingRole || !isOperator) {
     return (
-      <div className="h-screen bg-[#E2E8F0] text-slate-700 p-8 flex items-center justify-center font-sans">
-        <div className="bg-white/90 backdrop-blur-md border border-slate-300 p-6 rounded-2xl text-center space-y-2 shadow-md">
-          <p className="text-slate-900 font-bold text-sm">Memeriksa Hak Akses Operator...</p>
+      <div className={`h-screen p-8 flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-700'}`}>
+        <div className={`backdrop-blur-md border p-6 rounded-2xl text-center space-y-2 shadow-md ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
+          <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Memeriksa Hak Akses Operator...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
+    <motion.div
+      initial={{ opacity: 0, x: -60 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      }`}
+    >
       
       {/* 1. WATERMARK LOGO */}
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      }`}>
         <img
           src="/logo-smp.jpg"
           alt="Watermark SMP Muna Mustofa"
@@ -199,36 +219,48 @@ export default function KelolaMapelPage() {
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         
         {/* 2. HEADER TOPBAR */}
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs">
+        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+              }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Kelola Master Mata Pelajaran</p>
+                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Kelola Master Mata Pelajaran</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-100/80 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+            <div className={`border text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 ${
+              isDarkMode 
+                ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
+                : 'bg-emerald-100/80 border-emerald-300 text-emerald-800'
+            }`}>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Supabase Live</span>
             </div>
 
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+            }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
-              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+              }`}>
                 Operator
               </span>
             </div>
@@ -238,7 +270,11 @@ export default function KelolaMapelPage() {
                 await supabase.auth.signOut()
                 router.replace('/login')
               }}
-              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
+              className={`border p-2 rounded-xl transition cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
+                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
+              }`}
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -252,11 +288,15 @@ export default function KelolaMapelPage() {
         <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
           
           {/* PANEL FORM INPUT MAPEL LENGKAP */}
-          <form onSubmit={handleSubmit} className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 space-y-2.5">
+          <form onSubmit={handleSubmit} className={`backdrop-blur-md border rounded-2xl p-3.5 shadow-xs shrink-0 space-y-2.5 ${
+            isDarkMode 
+              ? 'bg-slate-900/90 border-slate-800' 
+              : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+          }`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 items-end">
               
               <div className="md:col-span-2">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   KODE MAPEL *
                 </label>
                 <input
@@ -264,13 +304,15 @@ export default function KelolaMapelPage() {
                   value={kodeMapel}
                   onChange={(e) => setKodeMapel(e.target.value)}
                   placeholder="MAT-VII"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 uppercase"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 uppercase ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                   required
                 />
               </div>
 
               <div className="md:col-span-4">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   NAMA MATA PELAJARAN *
                 </label>
                 <input
@@ -278,19 +320,23 @@ export default function KelolaMapelPage() {
                   value={namaMapel}
                   onChange={(e) => setNamaMapel(e.target.value)}
                   placeholder="Matematika / Bahasa Indonesia"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                   required
                 />
               </div>
 
               <div className="md:col-span-3">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   KELOMPOK / KATEGORI
                 </label>
                 <select
                   value={kelompok}
                   onChange={(e) => setKelompok(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 >
                   <option value="Umum">Umum (Muatan Nasional)</option>
                   <option value="Muatan Lokal">Muatan Lokal (Mulok)</option>
@@ -300,13 +346,15 @@ export default function KelolaMapelPage() {
               </div>
 
               <div className="md:col-span-3">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   TINGKAT / KELAS TARGET
                 </label>
                 <select
                   value={tingkat}
                   onChange={(e) => setTingkat(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 >
                   <option value="VII">Kelas VII (Fase D)</option>
                   <option value="VIII">Kelas VIII (Fase D)</option>
@@ -320,7 +368,7 @@ export default function KelolaMapelPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 items-end pt-1">
               
               <div className="md:col-span-2">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   BEBAN (JP/MINGGU)
                 </label>
                 <input
@@ -329,19 +377,23 @@ export default function KelolaMapelPage() {
                   max={10}
                   value={jumlahJp}
                   onChange={(e) => setJumlahJp(Number(e.target.value))}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                   required
                 />
               </div>
 
               <div className="md:col-span-3">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   SEMESTER
                 </label>
                 <select
                   value={semester}
                   onChange={(e) => setSemester(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 >
                   <option value="Ganjil">Semester Ganjil</option>
                   <option value="Genap">Semester Genap</option>
@@ -349,7 +401,7 @@ export default function KelolaMapelPage() {
               </div>
 
               <div className="md:col-span-3">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   TAHUN AJARAN
                 </label>
                 <input
@@ -357,12 +409,14 @@ export default function KelolaMapelPage() {
                   value={tahunAjaran}
                   onChange={(e) => setTahunAjaran(e.target.value)}
                   placeholder="2026/2027"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">
+                <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                   URUTAN RAPOR
                 </label>
                 <input
@@ -370,7 +424,9 @@ export default function KelolaMapelPage() {
                   min={1}
                   value={urutan}
                   onChange={(e) => setUrutan(Number(e.target.value))}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                  className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 />
               </div>
 
@@ -387,7 +443,9 @@ export default function KelolaMapelPage() {
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="px-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-xs text-slate-700 font-bold rounded-xl transition cursor-pointer"
+                    className={`px-2.5 border text-xs font-bold rounded-xl transition cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
                   >
                     Batal
                   </button>
@@ -398,7 +456,11 @@ export default function KelolaMapelPage() {
           </form>
 
           {/* PANEL TABEL REKAP MAPEL */}
-          <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
+          <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+            isDarkMode 
+              ? 'bg-slate-900/90 border-slate-800' 
+              : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+          }`}>
             
             {/* SEARCH BAR */}
             <div className="flex items-center justify-between mb-2.5 shrink-0 gap-3">
@@ -408,23 +470,29 @@ export default function KelolaMapelPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="🔍 Cari Kode, Nama Mapel, atau Kelompok..."
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                  className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-400' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 />
               </div>
 
               <button
                 onClick={fetchMapel}
-                className="text-xs bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-xl font-bold text-slate-700 transition cursor-pointer shrink-0"
+                className={`text-xs border px-3 py-1.5 rounded-xl font-bold transition cursor-pointer shrink-0 ${
+                  isDarkMode 
+                    ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200' 
+                    : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
+                }`}
               >
                 🔄 Refresh Data
               </button>
             </div>
 
             {/* TABEL DATA PRO */}
-            <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+            <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
               <table className="w-full text-left border-collapse text-xs">
-                <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
-                  <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase tracking-wider text-[11px]">
+                <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
+                  <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-400 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                     <th className="py-2.5 px-3 w-12 text-center">URUT</th>
                     <th className="py-2.5 px-3">KODE</th>
                     <th className="py-2.5 px-3">MATA PELAJARAN</th>
@@ -435,30 +503,34 @@ export default function KelolaMapelPage() {
                     <th className="py-2.5 px-3 text-center w-20">AKSI</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-slate-800">
+                <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">
+                      <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
                         Memuat data mata pelajaran...
                       </td>
                     </tr>
                   ) : filteredMapel.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">
+                      <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
                         Belum ada mata pelajaran terdaftar.
                       </td>
                     </tr>
                   ) : (
                     filteredMapel.map((item, index) => (
-                      <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
-                        <td className="py-2 px-3 text-center font-bold text-slate-500">{item.urutan || index + 1}</td>
-                        <td className="py-2 px-3 font-mono font-bold text-indigo-900 whitespace-nowrap">{item.kode_mapel}</td>
-                        <td className="py-2 px-3 font-extrabold text-slate-900">{item.nama_mapel}</td>
-                        <td className="py-2 px-3 font-bold text-slate-700">{item.kelompok}</td>
-                        <td className="py-2 px-3 text-center font-bold text-indigo-800">{item.tingkat}</td>
-                        <td className="py-2 px-3 text-center font-extrabold text-emerald-800">{item.jumlah_jp} JP</td>
+                      <tr key={item.id || index} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
+                        <td className={`py-2 px-3 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>{item.urutan || index + 1}</td>
+                        <td className={`py-2 px-3 font-mono font-bold whitespace-nowrap ${isDarkMode ? 'text-indigo-400' : 'text-indigo-900'}`}>{item.kode_mapel}</td>
+                        <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.nama_mapel}</td>
+                        <td className={`py-2 px-3 font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{item.kelompok}</td>
+                        <td className="py-2 px-3 text-center font-bold text-indigo-400">{item.tingkat}</td>
+                        <td className="py-2 px-3 text-center font-extrabold text-emerald-400">{item.jumlah_jp} JP</td>
                         <td className="py-2 px-3 text-center whitespace-nowrap">
-                          <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px] font-extrabold">
+                          <span className={`border px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                            isDarkMode 
+                              ? 'bg-indigo-950 text-indigo-300 border-indigo-800' 
+                              : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                          }`}>
                             {item.semester} ({item.tahun_ajaran})
                           </span>
                         </td>
@@ -491,49 +563,63 @@ export default function KelolaMapelPage() {
 
         {/* 4. FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0">
-          <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+          <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
+          }`}>
             <span>Aplikasi Guru AI</span>
             <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
           </div>
         </div>
 
       </div>
 
       {/* 5. BOTTOM NAVIGATION DOCK */}
-      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0">
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+      }`}>
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jadwal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-600 transition">
+          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-bold transition ${
+            isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
+          }`}>
             <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
 
-    </div>
+    </motion.div>
   )
 }

@@ -135,3 +135,12 @@ body {
   padding-bottom: 0.5rem;
   border-radius: 0 0.5rem 0.5rem 0;
 }
+
+/* =========================================================
+   ANIMASI CIRCULAR REVEAL DARK MODE (VIEW TRANSITIONS API)
+   ========================================================= */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}

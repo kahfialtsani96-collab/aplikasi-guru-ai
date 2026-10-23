@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -55,6 +56,16 @@ export default function JadwalMengajarPage() {
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'kelola' | 'rekap'>('kelola')
+
+  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+    }
+  }, [])
 
   // Options dari DB
   const [mapelList, setMapelList] = useState<MapelItem[]>([])
@@ -238,41 +249,58 @@ export default function JadwalMengajarPage() {
   })
 
   return (
-    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
+    <motion.div
+      initial={{ opacity: 0, x: -60 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      }`}
+    >
       
       {/* WATERMARK LOGO */}
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      }`}>
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         
         {/* HEADER TOPBAR */}
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden">
+        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+              }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Penjadwalan KBM Terintegrasi</p>
+                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Penjadwalan KBM Terintegrasi</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+            }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
-              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+              }`}>
                 {isOperator ? 'Operator' : 'Guru'}
               </span>
             </div>
@@ -282,7 +310,11 @@ export default function JadwalMengajarPage() {
                 await supabase.auth.signOut()
                 router.replace('/login')
               }}
-              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
+              className={`border p-2 rounded-xl transition cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
+                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
+              }`}
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -293,25 +325,37 @@ export default function JadwalMengajarPage() {
         </header>
 
         {/* SUB-NAVBAR AKADEMIK */}
-        <div className="bg-slate-200/80 backdrop-blur-md border-b border-slate-300 px-6 py-2 shrink-0 overflow-x-auto print:hidden">
+        <div className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
-            <span className="text-indigo-900 font-black pr-2 border-r border-slate-300 flex items-center gap-1">
+            <span className={`font-black pr-2 border-r flex items-center gap-1 ${
+              isDarkMode ? 'text-indigo-300 border-slate-800' : 'text-indigo-900 border-slate-300'
+            }`}>
               🎓 Akademik:
             </span>
             <Link href="/jadwal" className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl shadow-xs font-extrabold flex items-center gap-1.5">
               <span>🕒</span> Jadwal Mengajar
             </Link>
-            <Link href="/absensi" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+            <Link href="/absensi" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+              isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+            }`}>
               <span>📋</span> Input Absensi
             </Link>
-            <Link href="/nilai" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+            <Link href="/nilai" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+              isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+            }`}>
               <span>⭐</span> Input Penilaian
             </Link>
-            <Link href="/jurnal" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+            <Link href="/jurnal" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+              isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+            }`}>
               <span>📓</span> Agenda Mengajar
             </Link>
             {canAccessBimbingan && (
-              <Link href="/bimbingan" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+              <Link href="/bimbingan" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+                isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+              }`}>
                 <span>💖</span> Bimbingan Guru Wali
               </Link>
             )}
@@ -323,11 +367,17 @@ export default function JadwalMengajarPage() {
           
           {/* TAB MODE BAR */}
           <div className="flex items-center justify-between shrink-0 print:hidden">
-            <div className="grid grid-cols-2 bg-slate-200/90 p-1 rounded-xl border border-slate-300 max-w-md text-xs font-extrabold flex-1">
+            <div className={`grid grid-cols-2 p-1 rounded-xl border max-w-md text-xs font-extrabold flex-1 ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-200/90 border-slate-300'
+            }`}>
               <button
                 onClick={() => setActiveTab('kelola')}
                 className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
-                  activeTab === 'kelola' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                  activeTab === 'kelola' 
+                    ? 'bg-indigo-600 text-white shadow-xs' 
+                    : isDarkMode 
+                      ? 'text-slate-400 hover:text-white' 
+                      : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
                 <span>🕒</span> Input &amp; Kelola Jadwal
@@ -335,7 +385,11 @@ export default function JadwalMengajarPage() {
               <button
                 onClick={() => setActiveTab('rekap')}
                 className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
-                  activeTab === 'rekap' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                  activeTab === 'rekap' 
+                    ? 'bg-indigo-600 text-white shadow-xs' 
+                    : isDarkMode 
+                      ? 'text-slate-400 hover:text-white' 
+                      : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
                 <span>📜</span> Rekap &amp; Cetak
@@ -355,18 +409,24 @@ export default function JadwalMengajarPage() {
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
               {/* FORM INPUT JADWAL */}
-              <form onSubmit={handleSimpan} className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden">
+              <form onSubmit={handleSimpan} className={`backdrop-blur-md border rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
                   
                   {isOperator && (
                     <div className="sm:col-span-3">
-                      <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
+                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                         GURU PENGAMPU *
                       </label>
                       <select
                         value={selectedGuruEmail}
                         onChange={(e) => setSelectedGuruEmail(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                        className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
                         required
                       >
                         <option value="">-- Pilih Guru --</option>
@@ -378,7 +438,7 @@ export default function JadwalMengajarPage() {
                   )}
 
                   <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-2'}>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       HARI *
                     </label>
                     <select
@@ -388,7 +448,9 @@ export default function JadwalMengajarPage() {
                         setJamMulai('1')
                         setJamSelesai('1')
                       }}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     >
                       <option value="Senin">Senin</option>
                       <option value="Selasa">Selasa</option>
@@ -401,7 +463,7 @@ export default function JadwalMengajarPage() {
 
                   {/* OPSI JAM BLOK BERLANJUT */}
                   <div className={isOperator ? 'sm:col-span-3' : 'sm:col-span-3'}>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       JAM PELAJARAN *
                     </label>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -412,7 +474,9 @@ export default function JadwalMengajarPage() {
                           setJamMulai(val)
                           if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
                         }}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                        className={`w-full border rounded-xl px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
                       >
                         {jamOptionsForSelectedHari.length > 0 ? (
                           jamOptionsForSelectedHari.map((j) => (
@@ -428,7 +492,9 @@ export default function JadwalMengajarPage() {
                       <select
                         value={jamSelesai}
                         onChange={(e) => setJamSelesai(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                        className={`w-full border rounded-xl px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
                       >
                         {jamOptionsForSelectedHari.length > 0 ? (
                           jamOptionsForSelectedHari
@@ -448,13 +514,15 @@ export default function JadwalMengajarPage() {
                   </div>
 
                   <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-3'}>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       KELAS *
                     </label>
                     <select
                       value={selectedKelasId}
                       onChange={(e) => setSelectedKelasId(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                       required
                     >
                       <option value="">-- Pilih Kelas --</option>
@@ -465,13 +533,15 @@ export default function JadwalMengajarPage() {
                   </div>
 
                   <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-3'}>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       MATA PELAJARAN *
                     </label>
                     <select
                       value={selectedMapelId}
                       onChange={(e) => setSelectedMapelId(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                       required
                     >
                       <option value="">-- Pilih Mapel --</option>
@@ -494,11 +564,15 @@ export default function JadwalMengajarPage() {
               </form>
 
               {/* TABEL JADWAL SAYA */}
-              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
-                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
+                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
-                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                    <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
+                      <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                         <th className="py-2.5 px-3">HARI</th>
                         <th className="py-2.5 px-3">JAM MENGAJAR</th>
                         <th className="py-2.5 px-3">KELAS</th>
@@ -507,31 +581,33 @@ export default function JadwalMengajarPage() {
                         <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 text-slate-800">
+                    <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Memuat data jadwal...</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data jadwal...</td>
                         </tr>
                       ) : jadwalList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Belum ada jadwal mengajar tersimpan.</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada jadwal mengajar tersimpan.</td>
                         </tr>
                       ) : (
                         jadwalList.map((item, index) => {
                           const namaKelas = typeof item.kelas === 'object' ? item.kelas?.nama_kelas : item.kelas
                           const namaMapel = typeof item.mapel === 'object' ? item.mapel?.nama_mapel : item.mapel
                           return (
-                            <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
-                              <td className="py-2 px-3 font-extrabold text-amber-800">{item.hari}</td>
-                              <td className="py-2 px-3 font-bold text-slate-700">{item.jam}</td>
-                              <td className="py-2 px-3 font-extrabold text-slate-900">
-                                <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[11px]">
+                            <tr key={item.id || index} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
+                              <td className="py-2 px-3 font-extrabold text-amber-500">{item.hari}</td>
+                              <td className={`py-2 px-3 font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{item.jam}</td>
+                              <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                <span className={`px-2 py-0.5 rounded-md text-[11px] border ${
+                                  isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                }`}>
                                   {namaKelas || '-'}
                                 </span>
                               </td>
-                              <td className="py-2 px-3 font-extrabold text-indigo-950">{namaMapel || '-'}</td>
+                              <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>{namaMapel || '-'}</td>
                               {isOperator && (
-                                <td className="py-2 px-3 font-bold text-slate-700">{item.guru_email}</td>
+                                <td className={`py-2 px-3 font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{item.guru_email}</td>
                               )}
                               <td className="py-2 px-3 text-center print:hidden">
                                 <button
@@ -559,13 +635,19 @@ export default function JadwalMengajarPage() {
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
               {/* FILTER BAR */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 p-3 rounded-2xl shrink-0 shadow-xs print:hidden">
+              <div className={`grid grid-cols-1 md:grid-cols-3 gap-2.5 backdrop-blur-md border p-3 rounded-2xl shrink-0 shadow-xs print:hidden ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER HARI</label>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER HARI</label>
                   <select
                     value={filterHari}
                     onChange={(e) => setFilterHari(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="">Semua Hari</option>
                     <option value="Senin">Senin</option>
@@ -578,11 +660,13 @@ export default function JadwalMengajarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER KELAS</label>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER KELAS</label>
                   <select
                     value={filterKelasId}
                     onChange={(e) => setFilterKelasId(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="">Semua Kelas</option>
                     {kelasList.map((k) => (
@@ -592,11 +676,13 @@ export default function JadwalMengajarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER MAPEL</label>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER MAPEL</label>
                   <select
                     value={filterMapelId}
                     onChange={(e) => setFilterMapelId(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="">Semua Mapel</option>
                     {mapelList.map((m) => (
@@ -607,11 +693,15 @@ export default function JadwalMengajarPage() {
               </div>
 
               {/* TABEL REKAP */}
-              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
-                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
+                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
-                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                    <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
+                      <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                         <th className="py-2.5 px-3 w-12 text-center">NO</th>
                         <th className="py-2.5 px-3">HARI</th>
                         <th className="py-2.5 px-3">JAM MENGAJAR</th>
@@ -620,30 +710,32 @@ export default function JadwalMengajarPage() {
                         <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 text-slate-800">
+                    <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Memuat data jadwal...</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data jadwal...</td>
                         </tr>
                       ) : filteredRekapList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-600 font-medium">Tidak ada data jadwal ditemukan.</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Tidak ada data jadwal ditemukan.</td>
                         </tr>
                       ) : (
                         filteredRekapList.map((item, index) => {
                           const namaKelas = typeof item.kelas === 'object' ? item.kelas?.nama_kelas : item.kelas
                           const namaMapel = typeof item.mapel === 'object' ? item.mapel?.nama_mapel : item.mapel
                           return (
-                            <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
-                              <td className="py-2 px-3 text-center font-bold text-slate-500">{index + 1}</td>
-                              <td className="py-2 px-3 font-extrabold text-amber-800">{item.hari}</td>
-                              <td className="py-2 px-3 font-bold text-slate-700">{item.jam}</td>
-                              <td className="py-2 px-3 font-extrabold text-slate-900">
-                                <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[11px]">
+                            <tr key={item.id || index} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
+                              <td className={`py-2 px-3 text-center font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{index + 1}</td>
+                              <td className="py-2 px-3 font-extrabold text-amber-500">{item.hari}</td>
+                              <td className={`py-2 px-3 font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{item.jam}</td>
+                              <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                <span className={`px-2 py-0.5 rounded-md text-[11px] border ${
+                                  isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                }`}>
                                   {namaKelas || '-'}
                                 </span>
                               </td>
-                              <td className="py-2 px-3 font-extrabold text-indigo-950">{namaMapel || '-'}</td>
+                              <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>{namaMapel || '-'}</td>
                               <td className="py-2 px-3 text-center print:hidden">
                                 <button
                                   onClick={() => handleDelete(item.id)}
@@ -669,49 +761,61 @@ export default function JadwalMengajarPage() {
 
         {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
-          <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+          <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
+          }`}>
             <span>Aplikasi Guru AI</span>
             <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
           </div>
         </div>
 
       </div>
 
       {/* BOTTOM NAVIGATION DOCK */}
-      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+      }`}>
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jadwal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-600 transition">
+          <Link href="/jadwal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-500 transition">
             <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
 
-    </div>
+    </motion.div>
   )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -41,6 +42,16 @@ export default function AdministrasiTUPage() {
 
   const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
   const [suratList, setSuratList] = useState<SuratAdministrasi[]>([])
+
+  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+    }
+  }, [])
 
   // Global Filter Periode Akademik
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
@@ -383,51 +394,70 @@ export default function AdministrasiTUPage() {
 
   if (loadingRole || !isOperator) {
     return (
-      <div className="h-screen bg-[#E2E8F0] text-slate-700 p-8 flex items-center justify-center font-sans">
-        <div className="bg-white/90 backdrop-blur-md border border-slate-300 p-6 rounded-2xl text-center space-y-2 shadow-md">
-          <p className="text-slate-900 font-bold text-sm">Memeriksa Hak Akses Operator...</p>
+      <div className={`h-screen p-8 flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-700'}`}>
+        <div className={`backdrop-blur-md border p-6 rounded-2xl text-center space-y-2 shadow-md ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
+          <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Memeriksa Hak Akses Operator...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
+    <motion.div
+      initial={{ opacity: 0, x: -60 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      }`}
+    >
       
       {/* WATERMARK LOGO */}
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      }`}>
         <img src="/logo-smp.jpg" alt="Watermark SMP Muna Mustofa" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         
         {/* HEADER TOPBAR */}
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs">
+        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+              }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Administrasi &amp; Persuratan TU</p>
+                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Administrasi &amp; Persuratan TU</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs">
-              <span className="text-slate-500 text-[10px] uppercase">Periode:</span>
-              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+            <div className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+            }`}>
+              <span className={`text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
+              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
+                isDarkMode ? 'bg-slate-900 text-indigo-300' : 'bg-slate-100 text-indigo-900'
+              }`}>
                 <option value="Ganjil">Ganjil</option>
                 <option value="Genap">Genap</option>
               </select>
-              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className="bg-slate-100 font-bold text-indigo-900 rounded px-1 py-0.5 focus:outline-none">
+              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
+                isDarkMode ? 'bg-slate-900 text-indigo-300' : 'bg-slate-100 text-indigo-900'
+              }`}>
                 {Array.from({ length: 10 }, (_, i) => {
                   const startYear = 2024 + i
                   const tahunOption = `${startYear}/${startYear + 1}`
@@ -436,12 +466,16 @@ export default function AdministrasiTUPage() {
               </select>
             </div>
 
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+            }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
-              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+              }`}>
                 Operator
               </span>
             </div>
@@ -451,7 +485,11 @@ export default function AdministrasiTUPage() {
                 await supabase.auth.signOut()
                 router.replace('/login')
               }}
-              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
+              className={`border p-2 rounded-xl transition cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
+                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
+              }`}
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -466,24 +504,30 @@ export default function AdministrasiTUPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 min-h-0">
             
             {/* FORM INPUT SURAT */}
-            <form onSubmit={handleSubmit} className="lg:col-span-5 p-5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl flex flex-col justify-between shadow-xs h-full overflow-hidden">
+            <form onSubmit={handleSubmit} className={`lg:col-span-5 p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs h-full overflow-hidden ${
+              isDarkMode 
+                ? 'bg-slate-900/90 border-slate-800' 
+                : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+            }`}>
               <div className="space-y-3 overflow-y-auto pr-1 flex-1">
-                <div className="flex items-center gap-2 border-b border-indigo-200/80 pb-2">
-                  <span className="text-indigo-800 text-base">📑</span>
-                  <h3 className="font-extrabold text-slate-900 text-sm">
+                <div className={`flex items-center gap-2 border-b pb-2 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
+                  <span className="text-indigo-500 text-base">📑</span>
+                  <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     {editingId ? 'Edit Arsip Surat' : 'Buat / Registrasi Surat TU'}
                   </h3>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">1. Jenis Surat *</label>
+                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>1. Jenis Surat *</label>
                   <select
                     value={jenisSurat}
                     onChange={(e) => {
                       setJenisSurat(e.target.value)
                       setPenerima('')
                     }}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="Surat Keterangan Aktif Siswa">Surat Keterangan Aktif Siswa</option>
                     <option value="Surat Mutasi Siswa">Surat Mutasi Siswa</option>
@@ -495,7 +539,7 @@ export default function AdministrasiTUPage() {
 
                 {jenisSurat.includes('Siswa') ? (
                   <div>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">2. Pilih Siswa *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>2. Pilih Siswa *</label>
                     <select
                       value={selectedEntityId}
                       onChange={(e) => {
@@ -503,7 +547,9 @@ export default function AdministrasiTUPage() {
                         const found = siswaOptions.find(s => String(s.id) === e.target.value)
                         if (found) setPenerima(`${found.nama} (${found.extraInfo})`)
                       }}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer mb-1"
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer mb-1 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     >
                       <option value="">-- Pilih Nama Siswa --</option>
                       {siswaOptions.map(s => (
@@ -513,7 +559,7 @@ export default function AdministrasiTUPage() {
                   </div>
                 ) : jenisSurat.includes('Guru') ? (
                   <div>
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">2. Pilih Guru *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>2. Pilih Guru *</label>
                     <select
                       value={selectedEntityId}
                       onChange={(e) => {
@@ -521,7 +567,9 @@ export default function AdministrasiTUPage() {
                         const found = guruOptions.find(g => String(g.id) === e.target.value)
                         if (found) setPenerima(found.nama)
                       }}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 cursor-pointer mb-1"
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer mb-1 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     >
                       <option value="">-- Pilih Nama Guru --</option>
                       {guruOptions.map(g => (
@@ -532,25 +580,29 @@ export default function AdministrasiTUPage() {
                 ) : null}
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider mb-1">3. Penerima / Ditujukan Kepada *</label>
+                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>3. Penerima / Ditujukan Kepada *</label>
                   <input
                     type="text"
                     value={penerima}
                     onChange={(e) => setPenerima(e.target.value)}
                     placeholder="Nama Siswa / Guru / Instansi"
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                     required
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider">4. Keterangan / Narasi Surat</label>
+                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>4. Keterangan / Narasi Surat</label>
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => setIsModalEditorOpen(true)}
-                        className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-2 py-0.5 rounded-md transition shadow-xs cursor-pointer"
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition shadow-xs cursor-pointer ${
+                          isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                        }`}
                         title="Buka Editor Layar Penuh"
                       >
                         🔍 Layar Penuh
@@ -571,27 +623,31 @@ export default function AdministrasiTUPage() {
                     value={keterangan}
                     onChange={(e) => setKeterangan(e.target.value)}
                     placeholder="Tulis maksud singkat lalu klik 'Buat via AI' untuk merangkai narasi..."
-                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-600 leading-relaxed resize-y"
+                    className={`w-full border rounded-xl p-3 text-xs font-medium focus:outline-none focus:border-indigo-600 leading-relaxed resize-y ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   />
                 </div>
 
-                <div className="bg-indigo-50/80 p-2.5 rounded-xl border border-indigo-200/80">
+                <div className={`p-2.5 rounded-xl border ${isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-indigo-50/80 border-indigo-200/80'}`}>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider">5. Nomor Surat Resmi *</label>
-                    <span className="text-[9px] bg-indigo-200 text-indigo-900 font-black px-1.5 py-0.2 rounded">Auto / Editable</span>
+                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>5. Nomor Surat Resmi *</label>
+                    <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${isDarkMode ? 'bg-indigo-950 text-indigo-300' : 'bg-indigo-200 text-indigo-900'}`}>Auto / Editable</span>
                   </div>
                   <input
                     type="text"
                     value={nomorSurat}
                     onChange={(e) => setNomorSurat(e.target.value)}
                     placeholder="Contoh: 421/001/SMP-MM/2026"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:border-indigo-600"
+                    className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold focus:outline-none focus:border-indigo-600 ${
+                      isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                     required
                   />
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2 mt-2 border-t border-indigo-200/60 shrink-0">
+              <div className={`flex gap-2 pt-2 mt-2 border-t shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/60'}`}>
                 <button
                   type="submit"
                   disabled={loading}
@@ -604,7 +660,9 @@ export default function AdministrasiTUPage() {
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="px-3 bg-white border border-slate-300 hover:bg-slate-100 text-xs text-slate-700 font-bold rounded-xl transition cursor-pointer"
+                    className={`px-3 border text-xs font-bold rounded-xl transition cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
                   >
                     Batal
                   </button>
@@ -613,15 +671,21 @@ export default function AdministrasiTUPage() {
             </form>
 
             {/* TABEL ARSIP SURAT */}
-            <div className="lg:col-span-7 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden">
-              <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2.5 shrink-0 gap-3 flex-wrap">
+            <div className={`lg:col-span-7 backdrop-blur-md border rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden ${
+              isDarkMode 
+                ? 'bg-slate-900/90 border-slate-800' 
+                : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+            }`}>
+              <div className={`flex items-center justify-between border-b pb-2.5 shrink-0 gap-3 flex-wrap ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-indigo-800 text-base">📂</span>
-                  <h3 className="font-extrabold text-slate-900 text-sm">Arsip Surat Keluar TU</h3>
+                  <span className="text-indigo-500 text-base">📂</span>
+                  <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Arsip Surat Keluar TU</h3>
                 </div>
 
-                <div className="flex items-center gap-3 bg-white border border-slate-300 px-3 py-1 rounded-xl text-xs font-bold text-slate-700 shadow-xs">
-                  <span className="text-[10px] text-slate-500 uppercase">Cetak:</span>
+                <div className={`flex items-center gap-3 border px-3 py-1 rounded-xl text-xs font-bold shadow-xs ${
+                  isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-700'
+                }`}>
+                  <span className={`text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Cetak:</span>
                   <label className="flex items-center gap-1 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -648,21 +712,25 @@ export default function AdministrasiTUPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="🔍 Cari No. / Penerima..."
-                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600 w-40"
+                    className={`border rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-indigo-600 w-40 ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   />
                   <button
                     onClick={fetchSurat}
-                    className="text-[11px] bg-white border border-slate-300 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-bold text-slate-700 transition cursor-pointer whitespace-nowrap"
+                    className={`text-[11px] border px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                    }`}
                   >
                     🔄 Refresh
                   </button>
                 </div>
               </div>
 
-              <div className="mt-3 flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+              <div className={`mt-3 flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
-                    <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase tracking-wider text-[11px]">
+                  <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
+                    <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                       <th className="py-2.5 px-3">NO. SURAT</th>
                       <th className="py-2.5 px-3">JENIS SURAT</th>
                       <th className="py-2.5 px-3">PENERIMA</th>
@@ -670,26 +738,26 @@ export default function AdministrasiTUPage() {
                       <th className="py-2.5 px-3 text-center w-28">AKSI</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 text-slate-800">
+                  <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                     {loading ? (
                       <tr>
-                        <td colSpan={5} className="py-10 text-center text-slate-600 font-medium">
+                        <td colSpan={5} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
                           Memuat arsip surat...
                         </td>
                       </tr>
                     ) : filteredSurat.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-10 text-center text-slate-600 font-medium">
+                        <td colSpan={5} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
                           Belum ada arsip surat tercatat di periode ini.
                         </td>
                       </tr>
                     ) : (
                       filteredSurat.map((s) => (
-                        <tr key={s.id} className="hover:bg-indigo-50/60 transition">
-                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-900 whitespace-nowrap">{s.nomor_surat}</td>
-                          <td className="py-2.5 px-3 font-extrabold text-slate-900">{s.jenis_surat}</td>
-                          <td className="py-2.5 px-3 font-bold text-slate-700">{s.penerima}</td>
-                          <td className="py-2.5 px-3 font-medium text-slate-600 line-clamp-2">{s.keterangan || '-'}</td>
+                        <tr key={s.id} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
+                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-400 whitespace-nowrap">{s.nomor_surat}</td>
+                          <td className={`py-2.5 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{s.jenis_surat}</td>
+                          <td className={`py-2.5 px-3 font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{s.penerima}</td>
+                          <td className={`py-2.5 px-3 font-medium line-clamp-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{s.keterangan || '-'}</td>
                           <td className="py-2.5 px-3 text-center space-x-1 whitespace-nowrap">
                             <button
                               onClick={() => handlePrintSurat(s)}
@@ -727,7 +795,9 @@ export default function AdministrasiTUPage() {
         {/* MODAL EDITOR NARASI LAYAR PENUH */}
         {isModalEditorOpen && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh] overflow-hidden">
+            <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border flex flex-col max-h-[85vh] overflow-hidden ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+            }`}>
               <div className="px-5 py-3.5 bg-indigo-900 text-white flex items-center justify-between">
                 <h3 className="font-extrabold text-sm flex items-center gap-2">
                   <span>📝</span> Editor Fokus Narasi Surat
@@ -740,17 +810,19 @@ export default function AdministrasiTUPage() {
                 </button>
               </div>
               <div className="p-5 flex-1 flex flex-col space-y-3">
-                <p className="text-xs text-slate-600 font-medium">
+                <p className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                   Sunting dan sesuaikan teks narasi surat resmi di bawah ini dengan nyaman.
                 </p>
                 <textarea
                   value={keterangan}
                   onChange={(e) => setKeterangan(e.target.value)}
-                  className="w-full flex-1 min-h-[300px] border border-slate-300 rounded-xl p-4 text-sm text-slate-900 font-medium leading-relaxed focus:outline-none focus:border-indigo-600 resize-none font-serif"
+                  className={`w-full flex-1 min-h-[300px] border rounded-xl p-4 text-sm font-medium leading-relaxed focus:outline-none focus:border-indigo-600 resize-none font-serif ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                   placeholder="Ketik atau edit narasi surat..."
                 />
               </div>
-              <div className="px-5 py-3 bg-slate-100 border-t border-slate-200 flex justify-end gap-2">
+              <div className={`px-5 py-3 border-t flex justify-end gap-2 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
                 <button
                   onClick={() => setIsModalEditorOpen(false)}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
@@ -764,48 +836,62 @@ export default function AdministrasiTUPage() {
 
         {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0">
-          <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+          <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
+          }`}>
             <span>Aplikasi Guru AI</span>
             <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
           </div>
         </div>
       </div>
 
       {/* BOTTOM NAVIGATION DOCK */}
-      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0">
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+      }`}>
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jadwal" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
 
-    </div>
+    </motion.div>
   )
 }

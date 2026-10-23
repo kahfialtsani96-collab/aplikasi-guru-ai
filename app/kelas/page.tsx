@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -37,6 +38,16 @@ export default function KelolaKelasPage() {
   const [waliKelasId, setWaliKelasId] = useState<string>('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+    }
+  }, [])
 
   // Guard Akses Operator
   useEffect(() => {
@@ -160,19 +171,28 @@ export default function KelolaKelasPage() {
 
   if (loadingRole || !isOperator) {
     return (
-      <div className="h-screen bg-[#E2E8F0] text-slate-700 p-8 flex items-center justify-center font-sans">
-        <div className="bg-white/90 backdrop-blur-md border border-slate-300 p-6 rounded-2xl text-center space-y-2 shadow-md">
-          <p className="text-slate-900 font-bold text-sm">Memeriksa Hak Akses Operator...</p>
+      <div className={`h-screen p-8 flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-700'}`}>
+        <div className={`backdrop-blur-md border p-6 rounded-2xl text-center space-y-2 shadow-md ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
+          <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Memeriksa Hak Akses Operator...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-white overflow-hidden relative">
+    <motion.div
+      initial={{ opacity: 0, x: -60 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`h-screen font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      }`}
+    >
       
       {/* 1. WATERMARK LOGO */}
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      }`}>
         <img
           src="/logo-smp.jpg"
           alt="Watermark SMP Muna Mustofa"
@@ -182,36 +202,48 @@ export default function KelolaKelasPage() {
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         {/* 2. HEADER TOPBAR GLASSMORPHISM */}
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs">
+        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+              }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Kelola Kelas &amp; Wali Kelas</p>
+                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Kelola Kelas &amp; Wali Kelas</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-100/80 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+            <div className={`border text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 ${
+              isDarkMode 
+                ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
+                : 'bg-emerald-100/80 border-emerald-300 text-emerald-800'
+            }`}>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Supabase Live</span>
             </div>
 
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+            }`}>
               <span className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
-              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+              }`}>
                 Operator
               </span>
             </div>
@@ -221,7 +253,11 @@ export default function KelolaKelasPage() {
                 await supabase.auth.signOut()
                 router.replace('/login')
               }}
-              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
+              className={`border p-2 rounded-xl transition cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
+                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
+              }`}
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -236,21 +272,27 @@ export default function KelolaKelasPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-1 min-h-0">
             
             {/* FORM INPUT KELAS */}
-            <form onSubmit={handleSubmit} className="p-5 bg-gradient-to-br from-emerald-100/90 via-slate-100/90 to-emerald-50/90 backdrop-blur-md border border-emerald-300/80 rounded-2xl flex flex-col justify-between shadow-sm h-full">
+            <form onSubmit={handleSubmit} className={`p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs h-full ${
+              isDarkMode 
+                ? 'bg-slate-900/90 border-slate-800' 
+                : 'bg-gradient-to-br from-emerald-100/90 via-slate-100/90 to-emerald-50/90 border-emerald-300/80'
+            }`}>
               <div className="space-y-4">
-                <div className="flex items-center gap-2 border-b border-emerald-300/80 pb-2.5">
-                  <span className="text-emerald-800 text-base">🏫</span>
-                  <h3 className="font-extrabold text-slate-900 text-sm">
+                <div className={`flex items-center gap-2 border-b pb-2.5 ${isDarkMode ? 'border-slate-800' : 'border-emerald-300/80'}`}>
+                  <span className="text-emerald-500 text-base">🏫</span>
+                  <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     {editingId ? 'Edit Data Rombel' : 'Tambah Rombel Kelas'}
                   </h3>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-emerald-950 uppercase tracking-wider mb-1">Tingkat Kelas *</label>
+                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-950'}`}>Tingkat Kelas *</label>
                   <select
                     value={tingkat}
                     onChange={(e) => setTingkat(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-bold cursor-pointer"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600 cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="7">Kelas 7 (SMP)</option>
                     <option value="8">Kelas 8 (SMP)</option>
@@ -259,23 +301,27 @@ export default function KelolaKelasPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-emerald-950 uppercase tracking-wider mb-1">Nama Rombel / Kelas *</label>
+                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-950'}`}>Nama Rombel / Kelas *</label>
                   <input
                     type="text"
                     value={namaKelas}
                     onChange={(e) => setNamaKelas(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-bold"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600 ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                     placeholder="Contoh: VII A, VIII B, IX C"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-emerald-950 uppercase tracking-wider mb-1">Tugaskan Wali Kelas</label>
+                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-950'}`}>Tugaskan Wali Kelas</label>
                   <select
                     value={waliKelasId}
                     onChange={(e) => setWaliKelasId(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-bold cursor-pointer"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600 cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="">-- Belum Ditentukan --</option>
                     {guruList.map((g) => (
@@ -287,11 +333,11 @@ export default function KelolaKelasPage() {
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-3 mt-2 border-t border-emerald-300/50">
+              <div className={`flex gap-2 pt-3 mt-2 border-t ${isDarkMode ? 'border-slate-800' : 'border-emerald-300/50'}`}>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-emerald-800 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-extrabold text-xs transition shadow-sm cursor-pointer"
+                  className="flex-1 bg-emerald-800 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-extrabold text-xs transition shadow-xs cursor-pointer"
                 >
                   {loading ? 'Menyimpan...' : editingId ? 'Update Kelas' : '+ Simpan Rombel Kelas'}
                 </button>
@@ -300,7 +346,9 @@ export default function KelolaKelasPage() {
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="px-3 bg-white border border-slate-300 hover:bg-slate-100 text-xs text-slate-700 font-bold rounded-xl transition cursor-pointer"
+                    className={`px-3 border text-xs font-bold rounded-xl transition cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
                   >
                     Batal
                   </button>
@@ -309,49 +357,61 @@ export default function KelolaKelasPage() {
             </form>
 
             {/* TABEL DAFTAR KELAS (SCROLLABLE MANDIRI) */}
-            <div className="lg:col-span-2 bg-gradient-to-br from-emerald-100/90 via-slate-100/90 to-emerald-50/90 backdrop-blur-md border border-emerald-300/80 rounded-2xl p-5 flex flex-col shadow-sm h-full overflow-hidden">
-              <div className="flex items-center justify-between border-b border-emerald-300/80 pb-2.5 shrink-0">
+            <div className={`lg:col-span-2 backdrop-blur-md border rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden ${
+              isDarkMode 
+                ? 'bg-slate-900/90 border-slate-800' 
+                : 'bg-gradient-to-br from-emerald-100/90 via-slate-100/90 to-emerald-50/90 border-emerald-300/80'
+            }`}>
+              <div className={`flex items-center justify-between border-b pb-2.5 shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-emerald-300/80'}`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-emerald-800 text-base">📋</span>
-                  <h3 className="font-extrabold text-slate-900 text-sm">Daftar Rombel SMP Muna Mustofa</h3>
+                  <span className="text-emerald-500 text-base">📋</span>
+                  <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Daftar Rombel SMP Muna Mustofa</h3>
                 </div>
                 <button
                   onClick={fetchData}
-                  className="text-[11px] bg-white border border-slate-300 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-bold text-slate-700 transition cursor-pointer"
+                  className={`text-[11px] border px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    isDarkMode 
+                      ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200' 
+                      : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
+                  }`}
                 >
                   🔄 Refresh Data
                 </button>
               </div>
 
-              <div className="mt-3 flex-1 overflow-y-auto rounded-xl border border-emerald-300/80 bg-white/90">
+              <div className={`mt-3 flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-emerald-300/80'}`}>
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="sticky top-0 bg-emerald-100 z-10 shadow-xs">
-                    <tr className="text-emerald-950 border-b border-emerald-200 font-extrabold uppercase tracking-wider text-[11px]">
+                  <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-emerald-100'}`}>
+                    <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-emerald-400 border-slate-700' : 'text-emerald-950 border-emerald-200'}`}>
                       <th className="py-2.5 px-4">TINGKAT</th>
                       <th className="py-2.5 px-4">NAMA KELAS</th>
                       <th className="py-2.5 px-4">WALI KELAS TERPILIH</th>
                       <th className="py-2.5 px-4 text-center w-24">AKSI</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 text-slate-800">
+                  <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                     {kelasList.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-12 text-center text-slate-600 font-medium">
+                        <td colSpan={4} className={`py-12 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
                           Belum ada rombel kelas terdaftar.
                         </td>
                       </tr>
                     ) : (
                       kelasList.map((k) => (
-                        <tr key={k.id} className="hover:bg-emerald-50/60 transition">
-                          <td className="py-2.5 px-4 font-bold text-slate-700 whitespace-nowrap">Kelas {k.tingkat}</td>
-                          <td className="py-2.5 px-4 font-black text-emerald-900 text-sm whitespace-nowrap">{k.nama_kelas}</td>
-                          <td className="py-2.5 px-4 font-semibold text-slate-800 whitespace-nowrap">
+                        <tr key={k.id} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-emerald-50/60'}`}>
+                          <td className={`py-2.5 px-4 font-bold whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>Kelas {k.tingkat}</td>
+                          <td className="py-2.5 px-4 font-black text-emerald-400 text-sm whitespace-nowrap">{k.nama_kelas}</td>
+                          <td className="py-2.5 px-4 font-semibold whitespace-nowrap">
                             {k.nama_wali ? (
-                              <span className="bg-emerald-100 text-emerald-900 px-2.5 py-1 rounded-md text-[11px] font-extrabold border border-emerald-200 inline-block">
+                              <span className={`px-2.5 py-1 rounded-md text-[11px] font-extrabold border inline-block ${
+                                isDarkMode 
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-800' 
+                                  : 'bg-emerald-100 text-emerald-900 border-emerald-200'
+                              }`}>
                                 👤 {k.nama_wali}
                               </span>
                             ) : (
-                              <span className="text-slate-400 italic text-[11px]">(Belum Ditentukan)</span>
+                              <span className={`italic text-[11px] ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>(Belum Ditentukan)</span>
                             )}
                           </td>
                           <td className="py-2.5 px-4 text-center space-x-1.5 whitespace-nowrap">
@@ -383,47 +443,61 @@ export default function KelolaKelasPage() {
 
         {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0">
-          <div className="bg-slate-100/90 border border-slate-300 px-4 py-1 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+          <div className={`border px-4 py-1 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
+          }`}>
             <span>Aplikasi Guru AI</span>
             <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
           </div>
         </div>
       </div>
 
       {/* 4. BOTTOM NAVIGATION DOCK */}
-      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0">
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+      }`}>
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jadwal" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

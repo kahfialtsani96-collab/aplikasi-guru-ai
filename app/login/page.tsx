@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Eye, EyeOff, LogIn, AlertCircle, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, LogIn, AlertCircle, Loader2, Sparkles, ShieldCheck, UserCheck, ArrowLeft, ArrowRight } from 'lucide-react'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -12,12 +12,35 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export default function LoginPage() {
   const router = useRouter()
+  
+  // STATE EFEK SLIDING OVERLAY (false = Panel di Kanan, true = Panel Bergeser ke Kiri Membuka Form Login)
+  const [isSlid, setIsSlid] = useState(false)
+
+  // STATE FORM & AUTH
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+
+  // DETEKSI & SINKRONISASI TEMA DARK/LIGHT MODE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+
+    if (savedTheme === 'light') {
+      setIsDarkMode(false)
+      document.documentElement.classList.remove('dark')
+    } else if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+      document.documentElement.classList.add('dark')
+    } else {
+      const isHtmlDark = document.documentElement.classList.contains('dark')
+      setIsDarkMode(isHtmlDark)
+    }
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +57,6 @@ export default function LoginPage() {
       setIsLoading(false)
     } else {
       setIsSuccess(true)
-      // Jeda singkat agar animasi sukses & exit transition berjalan mulus
       setTimeout(() => {
         router.replace('/')
         router.refresh()
@@ -43,9 +65,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#E2E8F0] flex items-center justify-center p-4 relative overflow-hidden selection:bg-indigo-500 selection:text-white">
+    <div className={`min-h-screen flex items-center justify-center p-4 relative overflow-hidden selection:bg-indigo-500 selection:text-white transition-colors duration-300 ${
+      isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+    }`}>
+      
       {/* WATERMARK LOGO SEKOLAH */}
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.12] select-none">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.12]'
+      }`}>
         <img
           src="/logo-smp.jpg"
           alt="Watermark SMP Muna Mustofa"
@@ -56,112 +83,231 @@ export default function LoginPage() {
       <AnimatePresence mode="wait">
         {!isSuccess && (
           <motion.div
-            key="login-card"
-            initial={{ opacity: 0, scale: 0.92, y: 20 }}
+            key="login-container-card"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -20, filter: 'blur(10px)' }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-md bg-slate-100/90 backdrop-blur-md border border-slate-300 rounded-3xl p-6 sm:p-8 shadow-xl relative z-10 space-y-6"
+            className={`w-full max-w-4xl h-[540px] rounded-3xl border shadow-2xl relative z-10 overflow-hidden transition-colors duration-300 ${
+              isDarkMode 
+                ? 'bg-slate-900 border-slate-800' 
+                : 'bg-white border-slate-300'
+            }`}
           >
-            {/* HEADER LOGO & JUDUL */}
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white border border-slate-300 p-1 shadow-md flex items-center justify-center">
-                <img
-                  src="/logo-smp.jpg"
-                  alt="Logo SMP Muna Mustofa"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  Aplikasi Guru AI
-                </h1>
-                <p className="text-xs font-extrabold text-emerald-800 tracking-wide uppercase mt-0.5">
-                  SMP Muna Mustofa
-                </p>
-              </div>
-              <p className="text-xs text-slate-600 font-medium">
-                Masuk ke Portal Administrasi &amp; Modul Ajar Sekolah
-              </p>
-            </div>
 
-            {/* ERROR ALERT */}
-            <AnimatePresence>
-              {errorMsg && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2 font-medium"
-                >
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                  <span>{errorMsg}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* LAYER BASE SISI KIRI: PENJELASAN APLIKASI */}
+            <div className="absolute top-0 left-0 w-full md:w-1/2 h-full p-8 md:p-10 flex flex-col justify-between z-10">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-white border border-slate-200 p-0.5 shadow-xs shrink-0">
+                    <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
+                  </div>
+                  <div>
+                    <h2 className={`font-black text-sm leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>SMP MUNA MUSTOFA</h2>
+                    <p className="text-[10px] font-extrabold text-emerald-500 uppercase tracking-wider">Aplikasi Guru AI</p>
+                  </div>
+                </div>
 
-            {/* FORM LOGIN */}
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Email Akun
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nama@smpmunamustofa.sch.id"
-                  className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition shadow-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Kata Sandi
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition shadow-xs pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition p-1"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                <div className="pt-4 space-y-2">
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border ${
+                    isDarkMode ? 'bg-slate-800 text-emerald-400 border-slate-700' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  }`}>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Portal Akademik &amp; Administrasi Guru</span>
+                  </div>
+                  <h1 className={`text-2xl font-black tracking-tight leading-snug ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    Selamat Datang di Portal Pembelajaran Sekolah
+                  </h1>
+                  <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Sistem terpadu untuk pengelolaan agenda mengajar harian, rekap nilai akademik, absensi siswa, hingga bimbingan konseling di SMP Muna Mustofa.
+                  </p>
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold rounded-xl text-xs shadow-md transition duration-200 flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>Memproses Masuk...</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    <span>Masuk Portal</span>
-                  </>
-                )}
-              </button>
-            </form>
+              <div className={`p-3 border rounded-xl text-[11px] font-medium flex items-center gap-2.5 ${
+                isDarkMode ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'
+              }`}>
+                <UserCheck className="w-4 h-4 shrink-0 text-emerald-500" />
+                <span>Registrasi akun hanya dilakukan oleh Operator Sekolah.</span>
+              </div>
+            </div>
 
-            {/* FOOTER TEXT */}
-            <p className="text-[11px] text-slate-500 text-center font-medium pt-2">
-              Belum punya akun? Hubungi Operator / Admin TU Sekolah.
-            </p>
+            {/* LAYER BASE SISI KANAN: FORM LOGIN */}
+            <div className="absolute top-0 right-0 w-full md:w-1/2 h-full p-8 md:p-10 flex flex-col justify-center z-10">
+              <div className="max-w-sm mx-auto w-full space-y-4">
+                <div>
+                  <h2 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Account Login</h2>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Enter your email and password to access the system.</p>
+                </div>
+
+                {/* ERROR ALERT */}
+                <AnimatePresence>
+                  {errorMsg && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2 font-medium"
+                    >
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{errorMsg}</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* FORM INPUT LOGIN */}
+                <form onSubmit={handleLogin} className="space-y-3.5">
+                  <div>
+                    <label className={`block text-[11px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="nama@smpmunamustofa.sch.id"
+                      className={`w-full px-3.5 py-2.5 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600 transition ${
+                        isDarkMode 
+                          ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' 
+                          : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-[11px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className={`w-full px-3.5 py-2.5 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600 transition pr-10 ${
+                          isDarkMode 
+                            ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' 
+                            : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className={`absolute right-3 top-1/2 -translate-y-1/2 transition p-1 ${
+                          isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-md transition duration-200 flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Logging In...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-4 h-4" />
+                        <span>Sign In</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* OVERLAY PANEL MELAYANG & BERGESER (SLIDING OVERLAY) */}
+            <motion.div
+              initial={false}
+              animate={{
+                x: isSlid ? '-100%' : '0%',
+                borderRadius: isSlid ? '0px 100px 100px 0px' : '100px 0px 0px 100px',
+              }}
+              transition={{ duration: 0.6, ease: [0.6, -0.05, 0.01, 0.99] }}
+              className={`absolute top-0 right-0 w-1/2 h-full z-30 p-8 md:p-10 flex flex-col justify-between text-white shadow-2xl overflow-hidden ${
+                isDarkMode 
+                  ? 'bg-gradient-to-br from-indigo-900 via-slate-900 to-emerald-950' 
+                  : 'bg-gradient-to-br from-indigo-600 via-indigo-700 to-emerald-700'
+              }`}
+            >
+              {/* KONTEN OVERLAY A (POSISI AWAL DI KANAN) */}
+              {!isSlid && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="h-full flex flex-col justify-between items-center text-center py-4"
+                >
+                  <div className="w-12 h-12 rounded-2xl overflow-hidden bg-white p-0.5 shadow-md mb-2">
+                    <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
+                  </div>
+
+                  <div className="space-y-3">
+                    <h2 className="text-3xl font-black tracking-tight leading-none uppercase">
+                      Welcome Back!
+                    </h2>
+                    <p className="text-xs text-indigo-100/90 leading-relaxed max-w-xs mx-auto">
+                      Are you ready to manage your class schedule, student grades, and teaching journals today?
+                    </p>
+                  </div>
+
+                  <div className="w-full space-y-4 pt-2">
+                    <button
+                      onClick={() => setIsSlid(true)}
+                      className="w-full py-3 px-6 bg-white text-indigo-950 font-black rounded-xl text-xs transition hover:bg-emerald-300 shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>Get Started</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center justify-center gap-1.5 text-[10px] text-indigo-200/70">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>SMP Muna Mustofa AI Application</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* KONTEN OVERLAY B (SAAT BERGESER KE KIRI) */}
+              {isSlid && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="h-full flex flex-col justify-between items-center text-center py-4"
+                >
+                  <div className="space-y-2 pt-4">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Authentication Mode</span>
+                    <h2 className="text-2xl font-black tracking-tight">
+                      Portal Login Active
+                    </h2>
+                    <p className="text-xs text-indigo-100/80 leading-relaxed max-w-xs mx-auto">
+                      Fill in your registered credentials on the form to proceed into the application dashboard.
+                    </p>
+                  </div>
+
+                  <div className="w-full space-y-4 pb-2">
+                    <button
+                      onClick={() => setIsSlid(false)}
+                      className="w-full py-2.5 px-5 bg-white/10 hover:bg-white/20 text-white font-extrabold rounded-xl text-xs transition border border-white/20 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Back to Welcome Screen</span>
+                    </button>
+                    <div className="text-[10px] text-indigo-200/70">
+                      <span>Secure Login System v2.0</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </motion.div>
+
           </motion.div>
         )}
       </AnimatePresence>

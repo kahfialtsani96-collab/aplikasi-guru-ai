@@ -5,6 +5,7 @@ import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { createClient } from '@supabase/supabase-js'
+import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -17,6 +18,16 @@ export default function AiToolsPage() {
   const [activeTool, setActiveTool] = useState('chatbot')
   const [activeTabSection, setActiveTabSection] = useState<'admin' | 'modul'>('admin')
   const [selectedDoc, setSelectedDoc] = useState('cp')
+
+  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+    }
+  }, [])
 
   const [showKopAccordion, setShowKopAccordion] = useState(false)
   const [pakaiKop, setPakaiKop] = useState(true)
@@ -264,17 +275,17 @@ export default function AiToolsPage() {
           setSelectedDoc(doc.id)
 
           const payloadBody = {
-  ...adminForm,
-  ...modulForm,
-  tool: currentConfig?.title || 'Asisten Guru AI',
-  activeTool,
-  selectedDoc: doc.id,
-  mapel: adminForm.mapel || 'IPA',
-  faseKelas: adminForm.faseKelas || 'Fase D / Kelas VII',
-  materiTopik: adminForm.cpPerElemen || modulForm.rumusanTp,
-  spesifikData: formData,
-  tanpaKisiKisi: true
-}
+            ...adminForm,
+            ...modulForm,
+            tool: currentConfig?.title || 'Asisten Guru AI',
+            activeTool,
+            selectedDoc: doc.id,
+            mapel: adminForm.mapel || 'IPA',
+            faseKelas: adminForm.faseKelas || 'Fase D / Kelas VII',
+            materiTopik: adminForm.cpPerElemen || modulForm.rumusanTp,
+            spesifikData: formData,
+            tanpaKisiKisi: true
+          }
 
           const response = await fetch('/api/gemini', {
             method: 'POST',
@@ -398,10 +409,19 @@ export default function AiToolsPage() {
   const currentToolData = aiToolsConfig[activeTool] || aiToolsConfig['chatbot']
 
   return (
-    <div className="min-h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden">
+    <motion.div
+      initial={{ opacity: 0, x: -60 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      }`}
+    >
       
       {/* 1. FIXED BACKGROUND WATERMARK LOGO SCHOOL */}
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      }`}>
         <img
           src="/logo-smp.jpg"
           alt="Watermark SMP Muna Mustofa"
@@ -411,15 +431,19 @@ export default function AiToolsPage() {
 
       <div className="relative z-10">
         {/* 2. HEADER TOPBAR GLASSMORPHISM */}
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-xs">
+        <header className={`border-b px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-xs transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+              <div className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+              }`}>
                 <img
                   src="/logo-smp.jpg"
                   alt="Logo SMP Muna Mustofa"
@@ -427,21 +451,27 @@ export default function AiToolsPage() {
                 />
               </div>
               <div>
-                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-emerald-800 font-bold mt-1">AI Tools &amp; Generator Perangkat</p>
+                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[11px] font-bold mt-1 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>AI Tools &amp; Generator Perangkat</p>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-100/80 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 hidden sm:flex">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+            <div className={`border text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 hidden sm:flex ${
+              isDarkMode 
+                ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
+                : 'bg-emerald-100/80 border-emerald-300 text-emerald-800'
+            }`}>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Mercury AI Ready</span>
             </div>
           </div>
         </header>
 
         {/* 3. TOOL NAVIGATOR */}
-        <div className="bg-slate-100/80 backdrop-blur-md border-b border-slate-300 px-6 py-3 overflow-x-auto custom-scrollbar">
+        <div className={`border-b px-6 py-3 overflow-x-auto custom-scrollbar transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-100/80 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-2 min-w-max">
             {aiToolsNav.map((tool) => (
               <button
@@ -449,8 +479,10 @@ export default function AiToolsPage() {
                 onClick={() => setActiveTool(tool.id)}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border cursor-pointer ${
                   activeTool === tool.id
-                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-indigo-50 hover:text-indigo-900'
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                    : isDarkMode 
+                      ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white' 
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-indigo-50 hover:text-indigo-900'
                 }`}
               >
                 <span>{tool.icon}</span>
@@ -484,10 +516,16 @@ export default function AiToolsPage() {
 
           {/* FORM SETUP KOP SEKOLAH MODE ACCORDION */}
           {activeTool !== 'chatbot' && (
-            <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-4 transition-all shadow-sm">
+            <div className={`backdrop-blur-md border rounded-2xl p-4 transition-all shadow-xs ${
+              isDarkMode 
+                ? 'bg-slate-900/90 border-slate-800' 
+                : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
+            }`}>
               <button
                 onClick={() => setShowKopAccordion(!showKopAccordion)}
-                className="w-full flex items-center justify-between text-xs font-bold text-indigo-950 hover:text-indigo-800 transition cursor-pointer"
+                className={`w-full flex items-center justify-between text-xs font-bold transition cursor-pointer ${
+                  isDarkMode ? 'text-indigo-300 hover:text-indigo-200' : 'text-indigo-950 hover:text-indigo-800'
+                }`}
               >
                 <div className="flex items-center gap-2">
                   <span>🏫</span>
@@ -497,41 +535,51 @@ export default function AiToolsPage() {
               </button>
 
               {showKopAccordion && (
-                <div className="mt-4 pt-4 border-t border-indigo-200/80 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className={`mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-2 gap-4 text-xs ${
+                  isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'
+                }`}>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-1">Nama Yayasan / Instansi</label>
+                    <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Nama Yayasan / Instansi</label>
                     <input
                       type="text"
                       value={kopSekolah.yayasan}
                       onChange={(e) => setKopSekolah({ ...kopSekolah, yayasan: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 font-medium"
+                      className={`w-full border rounded-xl px-3.5 py-2 font-medium ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     />
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-1">Nama Satuan Pendidikan / Sekolah</label>
+                    <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Nama Satuan Pendidikan / Sekolah</label>
                     <input
                       type="text"
                       value={kopSekolah.namaSekolah}
                       onChange={(e) => setKopSekolah({ ...kopSekolah, namaSekolah: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 font-bold"
+                      className={`w-full border rounded-xl px-3.5 py-2 font-bold ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     />
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-1">NPSN &amp; Legalitas SK</label>
+                    <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>NPSN &amp; Legalitas SK</label>
                     <input
                       type="text"
                       value={kopSekolah.legalitas}
                       onChange={(e) => setKopSekolah({ ...kopSekolah, legalitas: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 font-medium"
+                      className={`w-full border rounded-xl px-3.5 py-2 font-medium ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     />
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-1">Alamat Sekolah</label>
+                    <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Alamat Sekolah</label>
                     <input
                       type="text"
                       value={kopSekolah.alamat}
                       onChange={(e) => setKopSekolah({ ...kopSekolah, alamat: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 font-medium"
+                      className={`w-full border rounded-xl px-3.5 py-2 font-medium ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     />
                   </div>
                 </div>
@@ -540,19 +588,29 @@ export default function AiToolsPage() {
           )}
 
           {/* DYNAMIC FORM PARAMETER AI */}
-          <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-4 shadow-sm">
-            <h3 className="font-extrabold text-slate-900 text-base border-b border-indigo-200/80 pb-3">Parameter Input AI</h3>
+          <div className={`backdrop-blur-md border rounded-2xl p-6 space-y-4 shadow-xs ${
+            isDarkMode 
+              ? 'bg-slate-900/90 border-slate-800' 
+              : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
+          }`}>
+            <h3 className={`font-extrabold text-base border-b pb-3 ${
+              isDarkMode ? 'text-white border-slate-800' : 'text-slate-900 border-indigo-200/80'
+            }`}>Parameter Input AI</h3>
 
             {/* KOMPONEN INPUT UMUM */}
             {activeTool !== 'kbc' && activeTool !== 'chatbot' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-4">
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-1.5">Mata Pelajaran / Bidang Studi</label>
-                  <input type="text" value={formData.mapel} onChange={(e) => setFormData({ ...formData, mapel: e.target.value })} className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 font-medium focus:outline-none focus:border-indigo-600" />
+                  <label className={`block font-bold mb-1.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Mata Pelajaran / Bidang Studi</label>
+                  <input type="text" value={formData.mapel} onChange={(e) => setFormData({ ...formData, mapel: e.target.value })} className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-1.5">Fase / Kelas</label>
-                  <input type="text" value={formData.faseKelas} onChange={(e) => setFormData({ ...formData, faseKelas: e.target.value })} className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-900 font-medium focus:outline-none focus:border-indigo-600" />
+                  <label className={`block font-bold mb-1.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Fase / Kelas</label>
+                  <input type="text" value={formData.faseKelas} onChange={(e) => setFormData({ ...formData, faseKelas: e.target.value })} className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
@@ -561,63 +619,103 @@ export default function AiToolsPage() {
             {activeTool === 'kbc' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => setActiveTabSection('admin')} className={`p-3 rounded-xl border text-xs font-bold transition cursor-pointer ${activeTabSection === 'admin' ? 'bg-indigo-600 border-indigo-700 text-white shadow-xs' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}>1. Input Identitas &amp; Administrasi</button>
-                  <button onClick={() => setActiveTabSection('modul')} className={`p-3 rounded-xl border text-xs font-bold transition cursor-pointer ${activeTabSection === 'modul' ? 'bg-indigo-600 border-indigo-700 text-white shadow-xs' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}>2. Input Modul &amp; Skenario</button>
+                  <button onClick={() => setActiveTabSection('admin')} className={`p-3 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                    activeTabSection === 'admin' 
+                      ? 'bg-indigo-600 border-indigo-700 text-white shadow-xs' 
+                      : isDarkMode 
+                        ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' 
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                  }`}>1. Input Identitas &amp; Administrasi</button>
+                  <button onClick={() => setActiveTabSection('modul')} className={`p-3 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                    activeTabSection === 'modul' 
+                      ? 'bg-indigo-600 border-indigo-700 text-white shadow-xs' 
+                      : isDarkMode 
+                        ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' 
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                  }`}>2. Input Modul &amp; Skenario</button>
                 </div>
                 {activeTabSection === 'admin' ? (
                   <div className="space-y-4 text-xs">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-indigo-900/80 font-bold mb-1">Satuan Pendidikan</label>
-                        <input type="text" value={adminForm.satuanPendidikan} onChange={(e)=>setAdminForm({...adminForm, satuanPendidikan:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium" />
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Satuan Pendidikan</label>
+                        <input type="text" value={adminForm.satuanPendidikan} onChange={(e)=>setAdminForm({...adminForm, satuanPendidikan:e.target.value})} className={`w-full border rounded-xl p-2.5 font-medium ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`} />
                       </div>
                       <div>
-                        <label className="block text-indigo-900/80 font-bold mb-1">Mata Pelajaran</label>
-                        <input type="text" value={adminForm.mapel} onChange={(e)=>setAdminForm({...adminForm, mapel:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium" />
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Mata Pelajaran</label>
+                        <input type="text" value={adminForm.mapel} onChange={(e)=>setAdminForm({...adminForm, mapel:e.target.value})} className={`w-full border rounded-xl p-2.5 font-medium ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`} />
                       </div>
                       <div>
-                        <label className="block text-indigo-900/80 font-bold mb-1">Fase / Kelas</label>
-                        <input type="text" value={adminForm.faseKelas} onChange={(e)=>setAdminForm({...adminForm, faseKelas:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium" />
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Fase / Kelas</label>
+                        <input type="text" value={adminForm.faseKelas} onChange={(e)=>setAdminForm({...adminForm, faseKelas:e.target.value})} className={`w-full border rounded-xl p-2.5 font-medium ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`} />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-indigo-900/80 font-bold mb-1">Nama Guru Pengampu</label>
-                        <input type="text" value={adminForm.namaGuru} onChange={(e)=>setAdminForm({...adminForm, namaGuru:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-bold" />
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Nama Guru Pengampu</label>
+                        <input type="text" value={adminForm.namaGuru} onChange={(e)=>setAdminForm({...adminForm, namaGuru:e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`} />
                       </div>
                       <div>
-                        <label className="block text-indigo-900/80 font-bold mb-1">Nama Kepala Sekolah</label>
-                        <input type="text" value={adminForm.namaKepala} onChange={(e)=>setAdminForm({...adminForm, namaKepala:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-bold" />
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Nama Kepala Sekolah</label>
+                        <input type="text" value={adminForm.namaKepala} onChange={(e)=>setAdminForm({...adminForm, namaKepala:e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`} />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-indigo-900/80 font-bold mb-1">NIP / NUPTK Guru</label>
-                        <input type="text" value={adminForm.nipGuru} onChange={(e)=>setAdminForm({...adminForm, nipGuru:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 font-mono font-medium" />
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>NIP / NUPTK Guru</label>
+                        <input type="text" value={adminForm.nipGuru} onChange={(e)=>setAdminForm({...adminForm, nipGuru:e.target.value})} className={`w-full border rounded-xl p-2.5 font-mono font-medium ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'
+                        }`} />
                       </div>
                       <div>
-                        <label className="block text-indigo-900/80 font-bold mb-1">NIP / NUPTK Kepala Sekolah</label>
-                        <input type="text" value={adminForm.nipKepala} onChange={(e)=>setAdminForm({...adminForm, nipKepala:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 font-mono font-medium" />
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>NIP / NUPTK Kepala Sekolah</label>
+                        <input type="text" value={adminForm.nipKepala} onChange={(e)=>setAdminForm({...adminForm, nipKepala:e.target.value})} className={`w-full border rounded-xl p-2.5 font-mono font-medium ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'
+                        }`} />
                       </div>
                     </div>
-                    <textarea rows={2} placeholder="Capaian Pembelajaran (CP)" value={adminForm.cpPerElemen} onChange={(e)=>setAdminForm({...adminForm, cpPerElemen:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 text-xs font-medium" />
+                    <textarea rows={2} placeholder="Capaian Pembelajaran (CP)" value={adminForm.cpPerElemen} onChange={(e)=>setAdminForm({...adminForm, cpPerElemen:e.target.value})} className={`w-full border rounded-xl p-3 text-xs font-medium ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`} />
                   </div>
                 ) : (
                   <div className="space-y-4 text-xs">
                      <div className="grid grid-cols-2 gap-4">
-                        <input type="text" placeholder="Kode TP" value={modulForm.kodeTp} onChange={(e)=>setModulForm({...modulForm, kodeTp:e.target.value})} className="bg-white border border-slate-300 rounded-xl p-2.5 text-indigo-900 font-bold" />
-                        <select value={modulForm.modelPembelajaran} onChange={(e)=>setModulForm({...modulForm, modelPembelajaran:e.target.value})} className="bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-bold cursor-pointer">
+                        <input type="text" placeholder="Kode TP" value={modulForm.kodeTp} onChange={(e)=>setModulForm({...modulForm, kodeTp:e.target.value})} className={`border rounded-xl p-2.5 font-bold ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-indigo-300' : 'bg-white border-slate-300 text-indigo-900'
+                        }`} />
+                        <select value={modulForm.modelPembelajaran} onChange={(e)=>setModulForm({...modulForm, modelPembelajaran:e.target.value})} className={`border rounded-xl p-2.5 font-bold cursor-pointer ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}>
                           <option>Problem Based Learning (PBL)</option><option>Discovery Learning</option><option>Project Based Learning</option>
                         </select>
                      </div>
-                     <textarea rows={2} placeholder="Rumusan Tujuan Pembelajaran" value={modulForm.rumusanTp} onChange={(e)=>setModulForm({...modulForm, rumusanTp:e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 text-xs font-medium" />
+                     <textarea rows={2} placeholder="Rumusan Tujuan Pembelajaran" value={modulForm.rumusanTp} onChange={(e)=>setModulForm({...modulForm, rumusanTp:e.target.value})} className={`w-full border rounded-xl p-3 text-xs font-medium ${
+                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                     }`} />
                   </div>
                 )}
-                <div className="pt-4 border-t border-indigo-200/80">
-                  <span className="text-xs text-indigo-950 font-extrabold mb-2 block">Pilih Dokumen Target (Klik untuk melihat hasil):</span>
+                <div className={`pt-4 border-t ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
+                  <span className={`text-xs font-extrabold mb-2 block ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>Pilih Dokumen Target (Klik untuk melihat hasil):</span>
                   <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
                     {kbcDocsList.map(doc => (
-                      <button key={doc.id} onClick={() => setSelectedDoc(doc.id)} className={`p-2 rounded-lg border text-[10px] flex flex-col items-center gap-1 cursor-pointer ${selectedDoc === doc.id ? 'bg-indigo-600 text-white font-bold border-indigo-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
+                      <button key={doc.id} onClick={() => setSelectedDoc(doc.id)} className={`p-2 rounded-lg border text-[10px] flex flex-col items-center gap-1 cursor-pointer ${
+                        selectedDoc === doc.id 
+                          ? 'bg-indigo-600 text-white font-bold border-indigo-700 shadow-xs' 
+                          : isDarkMode 
+                            ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' 
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}>
                         <span className="text-sm">{doc.icon}</span> <span>{doc.name.split(' ')[0]}</span>
                       </button>
                     ))}
@@ -630,14 +728,18 @@ export default function AiToolsPage() {
             {activeTool === 'perangkat' && (
               <div className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-2">Jenis Dokumen Perangkat</label>
-                  <select value={formData.jenisPerangkat} onChange={(e) => setFormData({...formData, jenisPerangkat: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-bold cursor-pointer">
+                  <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Jenis Dokumen Perangkat</label>
+                  <select value={formData.jenisPerangkat} onChange={(e) => setFormData({...formData, jenisPerangkat: e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}>
                     <option>Modul Ajar / RPP Plus</option><option>Alur Tujuan Pembelajaran (ATP)</option><option>Program Tahunan (Prota)</option><option>Program Semester (Prosem)</option><option>Silabus Singkat</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-2">Materi Pokok / Deskripsi Singkat</label>
-                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Sistem Reproduksi Manusia..." className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 font-medium" />
+                  <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Materi Pokok / Deskripsi Singkat</label>
+                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Sistem Reproduksi Manusia..." className={`w-full border rounded-xl p-3 font-medium ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
@@ -647,25 +749,33 @@ export default function AiToolsPage() {
               <div className="space-y-4 text-xs">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Pilar Utama Skenario</label>
-                    <select value={formData.dlPilar} onChange={(e) => setFormData({...formData, dlPilar: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-indigo-900 font-bold cursor-pointer">
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Pilar Utama Skenario</label>
+                    <select value={formData.dlPilar} onChange={(e) => setFormData({...formData, dlPilar: e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-indigo-300' : 'bg-white border-slate-300 text-indigo-900'
+                    }`}>
                       <option>Mindful Learning (Kesadaran &amp; Fokus)</option>
                       <option>Meaningful Learning (Makna &amp; Kontekstual)</option>
                       <option>Joyful Learning (Eksplorasi Menyenangkan)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Strategi Kegiatan</label>
-                    <input type="text" value={formData.dlStrategi} onChange={(e) => setFormData({...formData, dlStrategi: e.target.value})} placeholder="Diskusi / Roleplay / Eksperimen" className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium" />
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Strategi Kegiatan</label>
+                    <input type="text" value={formData.dlStrategi} onChange={(e) => setFormData({...formData, dlStrategi: e.target.value})} placeholder="Diskusi / Roleplay / Eksperimen" className={`w-full border rounded-xl p-2.5 font-medium ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`} />
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Alokasi Waktu</label>
-                    <input type="text" value={formData.dlAlokasi} onChange={(e) => setFormData({...formData, dlAlokasi: e.target.value})} placeholder="Contoh: 2 JP (90 Menit)" className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium" />
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Alokasi Waktu</label>
+                    <input type="text" value={formData.dlAlokasi} onChange={(e) => setFormData({...formData, dlAlokasi: e.target.value})} placeholder="Contoh: 2 JP (90 Menit)" className={`w-full border rounded-xl p-2.5 font-medium ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`} />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-2">Topik Bahasan Skenario</label>
-                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 font-medium" />
+                  <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Topik Bahasan Skenario</label>
+                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} className={`w-full border rounded-xl p-3 font-medium ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
@@ -675,19 +785,25 @@ export default function AiToolsPage() {
               <div className="space-y-4 text-xs">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Tema Utama P5 / PPRA</label>
-                    <select value={formData.kokuTema} onChange={(e) => setFormData({...formData, kokuTema: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-indigo-900 font-bold cursor-pointer">
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Tema Utama P5 / PPRA</label>
+                    <select value={formData.kokuTema} onChange={(e) => setFormData({...formData, kokuTema: e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-indigo-300' : 'bg-white border-slate-300 text-indigo-900'
+                    }`}>
                       <option>Kearifan Lokal</option><option>Gaya Hidup Berkelanjutan</option><option>Bhinneka Tunggal Ika</option><option>Kewirausahaan</option><option>Bangunlah Jiwa dan Raganya</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Target Dimensi Profil Pelajar</label>
-                    <input type="text" value={formData.kokuDimensi} onChange={(e) => setFormData({...formData, kokuDimensi: e.target.value})} placeholder="Contoh: Bernalar Kritis &amp; Kreatif" className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium" />
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Target Dimensi Profil Pelajar</label>
+                    <input type="text" value={formData.kokuDimensi} onChange={(e) => setFormData({...formData, kokuDimensi: e.target.value})} placeholder="Contoh: Bernalar Kritis &amp; Kreatif" className={`w-full border rounded-xl p-2.5 font-medium ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`} />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-2">Judul Spesifik Projek (Opsional)</label>
-                  <input type="text" value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Membuat ecobrick dari sampah plastik..." className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 font-medium" />
+                  <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Judul Spesifik Projek (Opsional)</label>
+                  <input type="text" value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Membuat ecobrick dari sampah plastik..." className={`w-full border rounded-xl p-3 font-medium ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
@@ -695,13 +811,17 @@ export default function AiToolsPage() {
             {/* 5. ASISTEN GURU CHATBOT */}
             {activeTool === 'chatbot' && (
               <div className="space-y-4 text-xs">
-                <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-xl flex items-start gap-3">
+                <div className={`border p-4 rounded-xl flex items-start gap-3 ${
+                  isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-indigo-50 border-indigo-200'
+                }`}>
                   <span className="text-xl">💬</span>
-                  <p className="text-indigo-900 font-medium mt-0.5 leading-relaxed">Gunakan asisten ini untuk mendiskusikan strategi menangani siswa yang sulit fokus, meminta saran ide pembuka kelas, atau sekadar memperbaiki tata bahasa untuk narasi rapor siswa.</p>
+                  <p className={`font-medium mt-0.5 leading-relaxed ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>Gunakan asisten ini untuk mendiskusikan strategi menangani siswa yang sulit fokus, meminta saran ide pembuka kelas, atau sekadar memperbaiki tata bahasa untuk narasi rapor siswa.</p>
                 </div>
                 <div>
-                  <label className="block text-indigo-950 font-extrabold mb-2 text-sm">Apa yang ingin Anda tanyakan atau diskusikan?</label>
-                  <textarea rows={4} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Ketik pertanyaan atau studi kasus guru di sini..." className="w-full bg-white border border-slate-300 rounded-xl p-4 text-slate-900 focus:outline-none focus:border-indigo-600 text-sm leading-relaxed font-medium shadow-xs" />
+                  <label className={`block font-extrabold mb-2 text-sm ${isDarkMode ? 'text-white' : 'text-indigo-950'}`}>Apa yang ingin Anda tanyakan atau diskusikan?</label>
+                  <textarea rows={4} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Ketik pertanyaan atau studi kasus guru di sini..." className={`w-full border rounded-xl p-4 focus:outline-none focus:border-indigo-600 text-sm leading-relaxed font-medium shadow-xs ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
@@ -711,21 +831,25 @@ export default function AiToolsPage() {
               <div className="space-y-4 text-xs">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Jenis Aktivitas LKPD</label>
-                    <select value={formData.lkpdAktivitas} onChange={(e) => setFormData({...formData, lkpdAktivitas: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-bold cursor-pointer">
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Jenis Aktivitas LKPD</label>
+                    <select value={formData.lkpdAktivitas} onChange={(e) => setFormData({...formData, lkpdAktivitas: e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}>
                       <option>Studi Kasus &amp; Pemecahan Masalah</option><option>Eksperimen / Pengamatan Langsung</option><option>Diskusi Kelompok &amp; Presentasi</option><option>Projek Mini Individu</option>
                     </select>
                   </div>
                   <div className="flex items-end pb-2">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input type="checkbox" checked={formData.lkpdHots} onChange={(e) => setFormData({...formData, lkpdHots: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer" />
-                      <span className="text-indigo-950 font-extrabold">Terapkan Pendekatan HOTS &amp; Konteks Lokal</span>
+                      <span className={`font-extrabold ${isDarkMode ? 'text-white' : 'text-indigo-950'}`}>Terapkan Pendekatan HOTS &amp; Konteks Lokal</span>
                     </label>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-2">Materi Pokok LKPD</label>
-                  <input type="text" value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 font-medium" />
+                  <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Materi Pokok LKPD</label>
+                  <input type="text" value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} className={`w-full border rounded-xl p-3 font-medium ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
@@ -735,25 +859,33 @@ export default function AiToolsPage() {
               <div className="space-y-4 text-xs">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Jumlah Soal</label>
-                    <input type="number" value={formData.soalJumlah} onChange={(e) => setFormData({...formData, soalJumlah: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-indigo-900 font-extrabold text-center" />
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Jumlah Soal</label>
+                    <input type="number" value={formData.soalJumlah} onChange={(e) => setFormData({...formData, soalJumlah: e.target.value})} className={`w-full border rounded-xl p-2.5 font-extrabold text-center ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-indigo-300' : 'bg-white border-slate-300 text-indigo-900'
+                    }`} />
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Bentuk Soal</label>
-                    <select value={formData.soalTipe} onChange={(e) => setFormData({...formData, soalTipe: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-bold cursor-pointer">
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Bentuk Soal</label>
+                    <select value={formData.soalTipe} onChange={(e) => setFormData({...formData, soalTipe: e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}>
                       <option>Pilihan Ganda</option><option>Uraian / Essay</option><option>Campuran (PG &amp; Uraian)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-indigo-900/80 font-bold mb-2">Tingkat Kesulitan</label>
-                    <select value={formData.soalLevel} onChange={(e) => setFormData({...formData, soalLevel: e.target.value})} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900 font-bold cursor-pointer">
+                    <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Tingkat Kesulitan</label>
+                    <select value={formData.soalLevel} onChange={(e) => setFormData({...formData, soalLevel: e.target.value})} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}>
                       <option>HOTS (C4-C6) - Analisis &amp; Evaluasi</option><option>MOTS (C2-C3) - Pemahaman Dasar</option>
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-2">Topik Ujian / Indikator Materi</label>
-                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Menghitung gaya gravitasi Newton..." className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 font-medium" />
+                  <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Topik Ujian / Indikator Materi</label>
+                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Menghitung gaya gravitasi Newton..." className={`w-full border rounded-xl p-3 font-medium ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
@@ -761,34 +893,50 @@ export default function AiToolsPage() {
             {/* 8. MULTI TOOL */}
             {activeTool === 'multi' && (
               <div className="space-y-4 text-xs">
-                <label className="block text-indigo-950 font-extrabold mb-2">Pilih Kebutuhan Darurat (Sub-Tool Cepat):</label>
+                <label className={`block font-extrabold mb-2 ${isDarkMode ? 'text-white' : 'text-indigo-950'}`}>Pilih Kebutuhan Darurat (Sub-Tool Cepat):</label>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {multiSubToolsList.map(sub => (
-                    <button key={sub} onClick={() => setFormData({...formData, multiSubTool: sub})} className={`px-4 py-2 rounded-full border transition font-bold cursor-pointer ${formData.multiSubTool === sub ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}>
+                    <button key={sub} onClick={() => setFormData({...formData, multiSubTool: sub})} className={`px-4 py-2 rounded-full border transition font-bold cursor-pointer ${
+                      formData.multiSubTool === sub 
+                        ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs' 
+                        : isDarkMode 
+                          ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700' 
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                    }`}>
                       {sub}
                     </button>
                   ))}
                 </div>
                 <div>
-                  <label className="block text-indigo-900/80 font-bold mb-2">Catatan/Konteks Spesifik</label>
-                  <input type="text" value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Ketik rincian tambahan di sini (Opsional)..." className="w-full bg-white border border-slate-300 rounded-xl p-3 text-slate-900 font-medium" />
+                  <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Catatan/Konteks Spesifik</label>
+                  <input type="text" value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Ketik rincian tambahan di sini (Opsional)..." className={`w-full border rounded-xl p-3 font-medium ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`} />
                 </div>
               </div>
             )}
           </div>
 
           {/* AREA OUTPUT HASIL GENERASI AI */}
-          <div className="bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-6 space-y-6 min-h-[400px] shadow-sm">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-indigo-200/80 pb-4 gap-4">
+          <div className={`backdrop-blur-md border rounded-2xl p-6 space-y-6 min-h-[400px] shadow-xs ${
+            isDarkMode 
+              ? 'bg-slate-900/90 border-slate-800' 
+              : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
+          }`}>
+            <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-4 gap-4 ${
+              isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'
+            }`}>
               <div className="flex items-center gap-2">
-                <span className="text-indigo-700 text-lg">✨</span>
-                <h4 className="font-extrabold text-slate-900 text-base uppercase">Hasil Output - {currentToolData.title}</h4>
+                <span className="text-indigo-500 text-lg">✨</span>
+                <h4 className={`font-extrabold text-base uppercase ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Hasil Output - {currentToolData.title}</h4>
               </div>
 
               {/* SAKELAR CENTANG KOP SEKOLAH & TOMBOL CETAK */}
               <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                 {activeTool !== 'chatbot' && (
-                  <label className="flex items-center gap-2 text-xs font-bold text-indigo-950 cursor-pointer bg-white px-3 py-2 rounded-xl border border-slate-300 shadow-xs">
+                  <label className={`flex items-center gap-2 text-xs font-bold cursor-pointer px-3 py-2 rounded-xl border shadow-xs ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-indigo-300' : 'bg-white border-slate-300 text-indigo-950'
+                  }`}>
                     <input
                       type="checkbox"
                       checked={pakaiKop}
@@ -811,24 +959,30 @@ export default function AiToolsPage() {
             {isGenerating ? (
               <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
                 <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm text-indigo-900 font-extrabold animate-pulse">
+                <p className={`text-sm font-extrabold animate-pulse ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
                   {generateProgress || 'Menghubungkan ke Mercury AI Engine...'}
                 </p>
               </div>
             ) : generatedResults[currentResultKey] ? (
-              <div id="ai-document-result" className="bg-white border border-slate-300 rounded-xl p-6 text-sm text-slate-900 leading-relaxed font-sans prose max-w-none prose-headings:text-indigo-900 prose-a:text-indigo-700 shadow-sm">
+              <div id="ai-document-result" className={`border rounded-xl p-6 text-sm leading-relaxed font-sans prose max-w-none shadow-xs ${
+                isDarkMode 
+                  ? 'bg-slate-900 border-slate-800 text-slate-100 prose-headings:text-indigo-300 prose-a:text-indigo-400 prose-strong:text-white' 
+                  : 'bg-white border-slate-300 text-slate-900 prose-headings:text-indigo-900 prose-a:text-indigo-700'
+              }`}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {generatedResults[currentResultKey]}
                 </ReactMarkdown>
               </div>
             ) : (
               <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-white border border-indigo-200 flex items-center justify-center text-indigo-700 text-3xl shadow-xs">
+                <div className={`w-16 h-16 rounded-full border flex items-center justify-center text-3xl shadow-xs ${
+                  isDarkMode ? 'bg-slate-800 border-slate-700 text-indigo-400' : 'bg-white border-indigo-200 text-indigo-700'
+                }`}>
                   🤖
                 </div>
                 <div className="space-y-1">
-                  <h5 className="font-extrabold text-slate-900 text-lg tracking-tight">Belum Ada Hasil Generasi</h5>
-                  <p className="text-xs text-slate-600 font-medium max-w-md mx-auto">
+                  <h5 className={`font-extrabold text-lg tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Belum Ada Hasil Generasi</h5>
+                  <p className={`text-xs font-medium max-w-md mx-auto ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                     Sesuaikan parameter di atas lalu klik tombol <b>{currentToolData.buttonText}</b> untuk memulai pembuatan dokumen otomatis.
                   </p>
                 </div>
@@ -838,10 +992,12 @@ export default function AiToolsPage() {
 
           {/* BADGE COPYRIGHT FOOTER */}
           <div className="pt-8 pb-4 flex justify-center">
-            <div className="bg-slate-100 border border-slate-300 px-6 py-2.5 rounded-full text-center text-xs text-slate-700 font-medium shadow-xs">
+            <div className={`border px-6 py-2.5 rounded-full text-center text-xs font-medium shadow-xs transition-colors duration-300 ${
+              isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100 border-slate-300 text-slate-700'
+            }`}>
               <span>Aplikasi Guru AI</span>
               <span className="mx-2">•</span>
-              <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+              <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
             </div>
           </div>
 
@@ -849,43 +1005,55 @@ export default function AiToolsPage() {
       </div>
 
       {/* 5. BOTTOM NAVIGATION DOCK */}
-      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg">
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+      }`}>
         <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-lg">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/siswa" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-lg">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/guru" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-lg">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jadwal" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/jadwal" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-lg">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/ai" className="flex flex-col items-center gap-1 text-xs font-bold text-indigo-700 transition">
+          <Link href="/ai" className="flex flex-col items-center gap-1 text-xs font-bold text-indigo-500 transition">
             <span className="text-lg">✨</span>
             <span>AI Tools</span>
           </Link>
 
-          <Link href="/laporan" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/laporan" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-lg">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -47,6 +48,16 @@ export default function AgendaMengajarPage() {
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
+
+  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+    }
+  }, [])
 
   // Master Data Options
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
@@ -320,41 +331,58 @@ export default function AgendaMengajarPage() {
   const totalTertunda = rekapList.filter((item) => item.status === 'Tertunda').length
 
   return (
-    <div className="h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative">
+    <motion.div
+      initial={{ opacity: 0, x: -60 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      }`}
+    >
       
       {/* WATERMARK LOGO */}
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none print:hidden">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      }`}>
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         
         {/* HEADER TOPBAR */}
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden">
+        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg transition" title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+              }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-                <p className="text-[11px] text-emerald-800 font-bold mt-0.5">Jurnal Agenda Mengajar Harian</p>
+                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Jurnal Agenda Mengajar Harian</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs">
+            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+            }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
               <span>{userDisplayName}</span>
-              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border border-indigo-200">
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+              }`}>
                 {isOperator ? 'Operator' : 'Guru'}
               </span>
             </div>
@@ -364,7 +392,11 @@ export default function AgendaMengajarPage() {
                 await supabase.auth.signOut()
                 router.replace('/login')
               }}
-              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-2 rounded-xl transition cursor-pointer"
+              className={`border p-2 rounded-xl transition cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
+                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
+              }`}
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -375,25 +407,37 @@ export default function AgendaMengajarPage() {
         </header>
 
         {/* SUB-NAVBAR AKADEMIK */}
-        <div className="bg-slate-200/80 backdrop-blur-md border-b border-slate-300 px-6 py-2 shrink-0 overflow-x-auto print:hidden">
+        <div className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
-            <span className="text-indigo-900 font-black pr-2 border-r border-slate-300 flex items-center gap-1">
+            <span className={`font-black pr-2 border-r flex items-center gap-1 ${
+              isDarkMode ? 'text-indigo-300 border-slate-800' : 'text-indigo-900 border-slate-300'
+            }`}>
               🎓 Akademik:
             </span>
-            <Link href="/jadwal" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+            <Link href="/jadwal" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+              isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+            }`}>
               <span>🕒</span> Jadwal Mengajar
             </Link>
-            <Link href="/absensi" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+            <Link href="/absensi" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+              isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+            }`}>
               <span>📋</span> Input Absensi
             </Link>
-            <Link href="/nilai" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+            <Link href="/nilai" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+              isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+            }`}>
               <span>⭐</span> Input Penilaian
             </Link>
             <Link href="/jurnal" className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl shadow-xs font-extrabold flex items-center gap-1.5">
               <span>📓</span> Agenda Mengajar
             </Link>
             {canAccessBimbingan && (
-              <Link href="/bimbingan" className="bg-white/80 text-slate-700 hover:bg-white px-3 py-1.5 rounded-xl border border-slate-300 transition flex items-center gap-1.5">
+              <Link href="/bimbingan" className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+                isDarkMode ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border-slate-300'
+              }`}>
                 <span>💖</span> Bimbingan Guru Wali
               </Link>
             )}
@@ -405,11 +449,17 @@ export default function AgendaMengajarPage() {
           
           {/* TAB MODE BAR */}
           <div className="flex items-center justify-between shrink-0 print:hidden">
-            <div className="grid grid-cols-2 bg-slate-200/90 p-1 rounded-xl border border-slate-300 max-w-md text-xs font-extrabold flex-1">
+            <div className={`grid grid-cols-2 p-1 rounded-xl border max-w-md text-xs font-extrabold flex-1 ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-200/90 border-slate-300'
+            }`}>
               <button
                 onClick={() => setActiveTab('input')}
                 className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
-                  activeTab === 'input' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                  activeTab === 'input' 
+                    ? 'bg-indigo-600 text-white shadow-xs' 
+                    : isDarkMode 
+                      ? 'text-slate-400 hover:text-white' 
+                      : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
                 <span>📅</span> Input Jurnal Agenda
@@ -417,7 +467,11 @@ export default function AgendaMengajarPage() {
               <button
                 onClick={() => setActiveTab('rekap')}
                 className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
-                  activeTab === 'rekap' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                  activeTab === 'rekap' 
+                    ? 'bg-indigo-600 text-white shadow-xs' 
+                    : isDarkMode 
+                      ? 'text-slate-400 hover:text-white' 
+                      : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
                 <span>📜</span> Riwayat &amp; Rekapitulasi
@@ -430,10 +484,14 @@ export default function AgendaMengajarPage() {
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               
               {/* FORM INPUT */}
-              <form onSubmit={handleSimpanJurnal} className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden space-y-2.5">
+              <form onSubmit={handleSimpanJurnal} className={`backdrop-blur-md border rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden space-y-2.5 ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
                   <div className="sm:col-span-2">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">TANGGAL *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>TANGGAL *</label>
                     <input
                       type="date"
                       value={tanggal}
@@ -446,13 +504,15 @@ export default function AgendaMengajarPage() {
                           if (nHari !== 'Jumat') setHari(nHari)
                         }
                       }}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                       required
                     />
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">HARI *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>HARI *</label>
                     <select
                       value={hari}
                       onChange={(e) => {
@@ -460,7 +520,9 @@ export default function AgendaMengajarPage() {
                         setJamMulai('1')
                         setJamSelesai('1')
                       }}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     >
                       <option value="Senin">Senin</option>
                       <option value="Selasa">Selasa</option>
@@ -473,7 +535,7 @@ export default function AgendaMengajarPage() {
 
                   {/* JAM BLOK: MULAI S/D SELESAI */}
                   <div className="sm:col-span-3">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">JAM MENGAJAR *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>JAM MENGAJAR *</label>
                     <div className="grid grid-cols-2 gap-1.5">
                       <select
                         value={jamMulai}
@@ -482,7 +544,9 @@ export default function AgendaMengajarPage() {
                           setJamMulai(val)
                           if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
                         }}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                        className={`w-full border rounded-xl px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
                       >
                         {jamOptionsForHari.length > 0 ? (
                           jamOptionsForHari.map((j) => (
@@ -498,7 +562,9 @@ export default function AgendaMengajarPage() {
                       <select
                         value={jamSelesai}
                         onChange={(e) => setJamSelesai(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                        className={`w-full border rounded-xl px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
                       >
                         {jamOptionsForHari.length > 0 ? (
                           jamOptionsForHari
@@ -518,11 +584,13 @@ export default function AgendaMengajarPage() {
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">KELAS DIAJAR *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS DIAJAR *</label>
                     <select
                       value={selectedKelasId}
                       onChange={(e) => setSelectedKelasId(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                       required
                     >
                       <option value="">-- Pilih Kelas --</option>
@@ -533,11 +601,13 @@ export default function AgendaMengajarPage() {
                   </div>
 
                   <div className="sm:col-span-3">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">MAPEL DIAJAR *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>MAPEL DIAJAR *</label>
                     <select
                       value={selectedMapelId}
                       onChange={(e) => setSelectedMapelId(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                       required
                     >
                       <option value="">-- Pilih Mapel --</option>
@@ -550,23 +620,27 @@ export default function AgendaMengajarPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
                   <div className="sm:col-span-5">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">MATERI PEMBELAJARAN *</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>MATERI PEMBELAJARAN *</label>
                     <input
                       type="text"
                       value={materi}
                       onChange={(e) => setMateri(e.target.value)}
                       placeholder="Detail materi atau modul yang diajarkan..."
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                       required
                     />
                   </div>
 
                   <div className="sm:col-span-3">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">STATUS</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>STATUS</label>
                     <select
                       value={status}
                       onChange={(e) => setStatus(e.target.value as 'Terlaksana' | 'Tertunda')}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     >
                       <option value="Terlaksana">Terlaksana</option>
                       <option value="Tertunda">Tertunda</option>
@@ -574,13 +648,15 @@ export default function AgendaMengajarPage() {
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">ABSEN SISWA</label>
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>ABSEN SISWA</label>
                     <input
                       type="text"
                       value={absenSiswa}
                       onChange={(e) => setAbsenSiswa(e.target.value)}
                       placeholder="Nihil"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-600"
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     />
                   </div>
 
@@ -597,11 +673,15 @@ export default function AgendaMengajarPage() {
               </form>
 
               {/* TABEL DATA JURNAL */}
-              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
-                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
+                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
-                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                    <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
+                      <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                         <th className="py-2.5 px-3">TANGGAL</th>
                         <th className="py-2.5 px-3">JAM MENGAJAR</th>
                         <th className="py-2.5 px-3">KELAS &amp; MAPEL</th>
@@ -611,37 +691,37 @@ export default function AgendaMengajarPage() {
                         <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 text-slate-800">
+                    <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loading ? (
                         <tr>
-                          <td colSpan={7} className="py-10 text-center text-slate-600 font-medium">Memuat data agenda...</td>
+                          <td colSpan={7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data agenda...</td>
                         </tr>
                       ) : jurnalList.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="py-10 text-center text-slate-600 font-medium">Belum ada jurnal agenda tersimpan.</td>
+                          <td colSpan={7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada jurnal agenda tersimpan.</td>
                         </tr>
                       ) : (
                         jurnalList.map((item, index) => (
-                          <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
-                            <td className="py-2 px-3 font-mono font-bold text-slate-700">{item.tanggal}</td>
-                            <td className="py-2 px-3 font-bold text-indigo-900">{item.jam_ke}</td>
+                          <tr key={item.id || index} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
+                            <td className={`py-2 px-3 font-mono font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{item.tanggal}</td>
+                            <td className="py-2 px-3 font-bold text-indigo-400">{item.jam_ke}</td>
                             <td className="py-2 px-3">
-                              <span className="font-extrabold text-slate-900">{item.kelas}</span>
-                              <span className="block text-[10px] font-bold text-emerald-800">{item.mapel}</span>
+                              <span className={`font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.kelas}</span>
+                              <span className={`block text-[10px] font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>{item.mapel}</span>
                             </td>
-                            <td className="py-2 px-3 font-bold text-slate-800">{item.materi}</td>
+                            <td className={`py-2 px-3 font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.materi}</td>
                             <td className="py-2 px-3 text-center">
                               <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${
                                   item.status === 'Terlaksana'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                    : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                    ? isDarkMode ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : isDarkMode ? 'bg-rose-950 text-rose-300 border-rose-800' : 'bg-rose-100 text-rose-800 border-rose-300'
                                 }`}
                               >
                                 {item.status}
                               </span>
                             </td>
-                            <td className="py-2 px-3 text-center font-bold text-slate-600">{item.absen_siswa}</td>
+                            <td className={`py-2 px-3 text-center font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{item.absen_siswa}</td>
                             <td className="py-2 px-3 text-center print:hidden">
                               <button
                                 onClick={() => handleDeleteJurnal(item.id)}
@@ -668,28 +748,40 @@ export default function AgendaMengajarPage() {
               
               {/* STAT CARDS */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 max-w-md">
-                <div className="bg-white/90 backdrop-blur-md border border-slate-300 rounded-xl p-2.5 shadow-xs">
-                  <p className="text-[10px] font-extrabold text-slate-500 uppercase">TOTAL JURNAL</p>
-                  <p className="text-lg font-black text-slate-900 mt-0.5">{totalJurnal}</p>
+                <div className={`backdrop-blur-md border rounded-xl p-2.5 shadow-xs ${
+                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'
+                }`}>
+                  <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>TOTAL JURNAL</p>
+                  <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{totalJurnal}</p>
                 </div>
-                <div className="bg-white/90 backdrop-blur-md border border-emerald-200 rounded-xl p-2.5 shadow-xs">
-                  <p className="text-[10px] font-extrabold text-emerald-700 uppercase">TERLAKSANA</p>
-                  <p className="text-lg font-black text-emerald-900 mt-0.5">{totalTerlaksana}</p>
+                <div className={`backdrop-blur-md border rounded-xl p-2.5 shadow-xs ${
+                  isDarkMode ? 'bg-emerald-950/40 border-emerald-800' : 'bg-white/90 border-emerald-200'
+                }`}>
+                  <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>TERLAKSANA</p>
+                  <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-emerald-300' : 'text-emerald-900'}`}>{totalTerlaksana}</p>
                 </div>
-                <div className="bg-white/90 backdrop-blur-md border border-rose-200 rounded-xl p-2.5 shadow-xs">
-                  <p className="text-[10px] font-extrabold text-rose-700 uppercase">TERTUNDA</p>
-                  <p className="text-lg font-black text-rose-900 mt-0.5">{totalTertunda}</p>
+                <div className={`backdrop-blur-md border rounded-xl p-2.5 shadow-xs ${
+                  isDarkMode ? 'bg-rose-950/40 border-rose-800' : 'bg-white/90 border-rose-200'
+                }`}>
+                  <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}>TERTUNDA</p>
+                  <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-rose-300' : 'text-rose-900'}`}>{totalTertunda}</p>
                 </div>
               </div>
 
               {/* FILTER BAR REKAP */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 p-3 rounded-2xl shrink-0 shadow-xs">
+              <div className={`grid grid-cols-1 sm:grid-cols-4 gap-2.5 backdrop-blur-md border p-3 rounded-2xl shrink-0 shadow-xs ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER KELAS</label>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER KELAS</label>
                   <select
                     value={filterKelasId}
                     onChange={(e) => setFilterKelasId(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="">Semua Kelas</option>
                     {kelasList.map((k) => (
@@ -699,11 +791,13 @@ export default function AgendaMengajarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER MAPEL</label>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER MAPEL</label>
                   <select
                     value={filterMapelId}
                     onChange={(e) => setFilterMapelId(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="">Semua Mapel</option>
                     {mapelList.map((m) => (
@@ -713,11 +807,13 @@ export default function AgendaMengajarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">FILTER STATUS</label>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER STATUS</label>
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="">Semua Status</option>
                     <option value="Terlaksana">Terlaksana</option>
@@ -726,23 +822,29 @@ export default function AgendaMengajarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-indigo-950 uppercase mb-1">CARI MATERI</label>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>CARI MATERI</label>
                   <input
                     type="text"
                     value={searchMateri}
                     onChange={(e) => setSearchMateri(e.target.value)}
                     placeholder="Materi..."
-                    className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-900 font-bold focus:outline-none"
+                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   />
                 </div>
               </div>
 
               {/* TABEL REKAP */}
-              <div className="bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 backdrop-blur-md border border-indigo-200/80 rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
-                <div className="flex-1 overflow-y-auto rounded-xl border border-indigo-200/80 bg-white/90">
+              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+                isDarkMode 
+                  ? 'bg-slate-900/90 border-slate-800' 
+                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+              }`}>
+                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 bg-indigo-100 z-10 shadow-xs">
-                      <tr className="text-indigo-950 border-b border-indigo-200 font-extrabold uppercase text-[11px]">
+                    <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
+                      <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                         <th className="py-2.5 px-3 w-12 text-center">NO</th>
                         <th className="py-2.5 px-3">TANGGAL</th>
                         <th className="py-2.5 px-3">JAM MENGAJAR</th>
@@ -753,38 +855,38 @@ export default function AgendaMengajarPage() {
                         <th className="py-2.5 px-3 text-center w-20">AKSI</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 text-slate-800">
+                    <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loadingRekap ? (
                         <tr>
-                          <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">Memuat data rekap...</td>
+                          <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data rekap...</td>
                         </tr>
                       ) : rekapList.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-10 text-center text-slate-600 font-medium">Tidak ada data jurnal ditemukan.</td>
+                          <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Tidak ada data jurnal ditemukan.</td>
                         </tr>
                       ) : (
                         rekapList.map((item, index) => (
-                          <tr key={item.id || index} className="hover:bg-indigo-50/60 transition">
-                            <td className="py-2 px-3 text-center font-bold text-slate-500">{index + 1}</td>
-                            <td className="py-2 px-3 font-mono font-bold text-slate-700">{item.tanggal}</td>
-                            <td className="py-2 px-3 font-bold text-indigo-900">{item.jam_ke}</td>
+                          <tr key={item.id || index} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
+                            <td className={`py-2 px-3 text-center font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{index + 1}</td>
+                            <td className={`py-2 px-3 font-mono font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{item.tanggal}</td>
+                            <td className="py-2 px-3 font-bold text-indigo-400">{item.jam_ke}</td>
                             <td className="py-2 px-3">
-                              <span className="font-extrabold text-slate-900">{item.kelas}</span>
-                              <span className="block text-[10px] font-bold text-emerald-800">{item.mapel}</span>
+                              <span className={`font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.kelas}</span>
+                              <span className={`block text-[10px] font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>{item.mapel}</span>
                             </td>
-                            <td className="py-2 px-3 font-bold text-slate-800">{item.materi}</td>
+                            <td className={`py-2 px-3 font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.materi}</td>
                             <td className="py-2 px-3 text-center">
                               <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${
                                   item.status === 'Terlaksana'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                    : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                    ? isDarkMode ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : isDarkMode ? 'bg-rose-950 text-rose-300 border-rose-800' : 'bg-rose-100 text-rose-800 border-rose-300'
                                 }`}
                               >
                                 {item.status}
                               </span>
                             </td>
-                            <td className="py-2 px-3 text-center font-bold text-slate-600">{item.absen_siswa}</td>
+                            <td className={`py-2 px-3 text-center font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{item.absen_siswa}</td>
                             <td className="py-2 px-3 text-center">
                               <button
                                 onClick={() => handleDeleteJurnal(item.id)}
@@ -809,49 +911,61 @@ export default function AgendaMengajarPage() {
 
         {/* FOOTER BADGE */}
         <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
-          <div className="bg-slate-100/90 border border-slate-300 px-4 py-0.5 rounded-full text-center text-[10px] text-slate-700 font-medium shadow-xs">
+          <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
+          }`}>
             <span>Aplikasi Guru AI</span>
             <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-900 font-bold">MUZAINI AL KAHFI</strong></span>
+            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
           </div>
         </div>
 
       </div>
 
       {/* BOTTOM NAVIGATION DOCK */}
-      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden">
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+      }`}>
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jurnal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-600 transition">
+          <Link href="/jurnal" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-500 transition">
             <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/laporan" className="flex flex-col items-center gap-0.5 text-[11px] font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
 
-    </div>
+    </motion.div>
   )
 }

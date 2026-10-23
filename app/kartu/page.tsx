@@ -33,6 +33,16 @@ export default function CetakKartuPage() {
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const { isOperator } = useAuthRole()
 
+  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+    }
+  }, [])
+
   const [jenisKartu, setJenisKartu] = useState<JenisKartu>('pelajar')
   const [namaUjian, setNamaUjian] = useState('ASESMEN SUMATIF AKHIR SEMESTER (SAS)')
   
@@ -399,34 +409,44 @@ export default function CetakKartuPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="min-h-screen bg-[#E2E8F0] text-slate-800 font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden"
+      initial={{ opacity: 0, x: -60 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-32 relative overflow-x-hidden transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      }`}
     >
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.15] select-none">
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      }`}>
         <img src="/logo-smp.jpg" alt="Watermark SMP Muna Mustofa" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10">
-        <header className="bg-slate-100/90 backdrop-blur-md border-b border-slate-300 px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xs gap-2">
+        <header className={`border-b px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xs gap-2 transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        }`}>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <Link href="/" className="text-slate-600 hover:text-slate-900 p-1 rounded-lg transition" title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-slate-300 p-0.5 shadow-xs shrink-0">
+            <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+              isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+            }`}>
               <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="font-bold text-xs sm:text-base text-slate-900 leading-none">Aplikasi Guru AI</h1>
-              <p className="text-[10px] sm:text-[11px] text-emerald-800 font-bold mt-0.5 sm:mt-1">Pusat Cetak Kartu Sekolah</p>
+              <h1 className={`font-bold text-xs sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+              <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 sm:mt-1 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Pusat Cetak Kartu Sekolah</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-3">
-            <div className="bg-white border border-slate-300 text-slate-800 text-xs font-bold px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs">
+            <div className={`border text-xs font-bold px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+            }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                 {userDisplayName.charAt(0)}
               </span>
@@ -438,7 +458,11 @@ export default function CetakKartuPage() {
                 await supabase.auth.signOut()
                 router.replace('/login')
               }}
-              className="bg-rose-100 border border-rose-300 hover:bg-rose-200 text-rose-700 p-1.5 sm:p-2 rounded-xl transition cursor-pointer shrink-0"
+              className={`border p-1.5 sm:p-2 rounded-xl transition cursor-pointer shrink-0 ${
+                isDarkMode 
+                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
+                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
+              }`}
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -449,18 +473,22 @@ export default function CetakKartuPage() {
         </header>
 
         <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
-          <div className="bg-slate-100/90 backdrop-blur-md border border-slate-300 rounded-3xl p-6 min-h-[480px] space-y-6 shadow-md flex flex-col justify-between">
+          <div className={`backdrop-blur-md border rounded-3xl p-6 min-h-[480px] space-y-6 shadow-xs flex flex-col justify-between ${
+            isDarkMode 
+              ? 'bg-slate-900/90 border-slate-800' 
+              : 'bg-slate-100/90 border-slate-300'
+          }`}>
             
             {/* ACTION & FILTER ROW */}
-            <div className="space-y-4 border-b border-slate-300 pb-5">
+            <div className={`space-y-4 border-b pb-5 ${isDarkMode ? 'border-slate-800' : 'border-slate-300'}`}>
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-800 text-white rounded-2xl flex items-center justify-center text-lg shadow-sm">
+                  <div className="w-10 h-10 bg-emerald-800 text-white rounded-2xl flex items-center justify-center text-lg shadow-xs">
                     🎴
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Pusat Cetak Kartu Digital</h2>
-                    <p className="text-xs text-slate-600 font-medium">
+                    <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Pusat Cetak Kartu Digital</h2>
+                    <p className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                       Pilih jenis kartu resmi lalu klik kartu untuk pratinjau Sisi Depan &amp; Belakang.
                     </p>
                   </div>
@@ -485,7 +513,9 @@ export default function CetakKartuPage() {
                       value={selectedKelasId}
                       onChange={handleKelasChange}
                       disabled={loadingKelas}
-                      className="bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none cursor-pointer font-bold shadow-xs disabled:opacity-50"
+                      className={`border rounded-xl px-3.5 py-2 text-xs focus:outline-none cursor-pointer font-bold shadow-xs disabled:opacity-50 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
                     >
                       <option value="">{loadingKelas ? 'Memuat Kelas...' : 'Pilih Kelas'}</option>
                       {daftarKelas.map((kls) => (
@@ -499,13 +529,15 @@ export default function CetakKartuPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="🔍 Cari Nama / ID..."
-                    className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-emerald-600 w-36"
+                    className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600 w-36 ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
                   />
 
                   <button
                     onClick={() => handlePrint(filteredItems)}
                     disabled={filteredItems.length === 0}
-                    className="bg-emerald-800 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition shadow-md flex items-center gap-2 cursor-pointer"
+                    className="bg-emerald-800 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-2 cursor-pointer"
                   >
                     <span>📥</span> Cetak ({filteredItems.length})
                   </button>
@@ -513,10 +545,12 @@ export default function CetakKartuPage() {
               </div>
 
               {/* CHECKBOX OPSI LAYOUT CETAK DENGAN PILIHAN TERPISAH */}
-              <div className="flex flex-wrap items-center gap-5 bg-white/80 p-3 rounded-2xl border border-slate-300 text-xs font-bold text-slate-800">
-                <span className="text-slate-500 text-[11px] uppercase tracking-wider font-extrabold">Opsi Pengesahan Kartu:</span>
+              <div className={`flex flex-wrap items-center gap-5 p-3 rounded-2xl border text-xs font-bold ${
+                isDarkMode ? 'bg-slate-800/80 border-slate-700 text-slate-200' : 'bg-white/80 border-slate-300 text-slate-800'
+              }`}>
+                <span className={`text-[11px] uppercase tracking-wider font-extrabold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Opsi Pengesahan Kartu:</span>
                 
-                <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-900">
+                <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-400">
                   <input
                     type="checkbox"
                     checked={includeBackSide}
@@ -526,7 +560,7 @@ export default function CetakKartuPage() {
                   <span>Sertakan Sisi Belakang</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-900">
+                <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-400">
                   <input
                     type="checkbox"
                     checked={includeDigitalSignature}
@@ -537,7 +571,7 @@ export default function CetakKartuPage() {
                   <span>TTD Digital Kepsek</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-900">
+                <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-400">
                   <input
                     type="checkbox"
                     checked={includeStamp}
@@ -553,16 +587,16 @@ export default function CetakKartuPage() {
             {/* PREVIEW CONTAINER */}
             <div className="flex-1 flex flex-col items-center justify-center py-4">
               {jenisKartu !== 'guru' && !selectedKelasId ? (
-                <p className="text-xs text-slate-500 text-center font-medium">
+                <p className={`text-xs text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
                   Silakan pilih kelas di atas untuk melihat pratinjau kartu.
                 </p>
               ) : loading ? (
-                <div className="flex flex-col items-center gap-2 text-slate-600 text-xs font-bold">
-                  <div className="w-6 h-6 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></div>
+                <div className={`flex flex-col items-center gap-2 text-xs font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                   <p>Memuat data kartu...</p>
                 </div>
               ) : filteredItems.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center font-medium">
+                <p className={`text-xs text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
                   Tidak ada data ditemukan.
                 </p>
               ) : (
@@ -574,49 +608,59 @@ export default function CetakKartuPage() {
                         setSelectedModalItem(item)
                         setModalActiveTab('front')
                       }}
-                      className={`bg-white border rounded-2xl p-4 space-y-3 shadow-sm hover:shadow-md transition cursor-pointer relative group ${
-                        jenisKartu === 'guru' ? 'border-blue-300 hover:border-blue-600' : 'border-slate-300 hover:border-emerald-500'
+                      className={`border rounded-2xl p-4 space-y-3 shadow-xs hover:shadow-md transition cursor-pointer relative group ${
+                        isDarkMode
+                          ? jenisKartu === 'guru' 
+                            ? 'bg-slate-800/90 border-slate-700 hover:border-blue-500' 
+                            : 'bg-slate-800/90 border-slate-700 hover:border-emerald-500'
+                          : jenisKartu === 'guru' 
+                            ? 'bg-white border-slate-300 hover:border-blue-600' 
+                            : 'bg-white border-slate-300 hover:border-emerald-500'
                       }`}
                     >
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <div className={`flex items-center justify-between border-b pb-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
                         <div className="flex items-center gap-2">
                           <img src="/logo-smp.jpg" alt="Logo" className="w-6 h-6 object-contain" />
                           <div>
-                            <h3 className={`font-extrabold text-xs uppercase leading-none ${jenisKartu === 'guru' ? 'text-blue-900' : 'text-emerald-900'}`}>SMP MUNA MUSTOFA</h3>
-                            <p className="text-[9px] text-slate-600 font-bold tracking-wider uppercase mt-0.5">
+                            <h3 className={`font-extrabold text-xs uppercase leading-none ${jenisKartu === 'guru' ? 'text-blue-400' : 'text-emerald-400'}`}>SMP MUNA MUSTOFA</h3>
+                            <p className={`text-[9px] font-bold tracking-wider uppercase mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                               {jenisKartu === 'guru' ? 'KTA PTK / PEGAWAI' : jenisKartu === 'ujian' ? 'KARTU PESERTA UJIAN' : 'KARTU TANDA PELAJAR'}
                             </p>
                           </div>
                         </div>
-                        <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md group-hover:bg-indigo-600 group-hover:text-white transition">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition ${
+                          isDarkMode ? 'bg-slate-900 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-700 group-hover:bg-indigo-600 group-hover:text-white'
+                        }`}>
                           🔍 Detail
                         </span>
                       </div>
 
                       <div className="flex gap-3 items-center">
-                        <div className="w-14 h-18 bg-slate-100 border border-slate-300 rounded-lg flex items-center justify-center text-[10px] text-slate-400 font-bold shrink-0 overflow-hidden">
+                        <div className={`w-14 h-18 border rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 overflow-hidden ${
+                          isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-500' : 'bg-slate-100 border-slate-300 text-slate-400'
+                        }`}>
                           FOTO
                         </div>
                         <div className="space-y-1 text-xs overflow-hidden">
-                          <p className="text-slate-500 text-[10px] font-medium">NAMA:</p>
-                          <p className="font-bold text-slate-900 text-xs leading-tight truncate">{item.nama}</p>
-                          <p className="text-slate-500 text-[10px] pt-1">
+                          <p className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>NAMA:</p>
+                          <p className={`font-bold text-xs leading-tight truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.nama}</p>
+                          <p className={`text-[10px] pt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                             {jenisKartu === 'guru' ? 'NIP/NUPTK: ' : 'NISN: '}
-                            <span className="text-slate-800 font-mono font-bold">{item.nomorId}</span>
+                            <span className={`font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.nomorId}</span>
                           </p>
-                          <p className="text-slate-500 text-[10px]">
+                          <p className={`text-[10px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                             {jenisKartu === 'guru' ? 'JABATAN: ' : 'KELAS: '}
-                            <span className="text-slate-800 font-bold">{item.subInfo}</span>
+                            <span className={`font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.subInfo}</span>
                           </p>
                         </div>
                       </div>
 
-                      <div className="border-t border-slate-200 pt-3 flex items-center justify-between">
-                        <div className="text-[10px] text-slate-500 font-medium">
-                          <p className="font-bold text-slate-700">QR Code ID</p>
+                      <div className={`border-t pt-3 flex items-center justify-between ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                        <div className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                          <p className={`font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>QR Code ID</p>
                           <p className="text-[9px]">Sistem Presensi</p>
                         </div>
-                        <div className="bg-slate-50 p-1 border border-slate-200 rounded-lg">
+                        <div className={`p-1 border rounded-lg ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                           <img
                             src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId !== '-' ? item.nomorId : item.id}`}
                             alt="QR Code"
@@ -637,38 +681,44 @@ export default function CetakKartuPage() {
       {/* POPUP MODAL DETAIL DENGAN TOGGLE PRATINJAU SISI DEPAN & BELAKANG */}
       <AnimatePresence>
         {selectedModalItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white border border-slate-300 rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4"
+              className={`border rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 ${
+                isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+              }`}
             >
               <button
                 onClick={() => setSelectedModalItem(null)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full p-1.5 transition cursor-pointer"
+                className={`absolute top-4 right-4 rounded-full p-1.5 transition cursor-pointer ${
+                  isDarkMode ? 'text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700' : 'text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200'
+                }`}
               >
                 ✕
               </button>
 
-              <div className="flex items-center gap-3 border-b border-slate-200 pb-3">
-                <div className="w-10 h-10 rounded-xl overflow-hidden bg-white border border-slate-300 p-0.5 shadow-xs">
+              <div className={`flex items-center gap-3 border-b pb-3 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+                <div className={`w-10 h-10 rounded-xl overflow-hidden border p-0.5 shadow-xs ${
+                  isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+                }`}>
                   <img src="/logo-smp.jpg" alt="Logo" className="w-full h-full object-contain" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm text-slate-900">Pratinjau Kartu Resmi</h3>
-                  <p className="text-xs text-emerald-800 font-bold">SMP Muna Mustofa Gisting</p>
+                  <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Pratinjau Kartu Resmi</h3>
+                  <p className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>SMP Muna Mustofa Gisting</p>
                 </div>
               </div>
 
               {/* TAB SWITCHER DUA SISI */}
-              <div className="flex bg-slate-100 p-1 rounded-xl gap-1 text-xs font-extrabold">
+              <div className={`flex p-1 rounded-xl gap-1 text-xs font-extrabold ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
                 <button
                   onClick={() => setModalActiveTab('front')}
                   className={`flex-1 py-1.5 rounded-lg transition ${
                     modalActiveTab === 'front'
-                      ? 'bg-white text-indigo-900 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900'
+                      ? isDarkMode ? 'bg-slate-700 text-white shadow-xs' : 'bg-white text-indigo-900 shadow-xs'
+                      : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   🪪 Sisi Depan
@@ -677,8 +727,8 @@ export default function CetakKartuPage() {
                   onClick={() => setModalActiveTab('back')}
                   className={`flex-1 py-1.5 rounded-lg transition ${
                     modalActiveTab === 'back'
-                      ? 'bg-white text-indigo-900 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900'
+                      ? isDarkMode ? 'bg-slate-700 text-white shadow-xs' : 'bg-white text-indigo-900 shadow-xs'
+                      : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   📜 Sisi Belakang
@@ -687,13 +737,17 @@ export default function CetakKartuPage() {
 
               {/* VIEW CARD DEPAN ATAU BELAKANG */}
               {modalActiveTab === 'front' ? (
-                <div className={`border-2 rounded-2xl p-4 space-y-4 shadow-md ${jenisKartu === 'guru' ? 'bg-blue-50 border-blue-700' : 'bg-emerald-50 border-emerald-700'}`}>
-                  <div className="flex items-center justify-between border-b border-slate-300 pb-2">
+                <div className={`border-2 rounded-2xl p-4 space-y-4 shadow-xs ${
+                  jenisKartu === 'guru' 
+                    ? isDarkMode ? 'bg-blue-950/30 border-blue-800' : 'bg-blue-50 border-blue-700'
+                    : isDarkMode ? 'bg-emerald-950/30 border-emerald-800' : 'bg-emerald-50 border-emerald-700'
+                }`}>
+                  <div className={`flex items-center justify-between border-b pb-2 ${isDarkMode ? 'border-slate-800' : 'border-slate-300'}`}>
                     <div className="flex items-center gap-2">
                       <img src="/logo-smp.jpg" alt="Logo" className="w-7 h-7 object-contain" />
                       <div>
-                        <h4 className="font-black text-xs text-slate-950 uppercase leading-none">SMP MUNA MUSTOFA</h4>
-                        <p className="text-[9px] text-slate-700 font-bold tracking-wider uppercase mt-0.5">
+                        <h4 className={`font-black text-xs uppercase leading-none ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>SMP MUNA MUSTOFA</h4>
+                        <p className={`text-[9px] font-bold tracking-wider uppercase mt-0.5 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                           {jenisKartu === 'guru' ? 'KTA PTK / PEGAWAI' : jenisKartu === 'ujian' ? 'KARTU PESERTA UJIAN' : 'KARTU TANDA PELAJAR'}
                         </p>
                       </div>
@@ -701,31 +755,35 @@ export default function CetakKartuPage() {
                   </div>
 
                   <div className="flex gap-4 items-center">
-                    <div className="w-20 h-24 bg-white border border-slate-300 rounded-xl flex items-center justify-center text-xs text-slate-400 font-bold shrink-0 overflow-hidden shadow-xs">
+                    <div className={`w-20 h-24 border rounded-xl flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden shadow-xs ${
+                      isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-500' : 'bg-white border-slate-300 text-slate-400'
+                    }`}>
                       FOTO
                     </div>
                     <div className="space-y-1.5 text-xs">
                       <div>
-                        <p className="text-slate-500 text-[10px] font-bold uppercase">Nama Lengkap:</p>
-                        <p className="font-black text-slate-900 text-sm leading-tight">{selectedModalItem.nama}</p>
+                        <p className={`text-[10px] font-bold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Nama Lengkap:</p>
+                        <p className={`font-black text-sm leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedModalItem.nama}</p>
                       </div>
                       <div className="flex gap-4 pt-1">
                         <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase">{jenisKartu === 'guru' ? 'NIP/NUPTK:' : 'NISN:'}</p>
-                          <p className="font-mono font-bold text-slate-900 text-xs">{selectedModalItem.nomorId}</p>
+                          <p className={`text-[10px] font-bold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{jenisKartu === 'guru' ? 'NIP/NUPTK:' : 'NISN:'}</p>
+                          <p className={`font-mono font-bold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedModalItem.nomorId}</p>
                         </div>
                         <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase">{jenisKartu === 'guru' ? 'Jabatan:' : 'Kelas:'}</p>
-                          <p className="font-bold text-slate-900 text-xs">{selectedModalItem.subInfo}</p>
+                          <p className={`text-[10px] font-bold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{jenisKartu === 'guru' ? 'Jabatan:' : 'Kelas:'}</p>
+                          <p className={`font-bold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedModalItem.subInfo}</p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-300 pt-3 flex items-center justify-between bg-white/80 p-2.5 rounded-xl border">
+                  <div className={`border pt-3 flex items-center justify-between p-2.5 rounded-xl ${
+                    isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-300'
+                  }`}>
                     <div>
-                      <p className="font-extrabold text-xs text-slate-950">QR Code Identitas Resmi</p>
-                      <p className="text-[10px] text-slate-600">Terintegrasi dengan sistem presensi</p>
+                      <p className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>QR Code Identitas Resmi</p>
+                      <p className={`text-[10px] ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Terintegrasi dengan sistem presensi</p>
                     </div>
                     <img
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedModalItem.nomorId !== '-' ? selectedModalItem.nomorId : selectedModalItem.id}`}
@@ -736,30 +794,32 @@ export default function CetakKartuPage() {
                 </div>
               ) : (
                 /* PRATINJAU SISI BELAKANG */
-                <div className="bg-slate-50 border-2 border-slate-400 rounded-2xl p-4 space-y-3 shadow-md text-xs">
-                  <div className="border-b border-slate-300 pb-1.5 text-center">
-                    <h4 className="font-extrabold text-slate-900 text-xs uppercase">KETENTUAN PENGGUNAAN</h4>
+                <div className={`border-2 rounded-2xl p-4 space-y-3 shadow-xs text-xs ${
+                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-400'
+                }`}>
+                  <div className={`border-b pb-1.5 text-center ${isDarkMode ? 'border-slate-800' : 'border-slate-300'}`}>
+                    <h4 className={`font-extrabold text-xs uppercase ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>KETENTUAN PENGGUNAAN</h4>
                   </div>
                   
                   {jenisKartu === 'guru' ? (
-                    <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-700 font-medium">
+                    <ol className={`list-decimal pl-4 space-y-1 text-[11px] font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                       <li>Kartu Tanda Anggota (KTA) ini merupakan bukti identitas resmi PTK.</li>
                       <li>Wajib dikenakan/dibawa selama menjalankan tugas kedinasan.</li>
                       <li>Jika kartu hilang, melapor ke Tata Usaha (TU) SMP Muna Mustofa.</li>
                     </ol>
                   ) : (
-                    <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-700 font-medium">
+                    <ol className={`list-decimal pl-4 space-y-1 text-[11px] font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                       <li>Kartu ini berlaku selama terdaftar sebagai siswa aktif SMP Muna Mustofa.</li>
                       <li>Wajib dibawa selama berada di sekolah dan saat presensi KBM.</li>
                       <li>Jika menemukan kartu ini, harap mengembalikan ke Tata Usaha.</li>
                     </ol>
                   )}
 
-                  <div className="border-t border-slate-300 pt-2 text-right space-y-1 relative">
-                    <p className="text-[10px] text-slate-500">
+                  <div className={`border-t pt-2 text-right space-y-1 relative ${isDarkMode ? 'border-slate-800' : 'border-slate-300'}`}>
+                    <p className={`text-[10px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                       Gisting, {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
                     </p>
-                    <p className="font-bold text-slate-900 text-xs">
+                    <p className={`font-bold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                       {selectedModalItem.isKepalaSekolah ? 'Ketua Yayasan PPTQ Muna Mustofa,' : 'Kepala SMP Muna Mustofa,'}
                     </p>
 
@@ -773,10 +833,10 @@ export default function CetakKartuPage() {
                       )}
                     </div>
 
-                    <p className="font-extrabold text-slate-900 text-xs">
+                    <p className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                       <u>{selectedModalItem.isKepalaSekolah ? 'PENGURUS YAYASAN' : 'SULASTRI, S.Pd., Gr.'}</u>
                     </p>
-                    <p className="text-[10px] text-slate-600 font-mono">
+                    <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                       {selectedModalItem.isKepalaSekolah ? 'Yayasan Muna Mustofa' : 'NUPTK. 6337763664131233'}
                     </p>
                   </div>
@@ -790,13 +850,15 @@ export default function CetakKartuPage() {
                     handlePrint([selectedModalItem])
                     setSelectedModalItem(null)
                   }}
-                  className="flex-1 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  className="flex-1 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                 >
                   🖨️ Cetak Kartu Ini
                 </button>
                 <button
                   onClick={() => setSelectedModalItem(null)}
-                  className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                  className={`px-4 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer ${
+                    isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
                 >
                   Tutup
                 </button>
@@ -806,27 +868,39 @@ export default function CetakKartuPage() {
         )}
       </AnimatePresence>
 
-      <div className="border-t border-slate-300 bg-slate-100/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50 shadow-lg">
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+      }`}>
         <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <Link href="/" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-lg">🕒</span>
             <span>Dashboard</span>
           </Link>
           {isOperator && (
-            <Link href="/siswa" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+            <Link href="/siswa" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+            }`}>
               <span className="text-lg">👥</span>
               <span>Siswa</span>
             </Link>
           )}
-          <Link href="/jadwal" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/jadwal" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-lg">🎓</span>
             <span>Akademik</span>
           </Link>
-          <Link href="/ai" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/ai" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-lg">✨</span>
             <span>AI Tools</span>
           </Link>
-          <Link href="/laporan" className="flex flex-col items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950 transition">
+          <Link href="/laporan" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
+            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+          }`}>
             <span className="text-lg">🖨️</span>
             <span>Laporan</span>
           </Link>
