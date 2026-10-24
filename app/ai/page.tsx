@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw' // UNTUK MERENDER TABEL HTML DENGAN BENAR
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
@@ -49,11 +50,11 @@ export default function AiToolsPage() {
 
   const [formData, setFormData] = useState({
     mapel: 'IPA',
-    faseKelas: '7',
+    faseKelas: 'Fase D / Kelas VII',
     materiTopik: '',
     jenisPerangkat: 'Modul Ajar / RPP Plus',
     dlPilar: 'Mindful Learning',
-    dlAlokasi: '2 JP (1 Pertemuan)',
+    dlAlokasi: '3 Pertemuan (6 JP)',
     dlStrategi: 'Diskusi & Eksperimen',
     kokuTema: 'Kearifan Lokal',
     kokuDimensi: 'Beriman, Bertakwa & Berakhlak Mulia',
@@ -111,7 +112,7 @@ export default function AiToolsPage() {
     async function loadActiveUser() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Guru Pengampu'
+        const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Muzaini Al Kahfi'
         setAdminForm(prev => ({ ...prev, namaGuru: fullName }))
         setModulForm(prev => ({ ...prev, namaGuru: fullName }))
       }
@@ -142,7 +143,7 @@ export default function AiToolsPage() {
     },
     'deep-learning': {
       title: 'Modul Ajar Deep Learning AI',
-      subtitle: 'Susun skenario Modul Pembelajaran dengan 3 pilar: Mindful, Meaningful, & Joyful Learning.',
+      subtitle: 'Susun skenario Modul Pembelajaran lengkap Rubrik Asesmen & Lembar Pengesahan Akreditasi.',
       badge: '🪄 DEEP LEARNING AI ENGINE',
       buttonText: 'Generate Modul Deep Learning',
       bgBanner: 'bg-gradient-to-r from-indigo-800 via-purple-800 to-indigo-950 border-indigo-600/50'
@@ -220,6 +221,7 @@ export default function AiToolsPage() {
   const formatAndCleanDocument = (text: string) => {
     if (!text) return ''
     return text
+      .replace(/Sekolah\/Madrasah/gi, kopSekolah.namaSekolah)
       .replace(/Paket Naskah Ujian:\s*Generator Bank Soal\s*&\s*Ujian AI/gi, '')
       .replace(/Generator Bank Soal\s*&\s*Ujian AI/gi, '')
       .replace(/#+\s*.*Kisi-Kisi[\s\S]*?(?=#+\s*|\n\n\d+\.|\n\nKunci|$)/gi, '')
@@ -277,6 +279,7 @@ export default function AiToolsPage() {
           const payloadBody = {
             ...adminForm,
             ...modulForm,
+            satuanPendidikan: kopSekolah.namaSekolah,
             tool: currentConfig?.title || 'Asisten Guru AI',
             activeTool,
             selectedDoc: doc.id,
@@ -309,6 +312,8 @@ export default function AiToolsPage() {
       } else {
         setGenerateProgress('Menghubungkan ke Mercury AI Engine...')
         const payloadBody = {
+          ...adminForm,
+          satuanPendidikan: kopSekolah.namaSekolah,
           tool: currentConfig?.title || 'Asisten Guru AI',
           activeTool,
           selectedDoc: null,
@@ -343,6 +348,7 @@ export default function AiToolsPage() {
     }
   }
 
+  // CETAK PDF DENGAN ATURAN TABEL PENGESAHAN DINGIN TANPA BORDER
   const handlePrintPDF = () => {
     const resultElement = document.getElementById('ai-document-result')
     if (!resultElement) return
@@ -354,25 +360,71 @@ export default function AiToolsPage() {
       printWindow.document.write(`
         <html>
           <head>
-            <title>Dokumen Pembelajaran - SMP MUNA MUSTOFA</title>
+            <title>Dokumen Pembelajaran - ${kopSekolah.namaSekolah}</title>
             <style>
-              @page { margin: 2cm; size: A4; }
+              @page { 
+                margin: 1.5cm 2cm; 
+                size: A4; 
+              }
               body { 
                 font-family: 'Times New Roman', Times, serif; 
                 padding: 0; 
                 line-height: 1.5; 
                 color: #000; 
-                font-size: 12pt;
+                font-size: 11pt;
               }
-              h1, h2, h3, h4 { color: #000; margin-top: 16px; margin-bottom: 8px; page-break-after: avoid; }
-              p { margin-bottom: 8px; text-align: justify; }
-              table { border-collapse: collapse; width: 100%; margin: 15px 0; font-size: 11pt; page-break-inside: auto; }
-              tr { page-break-inside: avoid; page-break-after: auto; }
-              th, td { border: 1px solid #000; padding: 6px 8px; text-align: left; vertical-align: top; }
-              th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
-              ul, ol { margin-bottom: 12px; padding-left: 24px; }
-              li { margin-bottom: 6px; line-height: 1.5; page-break-inside: avoid; }
-              strong, b { font-weight: bold; }
+              h1, h2, h3, h4 { 
+                color: #000; 
+                margin-top: 14px; 
+                margin-bottom: 6px; 
+                page-break-after: avoid; 
+              }
+              p { 
+                margin-bottom: 6px; 
+                text-align: justify; 
+              }
+              table { 
+                border-collapse: collapse; 
+                width: 100%; 
+                margin: 12px 0; 
+                font-size: 10.5pt; 
+                page-break-inside: auto; 
+              }
+              tr { 
+                page-break-inside: auto !important; 
+                page-break-after: auto; 
+              }
+              th, td { 
+                border: 1px solid #000; 
+                padding: 5px 7px; 
+                text-align: left; 
+                vertical-align: top; 
+              }
+              th { 
+                background-color: #f2f2f2; 
+                font-weight: bold; 
+                text-align: center; 
+              }
+              ul, ol { 
+                margin-bottom: 10px; 
+                padding-left: 20px; 
+              }
+              li { 
+                margin-bottom: 4px; 
+                line-height: 1.4; 
+                page-break-inside: auto !important; 
+              }
+              strong, b { 
+                font-weight: bold; 
+              }
+              /* MENYHILANGKAN BORDER UNTUK TABEL LEMBAR PENGESAHAN */
+              table.ttd-table, 
+              table.ttd-table td, 
+              table.ttd-table tr,
+              table[style*="border: none"], 
+              table[style*="border: none"] td {
+                border: none !important;
+              }
             </style>
           </head>
           <body>
@@ -393,7 +445,7 @@ export default function AiToolsPage() {
 
     const printContents = resultElement.innerHTML
 
-    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export Word</title><style>body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; } p { margin-bottom: 8pt; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 5pt; }</style></head><body>"
+    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export Word</title><style>body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; } p { margin-bottom: 8pt; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 5pt; } table.ttd-table, table.ttd-table td { border: none !important; }</style></head><body>"
     const footer = copyrightFooterHTML + "</body></html>"
     const sourceHTML = header + (pakaiKop ? headerKopSekolahHTML : '') + printContents + footer
 
@@ -401,7 +453,7 @@ export default function AiToolsPage() {
     const fileDownload = document.createElement("a")
     document.body.appendChild(fileDownload)
     fileDownload.href = source
-    fileDownload.download = `Dokumen_Pembelajaran_${activeTool}.doc`
+    fileDownload.download = `Dokumen_Pembelajaran_${kopSekolah.namaSekolah}_${activeTool}.doc`
     fileDownload.click()
     document.body.removeChild(fileDownload)
   }
@@ -529,7 +581,7 @@ export default function AiToolsPage() {
               >
                 <div className="flex items-center gap-2">
                   <span>🏫</span>
-                  <span>Pengaturan Data Kop Surat Sekolah (SMP MUNA MUSTOFA)</span>
+                  <span>Pengaturan Data Kop Surat Sekolah ({kopSekolah.namaSekolah})</span>
                 </div>
                 <span>{showKopAccordion ? '🔼 Sembunyikan' : '🔽 Ubah Data Kop Surat'}</span>
               </button>
@@ -607,7 +659,7 @@ export default function AiToolsPage() {
                   }`} />
                 </div>
                 <div>
-                  <label className={`block font-bold mb-1.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Fase / Kelas</label>
+                  <label className={`block font-bold mb-1.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Fase / Kelas (Contoh: Fase D / Kelas VII)</label>
                   <input type="text" value={formData.faseKelas} onChange={(e) => setFormData({ ...formData, faseKelas: e.target.value })} className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
                     isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                   }`} />
@@ -737,7 +789,7 @@ export default function AiToolsPage() {
                 </div>
                 <div>
                   <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Materi Pokok / Deskripsi Singkat</label>
-                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Sistem Reproduksi Manusia..." className={`w-full border rounded-xl p-3 font-medium ${
+                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Pertumbuhan dan Perkembangan Makhluk Hidup..." className={`w-full border rounded-xl p-3 font-medium ${
                     isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                   }`} />
                 </div>
@@ -760,20 +812,20 @@ export default function AiToolsPage() {
                   </div>
                   <div>
                     <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Strategi Kegiatan</label>
-                    <input type="text" value={formData.dlStrategi} onChange={(e) => setFormData({...formData, dlStrategi: e.target.value})} placeholder="Diskusi / Roleplay / Eksperimen" className={`w-full border rounded-xl p-2.5 font-medium ${
+                    <input type="text" value={formData.dlStrategi} onChange={(e) => setFormData({...formData, dlStrategi: e.target.value})} placeholder="Diskusi &amp; Eksperimen" className={`w-full border rounded-xl p-2.5 font-medium ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`} />
                   </div>
                   <div>
                     <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Alokasi Waktu</label>
-                    <input type="text" value={formData.dlAlokasi} onChange={(e) => setFormData({...formData, dlAlokasi: e.target.value})} placeholder="Contoh: 2 JP (90 Menit)" className={`w-full border rounded-xl p-2.5 font-medium ${
+                    <input type="text" value={formData.dlAlokasi} onChange={(e) => setFormData({...formData, dlAlokasi: e.target.value})} placeholder="Contoh: 3 Pertemuan (6 JP)" className={`w-full border rounded-xl p-2.5 font-medium ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`} />
                   </div>
                 </div>
                 <div>
                   <label className={`block font-bold mb-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Topik Bahasan Skenario</label>
-                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} className={`w-full border rounded-xl p-3 font-medium ${
+                  <textarea rows={2} value={formData.materiTopik} onChange={(e) => setFormData({...formData, materiTopik: e.target.value})} placeholder="Contoh: Pertumbuhan dan Perkembangan Makhluk Hidup..." className={`w-full border rounded-xl p-3 font-medium ${
                     isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                   }`} />
                 </div>
@@ -917,7 +969,7 @@ export default function AiToolsPage() {
             )}
           </div>
 
-          {/* AREA OUTPUT HASIL GENERASI AI */}
+          {/* AREA OUTPUT HASIL GENERASI AI DENGAN REHYPE RAW ENABLED */}
           <div className={`backdrop-blur-md border rounded-2xl p-6 space-y-6 min-h-[400px] shadow-xs ${
             isDarkMode 
               ? 'bg-slate-900/90 border-slate-800' 
@@ -948,7 +1000,7 @@ export default function AiToolsPage() {
                 )}
 
                 <button onClick={handlePrintPDF} disabled={!generatedResults[currentResultKey]} className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
-                  🖨️ Cetak PDF
+                  🖨️ Cetak PDF Siap Akreditasi
                 </button>
                 <button onClick={handleDownloadWord} disabled={!generatedResults[currentResultKey]} className="flex-1 sm:flex-none bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-xl text-xs font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
                   📥 Unduh Word
@@ -969,7 +1021,7 @@ export default function AiToolsPage() {
                   ? 'bg-slate-900 border-slate-800 text-slate-100 prose-headings:text-indigo-300 prose-a:text-indigo-400 prose-strong:text-white' 
                   : 'bg-white border-slate-300 text-slate-900 prose-headings:text-indigo-900 prose-a:text-indigo-700'
               }`}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                   {generatedResults[currentResultKey]}
                 </ReactMarkdown>
               </div>
