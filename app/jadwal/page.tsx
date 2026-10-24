@@ -7,9 +7,18 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
+const getSupabaseUrl = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  return url.replace(/['"]/g, '').trim()
+}
+
+const getSupabaseAnonKey = () => {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+  return key.replace(/['"]/g, '').trim()
+}
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface MapelItem {
   id: number
@@ -253,7 +262,7 @@ export default function JadwalMengajarPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 overflow-y-auto ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
@@ -265,40 +274,40 @@ export default function JadwalMengajarPage() {
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+      <div className="relative z-10 flex flex-col min-h-screen">
         
         {/* HEADER TOPBAR */}
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+        <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                 isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
               }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Penjadwalan KBM Terintegrasi</p>
+                <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Penjadwalan KBM Terintegrasi</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <div className={`border text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+              <span className="max-w-[80px] sm:max-w-none truncate">{userDisplayName}</span>
+              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
                 {isOperator ? 'Operator' : 'Guru'}
@@ -325,7 +334,7 @@ export default function JadwalMengajarPage() {
         </header>
 
         {/* SUB-NAVBAR AKADEMIK */}
-        <div className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+        <div className={`border-b px-4 sm:px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
         }`}>
           <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
@@ -363,16 +372,16 @@ export default function JadwalMengajarPage() {
         </div>
 
         {/* MAIN CONTENT AREA */}
-        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
+        <main className="max-w-6xl w-full mx-auto p-3.5 sm:p-4 flex-1 flex flex-col space-y-4 pb-28 sm:pb-16">
           
           {/* TAB MODE BAR */}
-          <div className="flex items-center justify-between shrink-0 print:hidden">
-            <div className={`grid grid-cols-2 p-1 rounded-xl border max-w-md text-xs font-extrabold flex-1 ${
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0 print:hidden">
+            <div className={`grid grid-cols-2 p-1 rounded-xl border w-full sm:max-w-md text-xs font-extrabold ${
               isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-200/90 border-slate-300'
             }`}>
               <button
                 onClick={() => setActiveTab('kelola')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                className={`py-2 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'kelola' 
                     ? 'bg-indigo-600 text-white shadow-xs' 
                     : isDarkMode 
@@ -380,11 +389,11 @@ export default function JadwalMengajarPage() {
                       : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
-                <span>🕒</span> Input &amp; Kelola Jadwal
+                <span>🕒</span> Input &amp; Kelola
               </button>
               <button
                 onClick={() => setActiveTab('rekap')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                className={`py-2 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'rekap' 
                     ? 'bg-indigo-600 text-white shadow-xs' 
                     : isDarkMode 
@@ -398,33 +407,33 @@ export default function JadwalMengajarPage() {
 
             <button
               onClick={() => window.print()}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer ml-3"
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 sm:py-1.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer"
             >
-              <span>🖨️</span> Cetak PDF
+              <span>🖨️</span> Cetak Jadwal (PDF)
             </button>
           </div>
 
           {/* TAB 1: FORM INPUT & JADWAL SAYA */}
           {activeTab === 'kelola' && (
-            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            <div className="flex flex-col space-y-4">
               
               {/* FORM INPUT JADWAL */}
-              <form onSubmit={handleSimpan} className={`backdrop-blur-md border rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden ${
+              <form onSubmit={handleSimpan} className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs shrink-0 print:hidden ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                   
                   {isOperator && (
-                    <div className="sm:col-span-3">
+                    <div className="sm:col-span-12 md:col-span-3">
                       <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                         GURU PENGAMPU *
                       </label>
                       <select
                         value={selectedGuruEmail}
                         onChange={(e) => setSelectedGuruEmail(e.target.value)}
-                        className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                           isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                         }`}
                         required
@@ -437,7 +446,7 @@ export default function JadwalMengajarPage() {
                     </div>
                   )}
 
-                  <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-2'}>
+                  <div className={isOperator ? 'sm:col-span-6 md:col-span-2' : 'sm:col-span-6 md:col-span-3'}>
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       HARI *
                     </label>
@@ -448,7 +457,7 @@ export default function JadwalMengajarPage() {
                         setJamMulai('1')
                         setJamSelesai('1')
                       }}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
@@ -462,7 +471,7 @@ export default function JadwalMengajarPage() {
                   </div>
 
                   {/* OPSI JAM BLOK BERLANJUT */}
-                  <div className={isOperator ? 'sm:col-span-3' : 'sm:col-span-3'}>
+                  <div className={isOperator ? 'sm:col-span-6 md:col-span-3' : 'sm:col-span-6 md:col-span-3'}>
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       JAM PELAJARAN *
                     </label>
@@ -474,7 +483,7 @@ export default function JadwalMengajarPage() {
                           setJamMulai(val)
                           if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
                         }}
-                        className={`w-full border rounded-xl px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                           isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                         }`}
                       >
@@ -492,7 +501,7 @@ export default function JadwalMengajarPage() {
                       <select
                         value={jamSelesai}
                         onChange={(e) => setJamSelesai(e.target.value)}
-                        className={`w-full border rounded-xl px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                           isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                         }`}
                       >
@@ -513,14 +522,14 @@ export default function JadwalMengajarPage() {
                     </div>
                   </div>
 
-                  <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-3'}>
+                  <div className={isOperator ? 'sm:col-span-6 md:col-span-2' : 'sm:col-span-6 md:col-span-3'}>
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       KELAS *
                     </label>
                     <select
                       value={selectedKelasId}
                       onChange={(e) => setSelectedKelasId(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                       required
@@ -532,14 +541,14 @@ export default function JadwalMengajarPage() {
                     </select>
                   </div>
 
-                  <div className={isOperator ? 'sm:col-span-2' : 'sm:col-span-3'}>
+                  <div className={isOperator ? 'sm:col-span-6 md:col-span-2' : 'sm:col-span-6 md:col-span-3'}>
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                       MATA PELAJARAN *
                     </label>
                     <select
                       value={selectedMapelId}
                       onChange={(e) => setSelectedMapelId(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                       required
@@ -551,10 +560,10 @@ export default function JadwalMengajarPage() {
                     </select>
                   </div>
 
-                  <div className="sm:col-span-1">
+                  <div className="sm:col-span-12 md:col-span-1 pt-1 md:pt-0">
                     <button
                       type="submit"
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-1.5 rounded-xl text-xs transition shadow-xs cursor-pointer"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 text-xs rounded-xl transition shadow-xs cursor-pointer"
                     >
                       + Simpan
                     </button>
@@ -563,13 +572,75 @@ export default function JadwalMengajarPage() {
                 </div>
               </form>
 
-              {/* TABEL JADWAL SAYA */}
-              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+              {/* DAFTAR JADWAL SAYA */}
+              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                
+                {/* TAMPILAN MOBILE: KARTU LIST (md:hidden) */}
+                <div className="block md:hidden space-y-3">
+                  {loading ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Memuat data jadwal...
+                    </div>
+                  ) : jadwalList.length === 0 ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Belum ada jadwal mengajar tersimpan.
+                    </div>
+                  ) : (
+                    jadwalList.map((item, index) => {
+                      const namaKelas = typeof item.kelas === 'object' ? item.kelas?.nama_kelas : item.kelas
+                      const namaMapel = typeof item.mapel === 'object' ? item.mapel?.nama_mapel : item.mapel
+                      return (
+                        <div
+                          key={item.id || index}
+                          className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2 ${
+                            isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-extrabold text-xs text-amber-500 uppercase px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                              {item.hari}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold border ${
+                              isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                            }`}>
+                              {namaKelas || '-'}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1 border-t border-b py-2 my-0.5 border-slate-700/40">
+                            <h4 className={`font-extrabold text-xs ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                              {namaMapel || '-'}
+                            </h4>
+                            <p className={`text-[11px] font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                              ⏰ {item.jam}
+                            </p>
+                            {isOperator && (
+                              <p className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                👤 {item.guru_email}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex justify-end pt-0.5">
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
+                            >
+                              🗑️ Hapus Jadwal
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* TAMPILAN DESKTOP: TABEL HTML (hidden md:block) */}
+                <div className={`hidden md:block overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                       <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -584,11 +655,11 @@ export default function JadwalMengajarPage() {
                     <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data jadwal...</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Memuat data jadwal...</td>
                         </tr>
                       ) : jadwalList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada jadwal mengajar tersimpan.</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Belum ada jadwal mengajar tersimpan.</td>
                         </tr>
                       ) : (
                         jadwalList.map((item, index) => {
@@ -632,10 +703,10 @@ export default function JadwalMengajarPage() {
 
           {/* TAB 2: REKAPITULASI & CETAK */}
           {activeTab === 'rekap' && (
-            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            <div className="flex flex-col space-y-4">
               
               {/* FILTER BAR */}
-              <div className={`grid grid-cols-1 md:grid-cols-3 gap-2.5 backdrop-blur-md border p-3 rounded-2xl shrink-0 shadow-xs print:hidden ${
+              <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 backdrop-blur-md border p-4 rounded-2xl shrink-0 shadow-xs print:hidden ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
@@ -645,7 +716,7 @@ export default function JadwalMengajarPage() {
                   <select
                     value={filterHari}
                     onChange={(e) => setFilterHari(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -664,7 +735,7 @@ export default function JadwalMengajarPage() {
                   <select
                     value={filterKelasId}
                     onChange={(e) => setFilterKelasId(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -680,7 +751,7 @@ export default function JadwalMengajarPage() {
                   <select
                     value={filterMapelId}
                     onChange={(e) => setFilterMapelId(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -692,13 +763,70 @@ export default function JadwalMengajarPage() {
                 </div>
               </div>
 
-              {/* TABEL REKAP */}
-              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+              {/* TABEL / KARTU REKAP */}
+              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                
+                {/* TAMPILAN MOBILE: REKAP KARTU (md:hidden) */}
+                <div className="block md:hidden space-y-3">
+                  {loading ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Memuat data jadwal...
+                    </div>
+                  ) : filteredRekapList.length === 0 ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Tidak ada data jadwal ditemukan.
+                    </div>
+                  ) : (
+                    filteredRekapList.map((item, index) => {
+                      const namaKelas = typeof item.kelas === 'object' ? item.kelas?.nama_kelas : item.kelas
+                      const namaMapel = typeof item.mapel === 'object' ? item.mapel?.nama_mapel : item.mapel
+                      return (
+                        <div
+                          key={item.id || index}
+                          className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2 ${
+                            isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-extrabold text-xs text-amber-500 uppercase px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                              #{index + 1} - {item.hari}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold border ${
+                              isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                            }`}>
+                              {namaKelas || '-'}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1 border-t border-b py-2 my-0.5 border-slate-700/40">
+                            <h4 className={`font-extrabold text-xs ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                              {namaMapel || '-'}
+                            </h4>
+                            <p className={`text-[11px] font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                              ⏰ {item.jam}
+                            </p>
+                          </div>
+
+                          <div className="flex justify-end pt-0.5">
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
+                            >
+                              🗑️ Hapus
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* TAMPILAN DESKTOP: REKAP TABEL (hidden md:block) */}
+                <div className={`hidden md:block overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                       <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -713,11 +841,11 @@ export default function JadwalMengajarPage() {
                     <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data jadwal...</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Memuat data jadwal...</td>
                         </tr>
                       ) : filteredRekapList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Tidak ada data jadwal ditemukan.</td>
+                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Tidak ada data jadwal ditemukan.</td>
                         </tr>
                       ) : (
                         filteredRekapList.map((item, index) => {
@@ -760,7 +888,7 @@ export default function JadwalMengajarPage() {
         </main>
 
         {/* FOOTER BADGE */}
-        <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
+        <div className="pb-20 sm:pb-16 pt-2 flex justify-center shrink-0 print:hidden">
           <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
             isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
           }`}>

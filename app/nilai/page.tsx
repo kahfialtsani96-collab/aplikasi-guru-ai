@@ -7,9 +7,18 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
+const getSupabaseUrl = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  return url.replace(/['"]/g, '').trim()
+}
+
+const getSupabaseAnonKey = () => {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+  return key.replace(/['"]/g, '').trim()
+}
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface Siswa {
   id: number
@@ -313,46 +322,48 @@ export default function PenilaianPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 overflow-y-auto ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
       
+      {/* WATERMARK LOGO */}
       <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
         isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
       }`}>
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+      <div className="relative z-10 flex flex-col min-h-screen">
         
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+        {/* HEADER TOPBAR */}
+        <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                 isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
               }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Input Penilaian Akademik Siswa</p>
+                <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Input Penilaian Akademik Siswa</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <div className={`border text-xs font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
-              <span className={`text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
+              <span className={`text-[9px] sm:text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
               <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
                 isDarkMode ? 'bg-slate-700 text-indigo-300' : 'bg-slate-100 text-indigo-900'
               }`}>
@@ -368,14 +379,14 @@ export default function PenilaianPage() {
               </select>
             </div>
 
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+            <div className={`border text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+              <span className="max-w-[80px] sm:max-w-none truncate">{userDisplayName}</span>
+              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
                 {isOperator ? 'Operator' : 'Guru'}
@@ -401,7 +412,8 @@ export default function PenilaianPage() {
           </div>
         </header>
 
-        <div className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+        {/* SUB-NAVBAR AKADEMIK */}
+        <div className={`border-b px-4 sm:px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
         }`}>
           <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
@@ -436,15 +448,17 @@ export default function PenilaianPage() {
           </div>
         </div>
 
-        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
+        {/* MAIN CONTENT AREA */}
+        <main className="max-w-6xl w-full mx-auto p-3.5 sm:p-4 flex-1 flex flex-col space-y-4 pb-28 sm:pb-16">
           
+          {/* TAB MODE BAR */}
           <div className="flex items-center justify-between shrink-0 print:hidden">
-            <div className={`grid grid-cols-2 p-1 rounded-xl border max-w-md text-xs font-extrabold flex-1 ${
+            <div className={`grid grid-cols-2 p-1 rounded-xl border w-full sm:max-w-md text-xs font-extrabold ${
               isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-200/90 border-slate-300'
             }`}>
               <button
                 onClick={() => setActiveTab('input')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                className={`py-2 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'input' 
                     ? 'bg-indigo-600 text-white shadow-xs' 
                     : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-700 hover:text-slate-900'
@@ -454,7 +468,7 @@ export default function PenilaianPage() {
               </button>
               <button
                 onClick={() => setActiveTab('rekap')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                className={`py-2 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'rekap' 
                     ? 'bg-indigo-600 text-white shadow-xs' 
                     : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-700 hover:text-slate-900'
@@ -465,22 +479,24 @@ export default function PenilaianPage() {
             </div>
           </div>
 
+          {/* TAB 1: INPUT NILAI */}
           {activeTab === 'input' && (
-            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            <div className="flex flex-col space-y-4">
               
-              <div className={`backdrop-blur-md border rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden ${
+              {/* FILTER INPUT NILAI */}
+              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs shrink-0 print:hidden ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                   
                   <div className="sm:col-span-4">
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS DIAJAR *</label>
                     <select
                       value={selectedKelasId}
                       onChange={(e) => setSelectedKelasId(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
@@ -496,7 +512,7 @@ export default function PenilaianPage() {
                     <select
                       value={selectedMapelId}
                       onChange={(e) => setSelectedMapelId(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
@@ -512,7 +528,7 @@ export default function PenilaianPage() {
                     <select
                       value={jenisPenilaian}
                       onChange={(e: any) => setJenisPenilaian(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
@@ -525,12 +541,70 @@ export default function PenilaianPage() {
                 </div>
               </div>
 
-              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+              {/* LIST KARTU & TABEL SISWA */}
+              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                
+                {/* 1. TAMPILAN MOBILE: KARTU SISWA (md:hidden) */}
+                <div className="block md:hidden space-y-3">
+                  {!selectedKelasId || !selectedMapelId ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                      Silakan pilih Kelas, Mapel, dan Jenis Penilaian di atas.
+                    </div>
+                  ) : loadingSiswa ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                      Memuat data siswa...
+                    </div>
+                  ) : siswaList.length === 0 ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                      Belum ada siswa terdaftar di kelas ini.
+                    </div>
+                  ) : (
+                    siswaList.map((siswa, index) => {
+                      const sId = String(siswa.id)
+                      return (
+                        <div
+                          key={sId || index}
+                          className={`p-3.5 rounded-xl border transition shadow-xs flex items-center justify-between gap-3 ${
+                            isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                          }`}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              #{index + 1} - {siswa.nama_lengkap}
+                            </span>
+                            <span className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                              NISN: {siswa.nisn || '-'}
+                            </span>
+                          </div>
+
+                          <div className="shrink-0 flex items-center gap-1.5">
+                            <label className={`text-[10px] font-bold uppercase ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
+                              NILAI:
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={nilaiInputMap[sId] ?? ''}
+                              onChange={(e) => handleNilaiChange(sId, e.target.value)}
+                              placeholder="0-100"
+                              className={`w-20 border rounded-xl px-2 py-1.5 text-center text-xs font-extrabold focus:outline-none focus:border-indigo-600 ${
+                                isDarkMode ? 'bg-slate-900 border-slate-700 text-indigo-300' : 'bg-slate-100 border-slate-300 text-indigo-950'
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* 2. TAMPILAN DESKTOP: TABEL HTML (hidden md:block) */}
+                <div className={`hidden md:block overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                       <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-400 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -588,11 +662,11 @@ export default function PenilaianPage() {
                 </div>
 
                 {selectedKelasId && selectedMapelId && siswaList.length > 0 && (
-                  <div className="flex justify-end pt-2 shrink-0">
+                  <div className="flex justify-end pt-3 shrink-0">
                     <button
                       onClick={handleSimpanNilai}
                       disabled={saving}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-5 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-6 py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <span>💾</span> {saving ? 'Menyimpan...' : 'Simpan Nilai'}
                     </button>
@@ -603,11 +677,12 @@ export default function PenilaianPage() {
             </div>
           )}
 
+          {/* TAB 2: REKAPITULASI NILAI */}
           {activeTab === 'rekap' && (
-            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            <div className="flex flex-col space-y-4">
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 max-w-sm">
-                <div className={`backdrop-blur-md border rounded-xl p-2.5 shadow-xs ${
+                <div className={`backdrop-blur-md border rounded-xl p-3 shadow-xs ${
                   isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
                 }`}>
                   <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>TOTAL ENTRI NILAI</p>
@@ -615,7 +690,8 @@ export default function PenilaianPage() {
                 </div>
               </div>
 
-              <div className={`grid grid-cols-1 sm:grid-cols-3 gap-2.5 backdrop-blur-md border p-3 rounded-2xl shrink-0 shadow-xs ${
+              {/* FILTER BAR REKAP */}
+              <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 backdrop-blur-md border p-4 rounded-2xl shrink-0 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
@@ -625,7 +701,7 @@ export default function PenilaianPage() {
                   <select
                     value={filterKelasId}
                     onChange={(e) => setFilterKelasId(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -641,7 +717,7 @@ export default function PenilaianPage() {
                   <select
                     value={filterMapelId}
                     onChange={(e) => setFilterMapelId(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -659,19 +735,93 @@ export default function PenilaianPage() {
                     value={searchNama}
                     onChange={(e) => setSearchNama(e.target.value)}
                     placeholder="Nama siswa..."
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   />
                 </div>
               </div>
 
-              <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+              {/* REKAP CARD & TABEL */}
+              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                
+                {/* 1. TAMPILAN MOBILE: KARTU REKAP NILAI (md:hidden) */}
+                <div className="block md:hidden space-y-3">
+                  {loadingRekap ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                      Memuat riwayat nilai...
+                    </div>
+                  ) : rekapList.length === 0 ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                      Tidak ada data nilai ditemukan.
+                    </div>
+                  ) : (
+                    rekapList.map((item, index) => (
+                      <div
+                        key={item.id || index}
+                        className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2 ${
+                          isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`font-mono text-[11px] font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                            📅 {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                            isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                          }`}>
+                            {item.siswa?.kelas?.nama_kelas || '-'}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1 border-t border-b py-2 my-0.5 border-slate-700/40">
+                          <h4 className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                            {item.siswa?.nama_lengkap || '-'}
+                          </h4>
+                          <p className={`text-[11px] font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                            📖 {item.mata_pelajaran}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-center py-1 bg-slate-950/20 rounded-lg">
+                          <div>
+                            <span className="block text-[9px] font-bold uppercase text-amber-500">TUGAS</span>
+                            <span className="font-black text-xs text-amber-500">{item.nilai_tugas ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-bold uppercase text-indigo-400">UTS</span>
+                            <span className="font-black text-xs text-indigo-400">{item.nilai_uts ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-bold uppercase text-emerald-400">UAS</span>
+                            <span className="font-black text-xs text-emerald-400">{item.nilai_uas ?? '-'}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-1">
+                          <button
+                            onClick={async () => {
+                              if (item.id && confirm('Hapus entri nilai ini?')) {
+                                await supabase.from('nilai').delete().eq('id', item.id)
+                                setRekapList((prev) => prev.filter((r) => r.id !== item.id))
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
+                          >
+                            🗑️ Hapus Nilai
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* 2. TAMPILAN DESKTOP: TABEL REKAP NILAI (hidden md:block) */}
+                <div className={`hidden md:block overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                       <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-400 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -738,7 +888,8 @@ export default function PenilaianPage() {
 
         </main>
 
-        <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
+        {/* FOOTER BADGE */}
+        <div className="pb-20 sm:pb-16 pt-2 flex justify-center shrink-0 print:hidden">
           <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
             isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
           }`}>
@@ -750,6 +901,7 @@ export default function PenilaianPage() {
 
       </div>
 
+      {/* BOTTOM NAVIGATION DOCK */}
       <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
       }`}>

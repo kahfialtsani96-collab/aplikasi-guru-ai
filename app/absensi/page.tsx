@@ -238,7 +238,7 @@ export default function AbsensiPage() {
 
         html5QrCode.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
           (decodedText: string) => {
             handleQRScanned(decodedText)
           },
@@ -440,7 +440,7 @@ export default function AbsensiPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 overflow-y-auto ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
@@ -450,36 +450,36 @@ export default function AbsensiPage() {
         <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+      <div className="relative z-10 flex flex-col min-h-screen">
         
         {/* HEADER TOPBAR */}
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+        <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                 isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
               }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Input Presensi Harian Siswa</p>
+                <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Input Presensi Harian Siswa</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <div className={`border text-xs font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
-              <span className={`text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
+              <span className={`text-[9px] sm:text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
               <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
                 isDarkMode ? 'bg-slate-900 text-indigo-300' : 'bg-slate-100 text-indigo-900'
               }`}>
@@ -501,14 +501,14 @@ export default function AbsensiPage() {
               </select>
             </div>
 
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+            <div className={`border text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+              <span className="max-w-[80px] sm:max-w-none truncate">{userDisplayName}</span>
+              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
                 {isOperator ? 'Operator' : 'Guru'}
@@ -535,7 +535,7 @@ export default function AbsensiPage() {
         </header>
 
         {/* SUB-NAVBAR AKADEMIK */}
-        <div className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+        <div className={`border-b px-4 sm:px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
         }`}>
           <div className="max-w-6xl mx-auto flex items-center gap-2 min-w-max text-xs font-bold">
@@ -573,64 +573,64 @@ export default function AbsensiPage() {
         </div>
 
         {/* MAIN CONTENT AREA */}
-        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
+        <main className="max-w-6xl w-full mx-auto p-3.5 sm:p-4 flex-1 flex flex-col space-y-4 pb-28 sm:pb-16">
           
           <div className="flex items-center justify-between shrink-0 print:hidden">
-            <div className={`grid grid-cols-2 p-1 rounded-xl border max-w-md text-xs font-extrabold flex-1 ${
+            <div className={`grid grid-cols-2 p-1 rounded-xl border w-full sm:max-w-md text-xs font-extrabold ${
               isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-200/90 border-slate-300'
             }`}>
               <button
                 onClick={() => setActiveTab('input')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                className={`py-2 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'input' 
                     ? 'bg-indigo-600 text-white shadow-xs' 
                     : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
-                <span>📋</span> Input Absensi Harian
+                <span>📋</span> Input Presensi Harian
               </button>
               <button
                 onClick={() => setActiveTab('rekap')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                className={`py-2 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'rekap' 
                     ? 'bg-indigo-600 text-white shadow-xs' 
                     : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
-                <span>📜</span> Riwayat &amp; Rekapitulasi
+                <span>📜</span> Riwayat Presensi
               </button>
             </div>
           </div>
 
           {activeTab === 'input' && (
-            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            <div className="flex flex-col space-y-4">
               
-              <div className={`backdrop-blur-md border rounded-2xl p-3.5 shadow-xs shrink-0 print:hidden ${
+              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs shrink-0 print:hidden ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                   
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-6 md:col-span-2">
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>TANGGAL *</label>
                     <input
                       type="date"
                       value={tanggal}
                       max={todayStr}
                       onChange={(e) => setTanggal(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
 
-                  <div className="sm:col-span-3">
+                  <div className="sm:col-span-6 md:col-span-3">
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS DIAJAR *</label>
                     <select
                       value={selectedKelasId}
                       onChange={(e) => setSelectedKelasId(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
@@ -641,12 +641,12 @@ export default function AbsensiPage() {
                     </select>
                   </div>
 
-                  <div className="sm:col-span-3">
+                  <div className="sm:col-span-6 md:col-span-3">
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>MAPEL DIAJAR *</label>
                     <select
                       value={selectedMapelId}
                       onChange={(e) => setSelectedMapelId(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
@@ -657,22 +657,22 @@ export default function AbsensiPage() {
                     </select>
                   </div>
 
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-6 md:col-span-2">
                     <button
                       type="button"
                       onClick={() => setModeInput(modeInput === 'manual' ? 'qr' : 'manual')}
-                      className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold py-1.5 px-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                      className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold py-2.5 px-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <span>{modeInput === 'manual' ? '📷 Mode QR' : '✍️ Mode Manual'}</span>
                     </button>
                   </div>
 
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-12 md:col-span-2">
                     <button
                       type="button"
                       onClick={handleSimpanAbsensi}
                       disabled={saving || !selectedKelasId || !selectedMapelId}
-                      className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-700 text-white font-black py-1.5 px-3 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-700 text-white font-black py-2.5 px-3 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <span>💾</span> {saving ? 'Simpan...' : 'Simpan Presensi'}
                     </button>
@@ -714,9 +714,11 @@ export default function AbsensiPage() {
                 </div>
               )}
 
-              <div className="flex-1 flex flex-col sm:flex-row gap-3 min-h-0">
+              {/* LIST PRESENSI DUAL PANEL (BELUM & SUDAH ABSEN) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 
-                <div className={`backdrop-blur-md border rounded-2xl p-3 flex-1 flex flex-col min-h-0 shadow-xs ${
+                {/* PANEL 1: BELUM ABSEN */}
+                <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex flex-col shadow-xs ${
                   isDarkMode 
                     ? 'bg-slate-900/90 border-slate-800' 
                     : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
@@ -729,13 +731,13 @@ export default function AbsensiPage() {
                     <span className={`text-[10px] font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Urut A–Z</span>
                   </div>
 
-                  <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                  <div className={`overflow-y-auto rounded-xl border max-h-[500px] ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                     <table className="w-full text-left border-collapse text-xs">
                       <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                         <tr className={`border-b font-extrabold uppercase text-[10px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
-                          <th className="py-2 px-2.5 w-8 text-center">NO</th>
-                          <th className="py-2 px-2.5">NAMA LENGKAP SISWA</th>
-                          <th className="py-2 px-2.5 text-center w-36">INPUT MANUAL</th>
+                          <th className="py-2.5 px-2.5 w-8 text-center">NO</th>
+                          <th className="py-2.5 px-2.5">NAMA LENGKAP SISWA</th>
+                          <th className="py-2.5 px-2.5 text-center w-36">INPUT MANUAL</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
@@ -760,36 +762,40 @@ export default function AbsensiPage() {
                             const sId = String(siswa.id)
                             return (
                               <tr key={sId} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
-                                <td className={`py-1.5 px-2.5 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{index + 1}</td>
-                                <td className={`py-1.5 px-2.5 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                <td className={`py-2 px-2.5 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{index + 1}</td>
+                                <td className={`py-2 px-2.5 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                                   {siswa.nama_lengkap}
                                   <span className={`block text-[9px] font-mono font-normal ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
                                     NISN: {siswa.nisn || '-'}
                                   </span>
                                 </td>
-                                <td className="py-1.5 px-2.5 text-center">
+                                <td className="py-2 px-2.5 text-center">
                                   <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
                                     <button
                                       onClick={() => handleStatusChange(sId, 'HADIR')}
-                                      className="px-1.5 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300"
+                                      className="px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 font-black cursor-pointer"
+                                      title="Hadir"
                                     >
                                       H
                                     </button>
                                     <button
                                       onClick={() => handleStatusChange(sId, 'IZIN')}
-                                      className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300"
+                                      className="px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 font-black cursor-pointer"
+                                      title="Izin"
                                     >
                                       I
                                     </button>
                                     <button
                                       onClick={() => handleStatusChange(sId, 'SAKIT')}
-                                      className="px-1.5 py-0.5 rounded bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-300"
+                                      className="px-2 py-1 rounded bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-300 font-black cursor-pointer"
+                                      title="Sakit"
                                     >
                                       S
                                     </button>
                                     <button
                                       onClick={() => handleStatusChange(sId, 'ALPA')}
-                                      className="px-1.5 py-0.5 rounded bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300"
+                                      className="px-2 py-1 rounded bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 font-black cursor-pointer"
+                                      title="Alpa"
                                     >
                                       A
                                     </button>
@@ -804,7 +810,8 @@ export default function AbsensiPage() {
                   </div>
                 </div>
 
-                <div className={`backdrop-blur-md border rounded-2xl p-3 flex-1 flex flex-col min-h-0 shadow-xs ${
+                {/* PANEL 2: SUDAH TERABSEN */}
+                <div className={`backdrop-blur-md border rounded-2xl p-3.5 flex flex-col shadow-xs ${
                   isDarkMode 
                     ? 'bg-slate-900/90 border-slate-800' 
                     : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
@@ -817,14 +824,14 @@ export default function AbsensiPage() {
                     <span className={`text-[10px] font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Siap Disimpan</span>
                   </div>
 
-                  <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                  <div className={`overflow-y-auto rounded-xl border max-h-[500px] ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                     <table className="w-full text-left border-collapse text-xs">
                       <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                         <tr className={`border-b font-extrabold uppercase text-[10px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
-                          <th className="py-2 px-2.5 w-8 text-center">NO</th>
-                          <th className="py-2 px-2.5">NAMA LENGKAP SISWA</th>
-                          <th className="py-2 px-2.5 text-center w-24">STATUS</th>
-                          <th className="py-2 px-2.5 text-center w-10">BATAL</th>
+                          <th className="py-2.5 px-2.5 w-8 text-center">NO</th>
+                          <th className="py-2.5 px-2.5">NAMA LENGKAP SISWA</th>
+                          <th className="py-2.5 px-2.5 text-center w-24">STATUS</th>
+                          <th className="py-2.5 px-2.5 text-center w-10">BATAL</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
@@ -840,11 +847,11 @@ export default function AbsensiPage() {
                             const st = absensiMap[sId]
                             return (
                               <tr key={sId} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
-                                <td className={`py-1.5 px-2.5 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{index + 1}</td>
-                                <td className={`py-1.5 px-2.5 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                <td className={`py-2 px-2.5 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{index + 1}</td>
+                                <td className={`py-2 px-2.5 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                                   {siswa.nama_lengkap}
                                 </td>
-                                <td className="py-1.5 px-2.5 text-center">
+                                <td className="py-2 px-2.5 text-center">
                                   <span
                                     className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                                       st === 'HADIR'
@@ -859,10 +866,10 @@ export default function AbsensiPage() {
                                     {st}
                                   </span>
                                 </td>
-                                <td className="py-1.5 px-2.5 text-center">
+                                <td className="py-2 px-2.5 text-center">
                                   <button
                                     onClick={() => handleStatusChange(sId, '')}
-                                    className="text-rose-500 hover:text-rose-700 font-bold p-0.5"
+                                    className="text-rose-500 hover:text-rose-700 font-bold p-1 cursor-pointer"
                                     title="Batalkan & Kembalikan ke Belum Absen"
                                   >
                                     ✕
@@ -882,33 +889,36 @@ export default function AbsensiPage() {
             </div>
           )}
 
+          {/* TAB 2: RIWAYAT & REKAPITULASI */}
           {activeTab === 'rekap' && (
-            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            <div className="flex flex-col space-y-4">
               
+              {/* RINGKASAN REKAP STATISTIK */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 shrink-0">
-                <div className={`border rounded-xl p-2.5 shadow-xs ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
+                <div className={`border rounded-xl p-3 shadow-xs ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
                   <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>TOTAL DATA</p>
                   <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{totalData}</p>
                 </div>
-                <div className={`border rounded-xl p-2.5 shadow-xs ${isDarkMode ? 'bg-slate-900 border-emerald-800/60' : 'bg-white/90 border-emerald-200'}`}>
+                <div className={`border rounded-xl p-3 shadow-xs ${isDarkMode ? 'bg-slate-900 border-emerald-800/60' : 'bg-white/90 border-emerald-200'}`}>
                   <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>HADIR</p>
                   <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-emerald-300' : 'text-emerald-900'}`}>{totalHadir}</p>
                 </div>
-                <div className={`border rounded-xl p-2.5 shadow-xs ${isDarkMode ? 'bg-slate-900 border-amber-800/60' : 'bg-white/90 border-amber-200'}`}>
+                <div className={`border rounded-xl p-3 shadow-xs ${isDarkMode ? 'bg-slate-900 border-amber-800/60' : 'bg-white/90 border-amber-200'}`}>
                   <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-amber-400' : 'text-amber-700'}`}>IZIN</p>
                   <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-amber-300' : 'text-amber-900'}`}>{totalIzin}</p>
                 </div>
-                <div className={`border rounded-xl p-2.5 shadow-xs ${isDarkMode ? 'bg-slate-900 border-indigo-800/60' : 'bg-white/90 border-indigo-200'}`}>
+                <div className={`border rounded-xl p-3 shadow-xs ${isDarkMode ? 'bg-slate-900 border-indigo-800/60' : 'bg-white/90 border-indigo-200'}`}>
                   <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}>SAKIT</p>
                   <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>{totalSakit}</p>
                 </div>
-                <div className={`border rounded-xl p-2.5 shadow-xs ${isDarkMode ? 'bg-slate-900 border-rose-800/60' : 'bg-white/90 border-rose-200'}`}>
+                <div className={`border rounded-xl p-3 shadow-xs ${isDarkMode ? 'bg-slate-900 border-rose-800/60' : 'bg-white/90 border-rose-200'}`}>
                   <p className={`text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}>ALPA</p>
                   <p className={`text-lg font-black mt-0.5 ${isDarkMode ? 'text-rose-300' : 'text-rose-900'}`}>{totalAlpa}</p>
                 </div>
               </div>
 
-              <div className={`grid grid-cols-1 sm:grid-cols-4 gap-2.5 border p-3 rounded-2xl shrink-0 shadow-xs ${
+              {/* FILTER BAR REKAP */}
+              <div className={`grid grid-cols-1 sm:grid-cols-4 gap-3 border p-4 rounded-2xl shrink-0 shadow-xs ${
                 isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
                 <div>
@@ -916,7 +926,7 @@ export default function AbsensiPage() {
                   <select
                     value={filterKelasId}
                     onChange={(e) => setFilterKelasId(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -932,7 +942,7 @@ export default function AbsensiPage() {
                   <select
                     value={filterMapelId}
                     onChange={(e) => setFilterMapelId(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -949,7 +959,7 @@ export default function AbsensiPage() {
                     type="date"
                     value={filterTanggal}
                     onChange={(e) => setFilterTanggal(e.target.value)}
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   />
@@ -962,17 +972,89 @@ export default function AbsensiPage() {
                     value={searchNama}
                     onChange={(e) => setSearchNama(e.target.value)}
                     placeholder="Nama siswa..."
-                    className={`w-full border rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   />
                 </div>
               </div>
 
-              <div className={`border rounded-2xl p-3.5 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden ${
+              {/* PANEL DATA REKAP */}
+              <div className={`border rounded-2xl p-4 shadow-sm ${
                 isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
-                <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                
+                {/* 1. TAMPILAN MOBILE: KARTU REKAP (sm:hidden) */}
+                <div className="block sm:hidden space-y-3">
+                  {loadingRekap ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Memuat riwayat presensi...
+                    </div>
+                  ) : rekapList.length === 0 ? (
+                    <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Tidak ada riwayat presensi ditemukan.
+                    </div>
+                  ) : (
+                    rekapList.map((item, index) => (
+                      <div
+                        key={item.id || index}
+                        className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2 ${
+                          isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`font-mono font-bold text-xs ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                            📅 {item.tanggal}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                              item.status === 'HADIR'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : item.status === 'IZIN'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : item.status === 'SAKIT'
+                                ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1 border-t border-b py-2 my-0.5 border-slate-700/40">
+                          <h4 className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                            {item.nama_siswa}
+                          </h4>
+                          <div className="flex items-center justify-between text-[11px] font-bold">
+                            <span className={isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}>{item.mapel}</span>
+                            <span className={`px-2 py-0.2 rounded border ${
+                              isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                            }`}>
+                              {item.kelas}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-0.5">
+                          <button
+                            onClick={async () => {
+                              if (item.id && confirm('Hapus record presensi ini?')) {
+                                await supabase.from('absensi').delete().eq('id', item.id)
+                                setRekapList(prev => prev.filter(r => r.id !== item.id))
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
+                          >
+                            🗑️ Hapus Record
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* 2. TAMPILAN DESKTOP: TABEL REKAP (hidden sm:block) */}
+                <div className={`hidden sm:block overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                       <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -1044,7 +1126,7 @@ export default function AbsensiPage() {
 
         </main>
 
-        <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
+        <div className="pb-20 sm:pb-16 pt-2 flex justify-center shrink-0 print:hidden">
           <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
             isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
           }`}>
