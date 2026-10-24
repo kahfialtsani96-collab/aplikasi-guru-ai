@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-// Helper Instansiasi Aman Supabase Client
+// Helper Instansiasi Aman Supabase Client untuk Vercel SSG Build
 const getSupabaseClient = () => {
   const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co').replace(/['"]/g, '').trim()
   const key = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder').replace(/['"]/g, '').trim()
@@ -227,48 +227,72 @@ export default function AbsensiPage() {
     }
   }, [selectedKelasId, selectedMapelId, tanggal, selectedSemester, selectedTahunAjaran, activeTab])
 
-  // QR Scanner Implementation (termasuk perpindahan facingMode)
+  // QR Scanner Implementation (Aman dari crash saat ganti kamera)
   useEffect(() => {
     let html5QrCode: any = null
+    let isMounted = true
 
     if (modeInput === 'qr' && activeTab === 'input') {
       import('html5-qrcode').then(({ Html5Qrcode }) => {
-        html5QrCode = new Html5Qrcode('reader')
-        qrScannerRef.current = html5QrCode
+        if (!isMounted) return
 
-        html5QrCode.start(
-          { facingMode: facingMode },
-          { fps: 10, qrbox: { width: 220, height: 220 } },
-          (decodedText: string) => {
-            handleQRScanned(decodedText)
-          },
-          () => {}
-        ).catch((err: any) => {
-          console.error('Gagal membuka kamera:', err)
-        })
+        if (!qrScannerRef.current) {
+          html5QrCode = new Html5Qrcode('reader')
+          qrScannerRef.current = html5QrCode
+        } else {
+          html5QrCode = qrScannerRef.current
+        }
+
+        const startScanner = async () => {
+          try {
+            if (html5QrCode.isScanning) {
+              await html5QrCode.stop()
+            }
+
+            await html5QrCode.start(
+              { facingMode: facingMode },
+              { fps: 10, qrbox: { width: 220, height: 220 } },
+              (decodedText: string) => {
+                handleQRScanned(decodedText)
+              },
+              () => {}
+            )
+          } catch (err: any) {
+            console.warn('Gagal memulai kamera:', err)
+            setScanStatus({
+              type: 'error',
+              msg: '⚠️ Kamera tidak tersedia / izin ditolak.'
+            })
+          }
+        }
+
+        startScanner()
       })
     }
 
     return () => {
-      if (qrScannerRef.current) {
-        qrScannerRef.current.stop().then(() => {
-          qrScannerRef.current.clear()
-        }).catch(() => {})
+      isMounted = false
+      if (qrScannerRef.current && qrScannerRef.current.isScanning) {
+        qrScannerRef.current.stop().catch(() => {})
       }
     }
   }, [modeInput, activeTab, facingMode, siswaList, absensiMap])
 
-  // Fungsi membalikkan kamera (Ganti Kamera Belakang <-> Depan)
+  // Fungsi ganti kamera (Depan <-> Belakang)
   const toggleCameraFacing = async () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment'
+    
     if (qrScannerRef.current) {
       try {
-        await qrScannerRef.current.stop()
-        qrScannerRef.current.clear()
+        if (qrScannerRef.current.isScanning) {
+          await qrScannerRef.current.stop()
+        }
       } catch (e) {
-        console.log('Stopping current stream...')
+        console.log('Proses penghentian kamera...', e)
       }
     }
-    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'))
+    
+    setFacingMode(nextMode)
   }
 
   // Logika Pemindaian QR
@@ -378,7 +402,7 @@ export default function AbsensiPage() {
     })
   }
 
-  // Simpan Absensi ke Supabase (Delete lalu Insert baru agar aman tanpa unique constraint error)
+  // Simpan Absensi ke Supabase
   const handleSimpanAbsensi = async () => {
     if (!selectedKelasId || !selectedMapelId || !tanggal) {
       alert('Silakan pilih Tanggal, Kelas, dan Mata Pelajaran terlebih dahulu!')
@@ -422,7 +446,7 @@ export default function AbsensiPage() {
         guru_email: userEmail
       }))
 
-      // 1. Hapus record presensi lama untuk kelas, mapel, & tanggal tersebut
+      // Hapus data presensi lama di tanggal & mapel tersebut, lalu masukkan data baru
       await supabase
         .from('absensi')
         .delete()
@@ -432,7 +456,6 @@ export default function AbsensiPage() {
         .eq('semester', selectedSemester)
         .eq('tahun_ajaran', selectedTahunAjaran)
 
-      // 2. Masukkan record presensi yang baru
       const { error } = await supabase
         .from('absensi')
         .insert(rowsToInsert)
@@ -705,7 +728,7 @@ export default function AbsensiPage() {
                 </div>
               </div>
 
-              {/* PEMINDAI QR DENGAN TOMBOL GANTI KAMERA */}
+              {/* PEMINDAI QR DENGAN SAKELAR KAMERA */}
               {modeInput === 'qr' && (
                 <div className={`backdrop-blur-md border rounded-2xl p-4 flex flex-col items-center justify-center space-y-3 shrink-0 shadow-xs relative ${
                   isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-indigo-200'
@@ -714,7 +737,6 @@ export default function AbsensiPage() {
                     <h3 className={`text-xs font-extrabold uppercase flex items-center gap-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
                       <span>📷</span> Arahkan QR Code Kartu Pelajar ke Kamera
                     </h3>
-                    {/* Tombol Sakelar Ganti Kamera */}
                     <button
                       type="button"
                       onClick={toggleCameraFacing}
