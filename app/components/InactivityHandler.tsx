@@ -13,8 +13,6 @@ const getSupabaseAnonKey = () => {
   return key.replace(/['"]/g, '').trim()
 }
 
-const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
-
 // Ubah sesuai kebutuhan (misal 60 * 60 * 1000 untuk 1 Jam)
 const INACTIVITY_LIMIT = 60 * 60 * 1000 
 
@@ -23,6 +21,8 @@ export default function InactivityHandler() {
 
   const handleLogout = async () => {
     try {
+      // Inisialisasi client dibuat di dalam fungsi agar aman dari error Prerender Vercel
+      const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
       await supabase.auth.signOut()
       
       // JANGAN hapus 'theme' di localStorage agar pilihan Dark Mode tetap tersimpan
