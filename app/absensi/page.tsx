@@ -7,17 +7,14 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const getSupabaseUrl = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
-  return url.replace(/['"]/g, '').trim()
+// Helper Instansiasi Aman Supabase Client
+const getSupabaseClient = () => {
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co').replace(/['"]/g, '').trim()
+  const key = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder').replace(/['"]/g, '').trim()
+  return createClient(url, key)
 }
 
-const getSupabaseAnonKey = () => {
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
-  return key.replace(/['"]/g, '').trim()
-}
-
-const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
+const supabase = getSupabaseClient()
 
 interface Siswa {
   id: number
@@ -69,6 +66,9 @@ export default function AbsensiPage() {
 
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
   const [modeInput, setModeInput] = useState<'manual' | 'qr'>('manual')
+
+  // State untuk Ganti Kamera ('environment' = Belakang, 'user' = Depan/Selfie)
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
 
   // Global Filter Periode Akademik
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
@@ -227,7 +227,7 @@ export default function AbsensiPage() {
     }
   }, [selectedKelasId, selectedMapelId, tanggal, selectedSemester, selectedTahunAjaran, activeTab])
 
-  // QR Scanner Implementation
+  // QR Scanner Implementation (termasuk perpindahan facingMode)
   useEffect(() => {
     let html5QrCode: any = null
 
@@ -237,7 +237,7 @@ export default function AbsensiPage() {
         qrScannerRef.current = html5QrCode
 
         html5QrCode.start(
-          { facingMode: 'environment' },
+          { facingMode: facingMode },
           { fps: 10, qrbox: { width: 220, height: 220 } },
           (decodedText: string) => {
             handleQRScanned(decodedText)
@@ -256,7 +256,20 @@ export default function AbsensiPage() {
         }).catch(() => {})
       }
     }
-  }, [modeInput, activeTab, siswaList, absensiMap])
+  }, [modeInput, activeTab, facingMode, siswaList, absensiMap])
+
+  // Fungsi membalikkan kamera (Ganti Kamera Belakang <-> Depan)
+  const toggleCameraFacing = async () => {
+    if (qrScannerRef.current) {
+      try {
+        await qrScannerRef.current.stop()
+        qrScannerRef.current.clear()
+      } catch (e) {
+        console.log('Stopping current stream...')
+      }
+    }
+    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'))
+  }
 
   // Logika Pemindaian QR
   const handleQRScanned = (scannedText: string) => {
@@ -365,7 +378,7 @@ export default function AbsensiPage() {
     })
   }
 
-  // Simpan Absensi ke Supabase
+  // Simpan Absensi ke Supabase (Delete lalu Insert baru agar aman tanpa unique constraint error)
   const handleSimpanAbsensi = async () => {
     if (!selectedKelasId || !selectedMapelId || !tanggal) {
       alert('Silakan pilih Tanggal, Kelas, dan Mata Pelajaran terlebih dahulu!')
@@ -394,7 +407,7 @@ export default function AbsensiPage() {
       const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
 
-      const rowsToUpsert = processedSiswa.map((siswa) => ({
+      const rowsToInsert = processedSiswa.map((siswa) => ({
         tanggal,
         kelas_id: Number(selectedKelasId),
         mapel_id: Number(selectedMapelId),
@@ -409,9 +422,20 @@ export default function AbsensiPage() {
         guru_email: userEmail
       }))
 
+      // 1. Hapus record presensi lama untuk kelas, mapel, & tanggal tersebut
+      await supabase
+        .from('absensi')
+        .delete()
+        .eq('kelas_id', Number(selectedKelasId))
+        .eq('mapel_id', Number(selectedMapelId))
+        .eq('tanggal', tanggal)
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
+
+      // 2. Masukkan record presensi yang baru
       const { error } = await supabase
         .from('absensi')
-        .upsert(rowsToUpsert, { onConflict: 'siswa_id,tanggal,mapel_id' })
+        .insert(rowsToInsert)
 
       if (error) {
         alert('Gagal menyimpan absensi: ' + error.message)
@@ -681,13 +705,29 @@ export default function AbsensiPage() {
                 </div>
               </div>
 
+              {/* PEMINDAI QR DENGAN TOMBOL GANTI KAMERA */}
               {modeInput === 'qr' && (
                 <div className={`backdrop-blur-md border rounded-2xl p-4 flex flex-col items-center justify-center space-y-3 shrink-0 shadow-xs relative ${
                   isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-indigo-200'
                 }`}>
-                  <h3 className={`text-xs font-extrabold uppercase flex items-center gap-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
-                    <span>📷</span> Arahkan QR Code Kartu Pelajar ke Kamera
-                  </h3>
+                  <div className="w-full flex items-center justify-between">
+                    <h3 className={`text-xs font-extrabold uppercase flex items-center gap-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
+                      <span>📷</span> Arahkan QR Code Kartu Pelajar ke Kamera
+                    </h3>
+                    {/* Tombol Sakelar Ganti Kamera */}
+                    <button
+                      type="button"
+                      onClick={toggleCameraFacing}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                        isDarkMode
+                          ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-indigo-300'
+                          : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-900'
+                      }`}
+                    >
+                      <span>🔄</span>
+                      <span>{facingMode === 'environment' ? 'Kamera Depan' : 'Kamera Belakang'}</span>
+                    </button>
+                  </div>
                   
                   <div className="w-full max-w-xs overflow-hidden rounded-2xl border-2 border-indigo-600 shadow-md bg-black relative">
                     <div id="reader" className="w-full"></div>
