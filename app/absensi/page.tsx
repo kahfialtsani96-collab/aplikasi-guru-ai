@@ -89,7 +89,7 @@ export default function AbsensiPage() {
   const [loadingSiswa, setLoadingSiswa] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // State Rekapitulasi
+  // State Rekapitulasi (Default Tanggal Hari Ini Agar Ringan)
   const [rekapList, setRekapList] = useState<AbsensiRecord[]>([])
   const [filterKelasId, setFilterKelasId] = useState('')
   const [filterMapelId, setFilterMapelId] = useState('')
@@ -107,6 +107,7 @@ export default function AbsensiPage() {
     const today = new Date().toISOString().split('T')[0]
     setTodayStr(today)
     setTanggal(today)
+    setFilterTanggal(today) // Default filter rekap ke hari ini!
 
     async function getUserData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -344,7 +345,7 @@ export default function AbsensiPage() {
     }, 2200)
   }
 
-  // Fetch Rekap
+  // Fetch Rekap (Dioptimalkan agar hanya memuat per-hari / per-kelas)
   const fetchRekap = async () => {
     setLoadingRekap(true)
     try {
@@ -361,7 +362,12 @@ export default function AbsensiPage() {
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
       if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
-      if (filterTanggal) query = query.eq('tanggal', filterTanggal)
+      
+      // Jika filter tanggal diisi, prioritaskan filter tanggal tersebut
+      if (filterTanggal) {
+        query = query.eq('tanggal', filterTanggal)
+      }
+
       if (searchNama.trim()) query = query.ilike('nama_siswa', `%${searchNama.trim()}%`)
 
       const { data, error } = await query
@@ -464,6 +470,9 @@ export default function AbsensiPage() {
         alert('Gagal menyimpan absensi: ' + error.message)
       } else {
         alert(`Berhasil menyimpan presensi ${processedSiswa.length} siswa!`)
+        // Otomatis arahkan filter rekap ke tanggal & kelas yang baru disimpan
+        setFilterTanggal(tanggal)
+        setFilterKelasId(selectedKelasId)
         setActiveTab('rekap')
       }
     } catch (err: any) {
@@ -951,7 +960,7 @@ export default function AbsensiPage() {
             </div>
           )}
 
-          {/* TAB 2: RIWAYAT & REKAPITULASI */}
+          {/* TAB 2: RIWAYAT & REKAPITULASI (DILENGKAPI DENGAN DEFAULT FILTER HARI INI) */}
           {activeTab === 'rekap' && (
             <div className="flex flex-col space-y-4">
               
@@ -1016,7 +1025,17 @@ export default function AbsensiPage() {
                 </div>
 
                 <div>
-                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER TANGGAL</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`block text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER TANGGAL</label>
+                    {filterTanggal && (
+                      <button
+                        onClick={() => setFilterTanggal('')}
+                        className="text-[9px] text-indigo-500 hover:underline font-bold"
+                      >
+                        Tampilkan Semua
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="date"
                     value={filterTanggal}
@@ -1054,7 +1073,7 @@ export default function AbsensiPage() {
                     </div>
                   ) : rekapList.length === 0 ? (
                     <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                      Tidak ada riwayat presensi ditemukan.
+                      Tidak ada riwayat presensi ditemukan {filterTanggal ? `pada tanggal ${filterTanggal}` : ''}.
                     </div>
                   ) : (
                     rekapList.map((item, index) => (
@@ -1136,7 +1155,9 @@ export default function AbsensiPage() {
                         </tr>
                       ) : rekapList.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Tidak ada riwayat presensi ditemukan.</td>
+                          <td colSpan={7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                            Tidak ada riwayat presensi ditemukan {filterTanggal ? `pada tanggal ${filterTanggal}` : ''}.
+                          </td>
                         </tr>
                       ) : (
                         rekapList.map((item, index) => (

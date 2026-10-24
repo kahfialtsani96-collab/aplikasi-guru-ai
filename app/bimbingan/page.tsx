@@ -17,6 +17,14 @@ interface SiswaPerwalian {
   nisn?: string
   jenis_kelamin?: string
   kelas_id?: number
+  kelas?: {
+    nama_kelas: string
+  }
+}
+
+interface OptionItem {
+  id: number
+  nama: string
 }
 
 interface BimbinganRecord {
@@ -34,13 +42,10 @@ interface BimbinganRecord {
 
 export default function BimbinganWaliPage() {
   const router = useRouter()
-  const [userDisplayName, setUserDisplayName] = useState('GURU WALI')
+  const [userDisplayName, setUserDisplayName] = useState('GURU')
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('rekap')
 
-  const [assignedKelas, setAssignedKelas] = useState<string>('')
-  const [assignedKelasId, setAssignedKelasId] = useState<number | null>(null)
-
-  const { isOperator, canAccessBimbingan, loading: loadingRole } = useAuthRole()
+  const { isOperator, loading: loadingRole } = useAuthRole()
 
   // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
@@ -52,13 +57,12 @@ export default function BimbinganWaliPage() {
     }
   }, [])
 
-  useEffect(() => {
-    if (!loadingRole && !canAccessBimbingan) {
-      router.push('/jadwal')
-    }
-  }, [loadingRole, canAccessBimbingan, router])
+  // Options Kelas
+  const [kelasList, setKelasList] = useState<OptionItem[]>([])
+  const [selectedKelasIdInput, setSelectedKelasIdInput] = useState<string>('')
 
-  const [listPerwalian, setListPerwalian] = useState<SiswaPerwalian[]>([])
+  // State Siswa
+  const [allSiswaList, setAllSiswaList] = useState<SiswaPerwalian[]>([])
 
   // State Input Catatan Bimbingan
   const [selectedSiswaNama, setSelectedSiswaNama] = useState('')
@@ -67,129 +71,110 @@ export default function BimbinganWaliPage() {
   const [masalah, setMasalah] = useState('')
   const [solusi, setSolusi] = useState('')
 
-  const [bimbinganList, setBimbinganList] = useState<BimbinganRecord[]>([])
   const [saving, setSaving] = useState(false)
 
   // State Rekapitulasi
   const [rekapList, setRekapList] = useState<BimbinganRecord[]>([])
+  const [filterKelasIdRekap, setFilterKelasIdRekap] = useState('')
   const [filterJenis, setFilterJenis] = useState('')
   const [searchKataKunci, setSearchKataKunci] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
 
   useEffect(() => {
-    async function initWaliPage() {
+    async function initPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const nameFromMeta = user.user_metadata?.full_name || user.email?.split('@')[0] || 'PENGGUNA'
         setUserDisplayName(nameFromMeta.toUpperCase())
-
-        // 1. Jika OPERATOR -> Load Seluruh Data
-        if (isOperator) {
-          setAssignedKelas('SEMUA KELAS (OPERATOR)')
-          fetchDataForOperator()
-          return
-        }
-
-        // 2. Jika GURU WALI -> Cari Kelas Binaannya
-        if (user.email) {
-          const { data: guruData } = await supabase
-            .from('guru')
-            .select('id')
-            .eq('email', user.email)
-            .maybeSingle()
-
-          if (guruData) {
-            const { data: kelasData } = await supabase
-              .from('kelas')
-              .select('id, nama_kelas')
-              .eq('wali_kelas_id', guruData.id)
-              .maybeSingle()
-
-            if (kelasData) {
-              setAssignedKelas(kelasData.nama_kelas)
-              setAssignedKelasId(kelasData.id)
-              fetchPerwalianAndBimbingan(kelasData.id, kelasData.nama_kelas)
-            } else {
-              setAssignedKelas('BELUM DIPETAKAN KELAS')
-            }
-          }
-        }
       }
+
+      // Load Master Kelas
+      const { data: dataKelas } = await supabase
+        .from('kelas')
+        .select('id, nama_kelas')
+        .order('nama_kelas', { ascending: true })
+      if (dataKelas) {
+        setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
+      }
+
+      // Load Seluruh Data Siswa (Semua Guru & Operator Bisa Akses)
+      fetchSiswaList()
     }
 
     const todayStr = new Date().toISOString().split('T')[0]
     setTanggal(todayStr)
 
     if (!loadingRole) {
-      initWaliPage()
+      initPage()
     }
-  }, [isOperator, loadingRole])
+  }, [loadingRole])
 
-  // Load Seluruh Data untuk Operator
-  async function fetchDataForOperator() {
-    setLoadingRekap(true)
+  // Fetch Siswa (Bisa Difilter Kelas di Tab Input)
+  async function fetchSiswaList(kelasId?: string) {
     try {
-      const { data: dataSiswa } = await supabase
+      let query = supabase
         .from('siswa')
         .select('id, nama_lengkap, nisn, jenis_kelamin, kelas_id')
         .order('nama_lengkap', { ascending: true })
-      if (dataSiswa) setListPerwalian(dataSiswa)
 
-      let query = supabase.from('bimbingan_wali').select('*').order('created_at', { ascending: false })
-      if (filterJenis) query = query.eq('jenis_masalah', filterJenis)
-      if (searchKataKunci.trim()) {
-        query = query.or(`nama_siswa.ilike.%${searchKataKunci.trim()}%,masalah.ilike.%${searchKataKunci.trim()}%`)
+      if (kelasId) {
+        query = query.eq('kelas_id', Number(kelasId))
       }
 
-      const { data: dataBimbingan } = await query
-      if (dataBimbingan) {
-        setBimbinganList(dataBimbingan)
-        setRekapList(dataBimbingan)
-      }
+      const { data } = await query
+      if (data) setAllSiswaList(data)
     } catch (err) {
-      console.error('Error operator fetch:', err)
-    } finally {
-      setLoadingRekap(false)
+      console.error('Error fetching siswa:', err)
     }
   }
 
-  // Load Data Spesifik Kelas untuk Wali Kelas
-  async function fetchPerwalianAndBimbingan(kelasId: number, namaKelas: string) {
+  // Handle Perubahan Filter Kelas di Form Input
+  useEffect(() => {
+    fetchSiswaList(selectedKelasIdInput)
+  }, [selectedKelasIdInput])
+
+  // Fetch Rekapitulasi Bimbingan (Bisa Filter Kelas, Jenis, dan Kata Kunci)
+  async function fetchRekapBimbingan() {
     setLoadingRekap(true)
     try {
-      const { data: dataSiswa } = await supabase
-        .from('siswa')
-        .select('id, nama_lengkap, nisn, jenis_kelamin, kelas_id')
-        .eq('kelas_id', kelasId)
-        .order('nama_lengkap', { ascending: true })
-      if (dataSiswa) setListPerwalian(dataSiswa)
+      let query = supabase
+        .from('bimbingan_wali')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-      let query = supabase.from('bimbingan_wali').select('*').eq('kelas', namaKelas).order('created_at', { ascending: false })
+      if (filterKelasIdRekap) {
+        const kelasObj = kelasList.find((k) => String(k.id) === filterKelasIdRekap)
+        if (kelasObj) {
+          query = query.eq('kelas', kelasObj.nama)
+        }
+      }
+
       if (filterJenis) query = query.eq('jenis_masalah', filterJenis)
+
       if (searchKataKunci.trim()) {
         query = query.or(`nama_siswa.ilike.%${searchKataKunci.trim()}%,masalah.ilike.%${searchKataKunci.trim()}%`)
       }
 
-      const { data: dataBimbingan } = await query
-      if (dataBimbingan) {
-        setBimbinganList(dataBimbingan)
-        setRekapList(dataBimbingan)
+      const { data } = await query
+      if (data) {
+        setRekapList(data)
+      } else {
+        setRekapList([])
       }
     } catch (err) {
-      console.error('Error wali fetch:', err)
+      console.error('Error rekap fetch:', err)
     } finally {
       setLoadingRekap(false)
     }
   }
 
   useEffect(() => {
-    if (isOperator) {
-      fetchDataForOperator()
-    } else if (assignedKelasId && assignedKelas) {
-      fetchPerwalianAndBimbingan(assignedKelasId, assignedKelas)
+    if (activeTab === 'rekap') {
+      fetchRekapBimbingan()
     }
-  }, [activeTab, filterJenis, searchKataKunci])
+  }, [activeTab, filterKelasIdRekap, filterJenis, searchKataKunci, kelasList])
 
+  // Simpan Bimbingan (Bisa Dikelola Seluruh Guru/Wali/Operator)
   const handleSimpanBimbingan = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedSiswaNama || !masalah.trim() || !tanggal) {
@@ -199,12 +184,20 @@ export default function BimbinganWaliPage() {
 
     setSaving(true)
     try {
-      const targetKelas = isOperator ? 'UMUM' : assignedKelas
+      // Cari nama kelas dari siswa yang dipilih
+      const targetSiswa = allSiswaList.find((s) => s.nama_lengkap === selectedSiswaNama)
+      let namaKelas = 'UMUM'
+
+      if (targetSiswa && targetSiswa.kelas_id) {
+        const kObj = kelasList.find((k) => k.id === targetSiswa.kelas_id)
+        if (kObj) namaKelas = kObj.nama
+      }
+
       const { error } = await supabase.from('bimbingan_wali').insert([
         {
           tanggal,
           nama_siswa: selectedSiswaNama,
-          kelas: targetKelas,
+          kelas: namaKelas,
           jenis_masalah: jenisMasalah,
           masalah: masalah.trim(),
           solusi: solusi.trim(),
@@ -217,8 +210,8 @@ export default function BimbinganWaliPage() {
         setMasalah('')
         setSolusi('')
         setSelectedSiswaNama('')
-        if (isOperator) fetchDataForOperator()
-        else if (assignedKelasId && assignedKelas) fetchPerwalianAndBimbingan(assignedKelasId, assignedKelas)
+        setActiveTab('rekap')
+        fetchRekapBimbingan()
       } else {
         alert('Gagal menyimpan: ' + error.message)
       }
@@ -229,8 +222,10 @@ export default function BimbinganWaliPage() {
     }
   }
 
-  // Fungsi Khusus Operator: Konfirmasi & Catat Tindak Lanjut Hukuman
+  // KHUSUS OPERATOR: Konfirmasi & Catat Tindak Lanjut Hukuman
   const handleTindakLanjutiOperator = async (item: BimbinganRecord) => {
+    if (!isOperator) return
+
     const defaultKeterangan = item.keterangan_hukuman || 'Anak tersebut sudah dihukum sesuai tata tertib sekolah.'
     const inputKeterangan = prompt(
       `Konfirmasi Penanganan untuk ${item.nama_siswa}:\nMasukkan keterangan tindak lanjut hukuman:`,
@@ -250,8 +245,7 @@ export default function BimbinganWaliPage() {
 
       if (!error) {
         alert('Status penanganan & hukuman berhasil dikonfirmasi!')
-        if (isOperator) fetchDataForOperator()
-        else if (assignedKelasId && assignedKelas) fetchPerwalianAndBimbingan(assignedKelasId, assignedKelas)
+        fetchRekapBimbingan()
       } else {
         alert('Gagal mengupdate penanganan: ' + error.message)
       }
@@ -260,20 +254,24 @@ export default function BimbinganWaliPage() {
     }
   }
 
+  // KHUSUS OPERATOR: Hapus Catatan Bimbingan
   const handleDeleteBimbingan = async (id?: string) => {
-    if (!id || !confirm('Hapus catatan bimbingan ini?')) return
+    if (!isOperator) return
+    if (!id || !confirm('Apakah Anda yakin ingin menghapus catatan bimbingan ini?')) return
+
     const { error } = await supabase.from('bimbingan_wali').delete().eq('id', id)
     if (!error) {
-      if (isOperator) fetchDataForOperator()
-      else if (assignedKelasId && assignedKelas) fetchPerwalianAndBimbingan(assignedKelasId, assignedKelas)
+      fetchRekapBimbingan()
+    } else {
+      alert('Gagal menghapus: ' + error.message)
     }
   }
 
-  if (loadingRole || !canAccessBimbingan) {
+  if (loadingRole) {
     return (
       <div className={`h-screen p-8 flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-700'}`}>
         <div className={`backdrop-blur-md border p-6 rounded-2xl text-center space-y-2 shadow-md ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
-          <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Memeriksa Hak Akses...</p>
+          <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Memuat Halaman Bimbingan...</p>
         </div>
       </div>
     )
@@ -295,6 +293,7 @@ export default function BimbinganWaliPage() {
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
+        {/* HEADER TOPBAR */}
         <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
@@ -313,22 +312,13 @@ export default function BimbinganWaliPage() {
               <div>
                 <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
                 <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>
-                  Pencatatan Bimbingan Siswa ({assignedKelas})
+                  Layanan Bimbingan & Konseling Siswa
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className={`border text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 ${
-              isDarkMode 
-                ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
-                : 'bg-emerald-100/80 border-emerald-300 text-emerald-800'
-            }`}>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Supabase Live</span>
-            </div>
-
             <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
@@ -339,7 +329,7 @@ export default function BimbinganWaliPage() {
               <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
-                {isOperator ? 'Operator' : 'Guru Wali'}
+                {isOperator ? 'Operator' : 'Guru'}
               </span>
             </div>
 
@@ -402,19 +392,40 @@ export default function BimbinganWaliPage() {
                 : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
             }`}>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
+                
+                {/* PANEL DAFTAR SISWA + FILTER KELAS */}
                 <div className={`lg:col-span-4 border p-3.5 rounded-xl space-y-2.5 h-fit shadow-xs ${
                   isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-indigo-200/80'
                 }`}>
-                  <h3 className={`text-[11px] font-extrabold uppercase tracking-wider border-b pb-2 ${
-                    isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200/80'
-                  }`}>
-                    👥 DAFTAR SISWA ({listPerwalian.length})
-                  </h3>
-                  <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
-                    {listPerwalian.length === 0 ? (
-                      <p className={`text-xs text-center py-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Belum ada siswa terdaftar.</p>
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h3 className={`text-[11px] font-extrabold uppercase tracking-wider ${
+                      isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                    }`}>
+                      👥 SISWA ({allSiswaList.length})
+                    </h3>
+                  </div>
+
+                  {/* Dropdown Filter Kelas untuk Memudahkan Pencarian Siswa */}
+                  <div>
+                    <select
+                      value={selectedKelasIdInput}
+                      onChange={(e) => setSelectedKelasIdInput(e.target.value)}
+                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
+                        isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      <option value="">Semua Kelas</option>
+                      {kelasList.map((k) => (
+                        <option key={k.id} value={k.id}>{k.nama}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+                    {allSiswaList.length === 0 ? (
+                      <p className={`text-xs text-center py-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Tidak ada siswa ditemukan.</p>
                     ) : (
-                      listPerwalian.map((siswa, i) => (
+                      allSiswaList.map((siswa, i) => (
                         <div
                           key={siswa.id || i}
                           onClick={() => setSelectedSiswaNama(siswa.nama_lengkap)}
@@ -434,6 +445,7 @@ export default function BimbinganWaliPage() {
                   </div>
                 </div>
 
+                {/* FORM INPUT BIMBINGAN */}
                 <div className={`lg:col-span-8 border p-3.5 rounded-xl space-y-3 h-fit shadow-xs ${
                   isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-indigo-200/80'
                 }`}>
@@ -458,7 +470,7 @@ export default function BimbinganWaliPage() {
                           required
                         >
                           <option value="">-- Pilih Siswa --</option>
-                          {listPerwalian.map((siswa, i) => (
+                          {allSiswaList.map((siswa, i) => (
                             <option key={siswa.id || i} value={siswa.nama_lengkap}>
                               {siswa.nama_lengkap} ({siswa.nisn || 'No NISN'})
                             </option>
@@ -518,7 +530,7 @@ export default function BimbinganWaliPage() {
 
                     <div>
                       <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                        SOLUSI / TINDAK LANJUT WALI KELAS
+                        SOLUSI / TINDAK LANJUT GURU
                       </label>
                       <textarea
                         rows={3}
@@ -544,13 +556,64 @@ export default function BimbinganWaliPage() {
             </div>
           )}
 
-          {/* TAB 2: REKAPITULASI DENGAN KOLOM KETERANGAN HUKUMAN & TOMBOL CENTANG */}
+          {/* TAB 2: REKAPITULASI BERSAMA FILTER KELAS */}
           {activeTab === 'rekap' && (
             <div className={`backdrop-blur-md border rounded-2xl p-4 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
               isDarkMode 
                 ? 'bg-slate-900/90 border-slate-800' 
                 : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
             }`}>
+              
+              {/* FILTER REKAPITULASI */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 shrink-0">
+                <div>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER KELAS</label>
+                  <select
+                    value={filterKelasIdRekap}
+                    onChange={(e) => setFilterKelasIdRekap(e.target.value)}
+                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                  >
+                    <option value="">Semua Kelas</option>
+                    {kelasList.map((k) => (
+                      <option key={k.id} value={k.id}>{k.nama}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER JENIS MASALAH</label>
+                  <select
+                    value={filterJenis}
+                    onChange={(e) => setFilterJenis(e.target.value)}
+                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                  >
+                    <option value="">Semua Jenis Masalah</option>
+                    <option value="Akademik">Akademik</option>
+                    <option value="Karakter/Sikap">Karakter/Sikap</option>
+                    <option value="Kedisiplinan">Kedisiplinan</option>
+                    <option value="Pribadi/Sosial">Pribadi/Sosial</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>CARI SISWA / KASUS</label>
+                  <input
+                    type="text"
+                    value={searchKataKunci}
+                    onChange={(e) => setSearchKataKunci(e.target.value)}
+                    placeholder="Kata kunci..."
+                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* TABEL REKAPITULASI */}
               <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
@@ -560,19 +623,19 @@ export default function BimbinganWaliPage() {
                       <th className="py-2.5 px-3">NAMA SISWA</th>
                       <th className="py-2.5 px-3">JENIS MASALAH</th>
                       <th className="py-2.5 px-3">DESKRIPSI KASUS</th>
-                      <th className="py-2.5 px-3">SOLUSI WALI KELAS</th>
+                      <th className="py-2.5 px-3">SOLUSI GURU</th>
                       <th className="py-2.5 px-3">PENANGANAN HUKUMAN</th>
-                      <th className="py-2.5 px-3 text-center w-20">AKSI</th>
+                      {isOperator && <th className="py-2.5 px-3 text-center w-20">AKSI</th>}
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                     {loadingRekap ? (
                       <tr>
-                        <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data...</td>
+                        <td colSpan={isOperator ? 8 : 7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data...</td>
                       </tr>
                     ) : rekapList.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada catatan kasus bimbingan.</td>
+                        <td colSpan={isOperator ? 8 : 7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada catatan kasus bimbingan.</td>
                       </tr>
                     ) : (
                       rekapList.map((item, index) => (
@@ -606,26 +669,26 @@ export default function BimbinganWaliPage() {
                             )}
                           </td>
 
-                          {/* KOLOM AKSI (CENTANG HIJAU KHUSUS OPERATOR) */}
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap space-x-1">
-                            {isOperator && (
+                          {/* KOLOM AKSI (CENTANG HIJAU & HAPUS HANYA UNTUK OPERATOR) */}
+                          {isOperator && (
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap space-x-1">
                               <button
                                 onClick={() => handleTindakLanjutiOperator(item)}
                                 className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 p-1.5 rounded-lg border border-emerald-300 transition cursor-pointer"
-                                title="Konfirmasi &amp; Isikan Keterangan Hukuman"
+                                title="Konfirmasi & Isikan Keterangan Hukuman"
                               >
                                 ✅
                               </button>
-                            )}
 
-                            <button
-                              onClick={() => handleDeleteBimbingan(item.id)}
-                              className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
-                              title="Hapus"
-                            >
-                              🗑️
-                            </button>
-                          </td>
+                              <button
+                                onClick={() => handleDeleteBimbingan(item.id)}
+                                className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
+                                title="Hapus Laporan"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
@@ -673,9 +736,7 @@ export default function BimbinganWaliPage() {
               <span>Guru</span>
             </Link>
           )}
-          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
+          <Link href="/bimbingan" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-500 transition">
             <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>

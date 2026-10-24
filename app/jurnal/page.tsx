@@ -75,6 +75,7 @@ export default function AgendaMengajarPage() {
 
   // State Input Jurnal Agenda
   const [tanggal, setTanggal] = useState('')
+  const [todayStr, setTodayStr] = useState('')
   const [hari, setHari] = useState('Senin')
   const [jamMulai, setJamMulai] = useState('1')
   const [jamSelesai, setJamSelesai] = useState('1')
@@ -94,10 +95,28 @@ export default function AgendaMengajarPage() {
   const [filterKelasId, setFilterKelasId] = useState('')
   const [filterMapelId, setFilterMapelId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterTanggal, setFilterTanggal] = useState('')
   const [searchMateri, setSearchMateri] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
 
   useEffect(() => {
+    // Presisi Zona Waktu Indonesia (WIB)
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const currentDateStr = `${year}-${month}-${day}`
+    
+    setTodayStr(currentDateStr)
+    setTanggal(currentDateStr)
+    setFilterTanggal(currentDateStr) // Default filter rekap ke hari ini!
+
+    // Deteksi Hari
+    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][now.getDay()]
+    if (namaHari !== 'Jumat') {
+      setHari(namaHari)
+    }
+
     async function initUser() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
@@ -108,22 +127,8 @@ export default function AgendaMengajarPage() {
         
         fetchJadwalGuru(email)
         fetchMasterJam()
-        fetchJurnal(email)
+        fetchJurnal(email, currentDateStr)
       }
-    }
-
-    // Presisi Zona Waktu Indonesia (WIB)
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    const todayStr = `${year}-${month}-${day}`
-    setTanggal(todayStr)
-
-    // Deteksi Hari
-    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][now.getDay()]
-    if (namaHari !== 'Jumat') {
-      setHari(namaHari)
     }
 
     initUser()
@@ -182,21 +187,31 @@ export default function AgendaMengajarPage() {
     }
   }
 
-  // Load Jurnal Agenda milik Guru
-  async function fetchJurnal(emailParam?: string | null) {
+  // Load Jurnal Agenda milik Guru KHUSUS HARI INI
+  async function fetchJurnal(emailParam?: string | null, dateParam?: string) {
     const activeEmail = emailParam || userEmail
+    const targetDate = dateParam || todayStr
     if (!activeEmail) return
 
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('jurnal_agenda')
         .select('*')
         .eq('guru_email', activeEmail)
         .order('created_at', { ascending: false })
 
+      // Filter hanya tampilkan jurnal hari ini di tab input
+      if (targetDate) {
+        query = query.eq('tanggal', targetDate)
+      }
+
+      const { data, error } = await query
+
       if (!error && data) {
         setJurnalList(data as any)
+      } else {
+        setJurnalList([])
       }
     } catch (err) {
       console.error('Error fetching jurnal:', err)
@@ -205,7 +220,7 @@ export default function AgendaMengajarPage() {
     }
   }
 
-  // Fetch Rekapitulasi Jurnal
+  // Fetch Rekapitulasi Jurnal (Dengan Filter Tanggal)
   const fetchRekap = async () => {
     if (!userEmail) return
 
@@ -214,12 +229,16 @@ export default function AgendaMengajarPage() {
       let query = supabase
         .from('jurnal_agenda')
         .select('*')
-        .eq('guru_email', userEmail)
         .order('created_at', { ascending: false })
+
+      if (!isOperator) {
+        query = query.eq('guru_email', userEmail)
+      }
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
       if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
       if (filterStatus) query = query.eq('status', filterStatus)
+      if (filterTanggal) query = query.eq('tanggal', filterTanggal)
       if (searchMateri.trim()) query = query.ilike('materi', `%${searchMateri.trim()}%`)
 
       const { data, error } = await query
@@ -240,7 +259,7 @@ export default function AgendaMengajarPage() {
     if (activeTab === 'rekap' && userEmail) {
       fetchRekap()
     }
-  }, [activeTab, filterKelasId, filterMapelId, filterStatus, searchMateri, userEmail])
+  }, [activeTab, filterKelasId, filterMapelId, filterStatus, filterTanggal, searchMateri, userEmail, isOperator])
 
   useEffect(() => {
     if (userEmail) {
@@ -254,6 +273,12 @@ export default function AgendaMengajarPage() {
     e.preventDefault()
     if (!selectedKelasId || !selectedMapelId || !materi.trim() || !tanggal) {
       alert('Silakan lengkapi data Tanggal, Kelas, Mapel, dan Materi Pembelajaran!')
+      return
+    }
+
+    // Proteksi untuk Guru: Tidak boleh mengisi jurnal pada tanggal terlewat
+    if (!isOperator && tanggal < todayStr) {
+      alert('Anda tidak dapat mengisi jurnal agenda untuk tanggal yang sudah terlewat! Silakan hubungi Operator.')
       return
     }
 
@@ -307,7 +332,7 @@ export default function AgendaMengajarPage() {
         setSelectedKelasId('')
         setSelectedMapelId('')
         setAbsenSiswa('Nihil')
-        fetchJurnal(userEmail)
+        fetchJurnal(userEmail, todayStr)
       }
     } catch (err: any) {
       alert('Terjadi kesalahan: ' + err.message)
@@ -499,6 +524,7 @@ export default function AgendaMengajarPage() {
                     <input
                       type="date"
                       value={tanggal}
+                      max={!isOperator ? todayStr : undefined} // Guru dikunci maks hari ini
                       onChange={(e) => {
                         const val = e.target.value
                         setTanggal(val)
@@ -676,22 +702,34 @@ export default function AgendaMengajarPage() {
                 </div>
               </form>
 
-              {/* LIST KARTU & TABEL DATA JURNAL */}
+              {/* LIST KARTU & TABEL DATA JURNAL HARI INI */}
               <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
               }`}>
+                <div className="flex items-center justify-between pb-3 mb-1 border-b border-slate-700/30">
+                  <h3 className={`text-xs font-black uppercase flex items-center gap-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
+                    <span>📓</span> Jurnal Terisi Hari Ini ({todayStr})
+                  </h3>
+                  <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border ${
+                    jurnalList.length > 0 
+                      ? isDarkMode ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      : isDarkMode ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-amber-100 text-amber-800 border-amber-200'
+                  }`}>
+                    {jurnalList.length > 0 ? `✅ Sudah Terisi (${jurnalList.length})` : '⚠️ Belum Mengisi Jurnal'}
+                  </span>
+                </div>
                 
                 {/* 1. TAMPILAN MOBILE: KARTU AGENDA (md:hidden) */}
-                <div className="block md:hidden space-y-3">
+                <div className="block md:hidden space-y-3 pt-2">
                   {loading ? (
                     <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
                       Memuat data agenda...
                     </div>
                   ) : jurnalList.length === 0 ? (
                     <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
-                      Belum ada jurnal agenda tersimpan.
+                      Belum ada jurnal agenda tersimpan untuk hari ini.
                     </div>
                   ) : (
                     jurnalList.map((item, index) => (
@@ -745,7 +783,7 @@ export default function AgendaMengajarPage() {
                 </div>
 
                 {/* 2. TAMPILAN DESKTOP: TABEL HTML (hidden md:block) */}
-                <div className={`hidden md:block overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                <div className={`hidden md:block overflow-x-auto rounded-xl border mt-2 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                       <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -765,7 +803,7 @@ export default function AgendaMengajarPage() {
                         </tr>
                       ) : jurnalList.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada jurnal agenda tersimpan.</td>
+                          <td colSpan={7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada jurnal agenda tersimpan untuk hari ini.</td>
                         </tr>
                       ) : (
                         jurnalList.map((item, index) => (
@@ -809,7 +847,7 @@ export default function AgendaMengajarPage() {
             </div>
           )}
 
-          {/* TAB 2: REKAPITULASI */}
+          {/* TAB 2: REKAPITULASI & RIWAYAT */}
           {activeTab === 'rekap' && (
             <div className="flex flex-col space-y-4">
               
@@ -836,7 +874,7 @@ export default function AgendaMengajarPage() {
               </div>
 
               {/* FILTER BAR REKAP */}
-              <div className={`grid grid-cols-1 sm:grid-cols-4 gap-3 backdrop-blur-md border p-4 rounded-2xl shrink-0 shadow-xs ${
+              <div className={`grid grid-cols-1 sm:grid-cols-5 gap-3 backdrop-blur-md border p-4 rounded-2xl shrink-0 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
                   : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
@@ -871,6 +909,28 @@ export default function AgendaMengajarPage() {
                       <option key={m.id} value={m.id}>{m.nama}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`block text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER TANGGAL</label>
+                    {filterTanggal && (
+                      <button
+                        onClick={() => setFilterTanggal('')}
+                        className="text-[9px] text-indigo-500 hover:underline font-bold"
+                      >
+                        Tampilkan Semua
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="date"
+                    value={filterTanggal}
+                    onChange={(e) => setFilterTanggal(e.target.value)}
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                  />
                 </div>
 
                 <div>
@@ -917,7 +977,7 @@ export default function AgendaMengajarPage() {
                     </div>
                   ) : rekapList.length === 0 ? (
                     <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
-                      Tidak ada data jurnal ditemukan.
+                      Tidak ada data jurnal ditemukan {filterTanggal ? `pada tanggal ${filterTanggal}` : ''}.
                     </div>
                   ) : (
                     rekapList.map((item, index) => (
@@ -992,7 +1052,9 @@ export default function AgendaMengajarPage() {
                         </tr>
                       ) : rekapList.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Tidak ada data jurnal ditemukan.</td>
+                          <td colSpan={8} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                            Tidak ada data jurnal ditemukan {filterTanggal ? `pada tanggal ${filterTanggal}` : ''}.
+                          </td>
                         </tr>
                       ) : (
                         rekapList.map((item, index) => (

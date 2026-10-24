@@ -7,9 +7,18 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Inisialisasi Supabase Client yang aman dari Prerender/SSG Vercel
+const getSupabaseUrl = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  return url.replace(/['"]/g, '').trim()
+}
+
+const getSupabaseAnonKey = () => {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+  return key.replace(/['"]/g, '').trim()
+}
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface KelasOption {
   id: number
@@ -187,6 +196,8 @@ export default function MasterSiswaPage() {
     setNamaLengkap(siswa.nama_lengkap || '')
     setJenisKelamin(siswa.jenis_kelamin || 'L')
     setKelasId(siswa.kelas_id ? String(siswa.kelas_id) : '')
+    // Scroll otomatis ke form jika di layar HP
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleDelete = async (id: number) => {
@@ -214,7 +225,7 @@ export default function MasterSiswaPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
@@ -226,33 +237,33 @@ export default function MasterSiswaPage() {
         <img src="/logo-smp.jpg" alt="Watermark SMP Muna Mustofa" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+      <div className="relative z-10 flex flex-col h-full flex-1">
         
-        {/* TOPBAR HEADER */}
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
+        {/* TOPBAR HEADER - RESPONSIVE */}
+        <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                 isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
               }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Kelola Master Data Siswa</p>
+                <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Kelola Master Data Siswa</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`border text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 ${
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <div className={`hidden sm:flex border text-xs font-semibold px-3 py-1.5 rounded-full items-center gap-2 ${
               isDarkMode 
                 ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
                 : 'bg-emerald-100/80 border-emerald-300 text-emerald-800'
@@ -261,17 +272,17 @@ export default function MasterSiswaPage() {
               <span>Supabase Live</span>
             </div>
 
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+            <div className={`border text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+              <span className="max-w-[80px] sm:max-w-none truncate">{userDisplayName}</span>
+              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
-                Operator
+                Op
               </span>
             </div>
 
@@ -294,11 +305,11 @@ export default function MasterSiswaPage() {
           </div>
         </header>
 
-        {/* MAIN CONTENT AREA */}
-        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-4">
+        {/* MAIN CONTENT AREA - EXTRA BOTTOM PADDING UTK DOCK HP */}
+        <main className="max-w-6xl w-full mx-auto p-3 sm:p-4 flex-1 flex flex-col space-y-4 pb-28 sm:pb-16">
           
           {/* PANEL FORM INPUT */}
-          <form onSubmit={handleSubmit} className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs shrink-0 ${
+          <form onSubmit={handleSubmit} className={`backdrop-blur-md border rounded-2xl p-3.5 sm:p-4 shadow-xs shrink-0 ${
             isDarkMode 
               ? 'bg-slate-900/90 border-slate-800' 
               : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
@@ -366,19 +377,19 @@ export default function MasterSiswaPage() {
                 </select>
               </div>
 
-              <div className="md:col-span-2 flex gap-2">
+              <div className="md:col-span-2 flex gap-2 pt-1 sm:pt-0">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl font-extrabold text-xs transition shadow-xs cursor-pointer"
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 sm:py-2 rounded-xl font-extrabold text-xs transition shadow-xs cursor-pointer"
                 >
-                  {loading ? '...' : editingId ? 'Update' : '+ Simpan'}
+                  {loading ? '...' : editingId ? 'Update Data' : '+ Simpan Siswa'}
                 </button>
                 {editingId && (
                   <button
                     type="button"
                     onClick={resetForm}
-                    className={`px-2.5 border text-xs font-bold rounded-xl transition cursor-pointer ${
+                    className={`px-3 border text-xs font-bold rounded-xl transition cursor-pointer ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -390,15 +401,15 @@ export default function MasterSiswaPage() {
             </div>
           </form>
 
-          {/* PANEL TABEL REKAP SISWA */}
-          <div className={`backdrop-blur-md border rounded-2xl p-4 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
+          {/* PANEL DATA SISWA */}
+          <div className={`backdrop-blur-md border rounded-2xl p-3.5 sm:p-4 flex-1 flex flex-col shadow-xs overflow-hidden ${
             isDarkMode 
               ? 'bg-slate-900/90 border-slate-800' 
               : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
           }`}>
             
             {/* FILTER & SEARCH BAR */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 mb-3 shrink-0">
               <div className="sm:col-span-6 relative">
                 <input
                   type="text"
@@ -429,8 +440,97 @@ export default function MasterSiswaPage() {
               </div>
             </div>
 
-            {/* TABEL DATA SISWA */}
-            <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+            {/* 1. TAMPILAN MOBILE: CARD SYSTEM (KHUSUS HP - md:hidden) */}
+            <div className="block md:hidden space-y-2.5 overflow-y-auto pr-1 max-h-[60vh]">
+              {loading ? (
+                <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Memuat data siswa...
+                </div>
+              ) : filteredSiswa.length === 0 ? (
+                <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Tidak ada data siswa ditemukan.
+                </div>
+              ) : (
+                filteredSiswa.map((siswa, idx) => (
+                  <div 
+                    key={siswa.id} 
+                    className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2.5 ${
+                      isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                    }`}
+                  >
+                    {/* Header Card: Nama & Kelas */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${
+                          isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-900 border-indigo-200'
+                        }`}>
+                          #{idx + 1}
+                        </span>
+                        <h4 className={`font-extrabold text-xs sm:text-sm leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                          {siswa.nama_lengkap}
+                        </h4>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
+                        isDarkMode ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      }`}>
+                        {siswa.nama_kelas}
+                      </span>
+                    </div>
+
+                    {/* Middle Info: NISN & JK */}
+                    <div className={`flex items-center justify-between text-xs border-t border-b py-2 my-0.5 ${
+                      isDarkMode ? 'border-slate-700/80 text-slate-300' : 'border-slate-100 text-slate-700'
+                    }`}>
+                      <div>
+                        <span className={`text-[9px] font-extrabold uppercase block ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                          NISN
+                        </span>
+                        <span className="font-mono font-bold">{siswa.nisn || '-'}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-[9px] font-extrabold uppercase block ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                          Jenis Kelamin
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black inline-block mt-0.5 ${
+                          siswa.jenis_kelamin === 'P' 
+                            ? isDarkMode ? 'bg-pink-950/80 text-pink-300 border border-pink-800' : 'bg-pink-100 text-pink-700 border border-pink-200'
+                            : isDarkMode ? 'bg-blue-950/80 text-blue-300 border border-blue-800' : 'bg-blue-100 text-blue-700 border border-blue-200'
+                        }`}>
+                          {siswa.jenis_kelamin === 'P' ? 'Perempuan (P)' : 'Laki-laki (L)'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions: Tombol Edit & Hapus */}
+                    <div className="flex justify-end gap-2 pt-0.5">
+                      <button
+                        onClick={() => handleEdit(siswa)}
+                        className={`px-3 py-1.5 border text-xs font-bold rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                          isDarkMode 
+                            ? 'bg-amber-950/50 border-amber-800 text-amber-300 hover:bg-amber-900/60' 
+                            : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                        }`}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(siswa.id)}
+                        className={`px-3 py-1.5 border text-xs font-bold rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                          isDarkMode 
+                            ? 'bg-rose-950/50 border-rose-800 text-rose-300 hover:bg-rose-900/60' 
+                            : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                        }`}
+                      >
+                        🗑️ Hapus
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 2. TAMPILAN DESKTOP/TABLET: TABEL HTML (hidden md:block) */}
+            <div className={`hidden md:block flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
               <table className="w-full text-left border-collapse text-xs">
                 <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                   <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-400 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -445,11 +545,11 @@ export default function MasterSiswaPage() {
                 <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data siswa...</td>
+                      <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Memuat data siswa...</td>
                     </tr>
                   ) : filteredSiswa.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Tidak ada data siswa ditemukan.</td>
+                      <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Tidak ada data siswa ditemukan.</td>
                     </tr>
                   ) : (
                     filteredSiswa.map((siswa, idx) => (
@@ -495,7 +595,7 @@ export default function MasterSiswaPage() {
         </main>
 
         {/* FOOTER BADGE */}
-        <div className="pb-16 pt-1 flex justify-center shrink-0">
+        <div className="pb-20 sm:pb-16 pt-1 flex justify-center shrink-0">
           <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
             isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
           }`}>

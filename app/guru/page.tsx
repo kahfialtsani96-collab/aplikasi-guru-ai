@@ -7,9 +7,18 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper Inisialisasi Supabase Client yang aman dari error Prerender SSG Vercel
+const getSupabaseUrl = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  return url.replace(/['"]/g, '').trim()
+}
+
+const getSupabaseAnonKey = () => {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+  return key.replace(/['"]/g, '').trim()
+}
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 export default function DataGuruPage() {
   const router = useRouter()
@@ -148,6 +157,8 @@ export default function DataGuruPage() {
     setNip(guru.nip || '')
     setEmail(guru.email || '')
     setJabatan(guru.jabatan || 'Guru Mata Pelajaran')
+    // Scroll mulus ke atas jika di HP
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleDelete = async (id: number) => {
@@ -175,7 +186,7 @@ export default function DataGuruPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
@@ -191,19 +202,20 @@ export default function DataGuruPage() {
         />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full overflow-hidden">
-        {/* 2. HEADER TOPBAR GLASSMORPHISM */}
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
+      <div className="relative z-10 flex flex-col h-full flex-1">
+        
+        {/* 2. HEADER TOPBAR GLASSMORPHISM - RESPONSIVE */}
+        <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                 isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
               }`}>
                 <img
@@ -213,14 +225,14 @@ export default function DataGuruPage() {
                 />
               </div>
               <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Data Guru &amp; Tenaga Pendidik</p>
+                <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Data Guru &amp; Tenaga Pendidik</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`border text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 ${
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <div className={`hidden sm:flex border text-xs font-semibold px-3 py-1.5 rounded-full items-center gap-2 ${
               isDarkMode 
                 ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
                 : 'bg-emerald-100/80 border-emerald-300 text-emerald-800'
@@ -229,17 +241,17 @@ export default function DataGuruPage() {
               <span>Supabase Live</span>
             </div>
 
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+            <div className={`border text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+              <span className="max-w-[80px] sm:max-w-none truncate">{userDisplayName}</span>
+              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
-                Operator
+                Op
               </span>
             </div>
 
@@ -262,12 +274,12 @@ export default function DataGuruPage() {
           </div>
         </header>
 
-        {/* 3. MAIN CONTENT AREA (FIXED HEIGHT) */}
-        <main className="max-w-6xl w-full mx-auto p-4 sm:p-5 flex-1 flex flex-col min-h-0">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-1 min-h-0">
+        {/* 3. MAIN CONTENT AREA (EXTRA BOTTOM PADDING UTK NAVIGATION DOCK) */}
+        <main className="max-w-6xl w-full mx-auto p-3.5 sm:p-5 flex-1 flex flex-col pb-28 sm:pb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-1">
             
-            {/* FORM INPUT GURU (FIXED NON-SCROLLABLE) */}
-            <form onSubmit={handleSubmit} className={`p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs h-full ${
+            {/* FORM INPUT GURU */}
+            <form onSubmit={handleSubmit} className={`p-4 sm:p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs ${
               isDarkMode 
                 ? 'bg-slate-900/90 border-slate-800' 
                 : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
@@ -286,7 +298,7 @@ export default function DataGuruPage() {
                     type="text"
                     value={nip}
                     onChange={(e) => setNip(e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-mono font-medium focus:outline-none focus:border-indigo-600 ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-mono font-medium focus:outline-none focus:border-indigo-600 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                     placeholder="Nomor Induk Pegawai"
@@ -299,7 +311,7 @@ export default function DataGuruPage() {
                     type="text"
                     value={nama}
                     onChange={(e) => setNama(e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                     placeholder="Nama Lengkap Guru"
@@ -313,7 +325,7 @@ export default function DataGuruPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-medium focus:outline-none focus:border-indigo-600 ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-indigo-600 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                     placeholder="guru@smpmunamustofa.sch.id"
@@ -328,7 +340,7 @@ export default function DataGuruPage() {
                       type="text"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className={`w-full border rounded-xl px-3 py-1.5 text-xs font-mono font-bold focus:outline-none focus:border-indigo-600 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-emerald-800'
                       }`}
                       required
@@ -341,7 +353,7 @@ export default function DataGuruPage() {
                   <select
                     value={jabatan}
                     onChange={(e) => setJabatan(e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
@@ -353,11 +365,11 @@ export default function DataGuruPage() {
                 </div>
               </div>
 
-              <div className={`flex gap-2 pt-3 mt-2 border-t ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/50'}`}>
+              <div className={`flex gap-2 pt-3 mt-3 border-t ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/50'}`}>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl font-extrabold text-xs transition shadow-xs cursor-pointer"
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-extrabold text-xs transition shadow-xs cursor-pointer"
                 >
                   {loading ? 'Menyimpan...' : editingId ? 'Update Data' : '+ Simpan & Buat Akun'}
                 </button>
@@ -376,8 +388,8 @@ export default function DataGuruPage() {
               </div>
             </form>
 
-            {/* TABEL DAFTAR GURU (HANYA TABEL DI-SCROLL MANDIRI) */}
-            <div className={`lg:col-span-2 backdrop-blur-md border rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden ${
+            {/* PANEL DAFTAR GURU */}
+            <div className={`lg:col-span-2 backdrop-blur-md border rounded-2xl p-4 sm:p-5 flex flex-col shadow-xs h-full ${
               isDarkMode 
                 ? 'bg-slate-900/90 border-slate-800' 
                 : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
@@ -387,7 +399,78 @@ export default function DataGuruPage() {
                 <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Daftar Guru SMP Muna Mustofa</h3>
               </div>
 
-              <div className={`mt-3 flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+              {/* 1. TAMPILAN MOBILE: KARTU LIST (KHUSUS HP - lg:hidden) */}
+              <div className="block lg:hidden space-y-3 mt-3 overflow-y-auto max-h-[60vh] pr-1">
+                {guruList.length === 0 ? (
+                  <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Belum ada data guru terdaftar.
+                  </div>
+                ) : (
+                  guruList.map((g) => (
+                    <div 
+                      key={g.id} 
+                      className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2.5 ${
+                        isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                      }`}
+                    >
+                      {/* Header Card: Nama & Jabatan */}
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className={`font-extrabold text-xs sm:text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                          {g.nama_lengkap}
+                        </h4>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border whitespace-nowrap shrink-0 ${
+                          isDarkMode 
+                            ? 'bg-indigo-950 text-indigo-300 border-indigo-800' 
+                            : 'bg-indigo-100 text-indigo-900 border-indigo-200'
+                        }`}>
+                          {g.jabatan || 'Guru'}
+                        </span>
+                      </div>
+
+                      {/* Middle Info: NIP & Email */}
+                      <div className={`flex flex-col gap-1 text-xs border-t border-b py-2 my-0.5 ${
+                        isDarkMode ? 'border-slate-700/80 text-slate-300' : 'border-slate-100 text-slate-700'
+                      }`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-[9px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>NIP / NUPTK:</span>
+                          <span className="font-mono font-bold">{g.nip || '-'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-[9px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Email Login:</span>
+                          <span className="font-bold text-indigo-400 truncate max-w-[200px]">{g.email || '-'}</span>
+                        </div>
+                      </div>
+
+                      {/* Bottom Actions: Tombol Edit & Hapus */}
+                      <div className="flex justify-end gap-2 pt-0.5">
+                        <button
+                          onClick={() => handleEdit(g)}
+                          className={`px-3 py-1.5 border text-xs font-bold rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                            isDarkMode 
+                              ? 'bg-amber-950/50 border-amber-800 text-amber-300 hover:bg-amber-900/60' 
+                              : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                          }`}
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(g.id)}
+                          className={`px-3 py-1.5 border text-xs font-bold rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                            isDarkMode 
+                              ? 'bg-rose-950/50 border-rose-800 text-rose-300 hover:bg-rose-900/60' 
+                              : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                          }`}
+                        >
+                          🗑️ Hapus
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* 2. TAMPILAN DESKTOP: TABEL HTML (hidden lg:block) */}
+              <div className={`hidden lg:block mt-3 flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                     <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -401,7 +484,7 @@ export default function DataGuruPage() {
                   <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                     {guruList.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className={`py-12 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                        <td colSpan={5} className={`py-12 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                           Belum ada data guru terdaftar.
                         </td>
                       </tr>
@@ -448,7 +531,7 @@ export default function DataGuruPage() {
         </main>
 
         {/* FOOTER BADGE */}
-        <div className="pb-16 pt-1 flex justify-center shrink-0">
+        <div className="pb-20 sm:pb-16 pt-1 flex justify-center shrink-0">
           <div className={`border px-4 py-1 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
             isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
           }`}>
@@ -492,13 +575,6 @@ export default function DataGuruPage() {
           }`}>
             <span className="text-base">🎓</span>
             <span>Akademik</span>
-          </Link>
-
-          <Link href="/ai" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <span className="text-base">✨</span>
-            <span>AI Tools</span>
           </Link>
 
           <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
