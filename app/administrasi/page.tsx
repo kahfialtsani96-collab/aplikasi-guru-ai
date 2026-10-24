@@ -7,9 +7,18 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
+const getSupabaseUrl = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  return url.replace(/['"]/g, '').trim()
+}
+
+const getSupabaseAnonKey = () => {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+  return key.replace(/['"]/g, '').trim()
+}
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface SuratAdministrasi {
   id: number
@@ -394,7 +403,7 @@ export default function AdministrasiTUPage() {
 
   if (loadingRole || !isOperator) {
     return (
-      <div className={`h-screen p-8 flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-700'}`}>
+      <div className={`min-h-screen p-8 flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-700'}`}>
         <div className={`backdrop-blur-md border p-6 rounded-2xl text-center space-y-2 shadow-md ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
           <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Memeriksa Hak Akses Operator...</p>
         </div>
@@ -407,7 +416,7 @@ export default function AdministrasiTUPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
+      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 overflow-y-auto ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
@@ -419,36 +428,36 @@ export default function AdministrasiTUPage() {
         <img src="/logo-smp.jpg" alt="Watermark SMP Muna Mustofa" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full overflow-hidden">
+      <div className="relative z-10 flex flex-col min-h-screen">
         
         {/* HEADER TOPBAR */}
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
+        <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                 isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
               }`}>
                 <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Administrasi &amp; Persuratan TU</p>
+                <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
+                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Administrasi &amp; Persuratan TU</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <div className={`border text-xs font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
-              <span className={`text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
+              <span className={`text-[9px] sm:text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
               <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
                 isDarkMode ? 'bg-slate-900 text-indigo-300' : 'bg-slate-100 text-indigo-900'
               }`}>
@@ -466,14 +475,14 @@ export default function AdministrasiTUPage() {
               </select>
             </div>
 
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+            <div className={`border text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+              <span className="max-w-[80px] sm:max-w-none truncate">{userDisplayName}</span>
+              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
                 Operator
@@ -500,16 +509,16 @@ export default function AdministrasiTUPage() {
         </header>
 
         {/* MAIN CONTAINER */}
-        <main className="max-w-7xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 min-h-0">
+        <main className="max-w-7xl w-full mx-auto p-3.5 sm:p-4 flex-1 flex flex-col space-y-4 pb-28 sm:pb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
             
             {/* FORM INPUT SURAT */}
-            <form onSubmit={handleSubmit} className={`lg:col-span-5 p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs h-full overflow-hidden ${
+            <form onSubmit={handleSubmit} className={`lg:col-span-5 p-4 sm:p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs space-y-4 ${
               isDarkMode 
                 ? 'bg-slate-900/90 border-slate-800' 
                 : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
             }`}>
-              <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+              <div className="space-y-3">
                 <div className={`flex items-center gap-2 border-b pb-2 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
                   <span className="text-indigo-500 text-base">📑</span>
                   <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -619,7 +628,7 @@ export default function AdministrasiTUPage() {
                     </div>
                   </div>
                   <textarea
-                    rows={8}
+                    rows={6}
                     value={keterangan}
                     onChange={(e) => setKeterangan(e.target.value)}
                     placeholder="Tulis maksud singkat lalu klik 'Buat via AI' untuk merangkai narasi..."
@@ -647,7 +656,7 @@ export default function AdministrasiTUPage() {
                 </div>
               </div>
 
-              <div className={`flex gap-2 pt-2 mt-2 border-t shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/60'}`}>
+              <div className={`flex gap-2 pt-2 border-t shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/60'}`}>
                 <button
                   type="submit"
                   disabled={loading}
@@ -670,8 +679,8 @@ export default function AdministrasiTUPage() {
               </div>
             </form>
 
-            {/* TABEL ARSIP SURAT */}
-            <div className={`lg:col-span-7 backdrop-blur-md border rounded-2xl p-5 flex flex-col shadow-xs h-full overflow-hidden ${
+            {/* ARSIP SURAT: CARD LIST (MOBILE) & TABEL (DESKTOP) */}
+            <div className={`lg:col-span-7 backdrop-blur-md border rounded-2xl p-4 sm:p-5 flex flex-col shadow-xs ${
               isDarkMode 
                 ? 'bg-slate-900/90 border-slate-800' 
                 : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
@@ -706,13 +715,13 @@ export default function AdministrasiTUPage() {
                   </label>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="🔍 Cari No. / Penerima..."
-                    className={`border rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-indigo-600 w-40 ${
+                    className={`border rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-indigo-600 flex-1 sm:w-40 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   />
@@ -727,7 +736,71 @@ export default function AdministrasiTUPage() {
                 </div>
               </div>
 
-              <div className={`mt-3 flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+              {/* 1. MOBILE CARD VIEW (md:hidden) */}
+              <div className="block md:hidden mt-3 space-y-3">
+                {loading ? (
+                  <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                    Memuat arsip surat...
+                  </div>
+                ) : filteredSurat.length === 0 ? (
+                  <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                    Belum ada arsip surat tercatat di periode ini.
+                  </div>
+                ) : (
+                  filteredSurat.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2 ${
+                        isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-bold text-indigo-400">
+                          {s.nomor_surat}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                          isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                        }`}>
+                          {s.jenis_surat}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-1 border-t border-b py-2 my-0.5 border-slate-700/40">
+                        <span className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                          👤 Penerima: {s.penerima}
+                        </span>
+                        <p className={`text-[11px] font-medium line-clamp-3 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                          📖 {s.keterangan || '-'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                        <button
+                          onClick={() => handlePrintSurat(s)}
+                          className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-indigo-100"
+                        >
+                          🖨️ Cetak
+                        </button>
+                        <button
+                          onClick={() => handleEdit(s)}
+                          className="px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-amber-100"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(s.id)}
+                          className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
+                        >
+                          🗑️ Hapus
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* 2. DESKTOP TABEL HTML (hidden md:block) */}
+              <div className={`hidden md:block mt-3 overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                     <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
@@ -835,7 +908,7 @@ export default function AdministrasiTUPage() {
         )}
 
         {/* FOOTER BADGE */}
-        <div className="pb-16 pt-1 flex justify-center shrink-0">
+        <div className="pb-20 sm:pb-16 pt-2 flex justify-center shrink-0">
           <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
             isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
           }`}>
