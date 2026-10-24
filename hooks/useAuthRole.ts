@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Inisialisasi Supabase Client langsung seperti di app/page.tsx
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper fungsi instansiasi aman agar lolos build SSG Vercel
+function getSupabaseClient() {
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+  
+  const url = rawUrl.replace(/['"]/g, '').trim()
+  const key = rawKey.replace(/['"]/g, '').trim()
+
+  return createClient(url, key)
+}
 
 export interface AuthRoleState {
   role: 'operator' | 'guru' | null
@@ -22,6 +28,9 @@ export function useAuthRole(): AuthRoleState {
   useEffect(() => {
     async function checkRole() {
       try {
+        // Buat client Supabase di dalam useEffect
+        const supabase = getSupabaseClient()
+
         // 1. Ambil data user yang sedang login dari Supabase Auth
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || !user.email) {
