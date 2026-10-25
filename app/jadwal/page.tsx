@@ -58,9 +58,20 @@ interface Jadwal {
   mapel?: { nama_mapel: string; kode_mapel: string } | string
 }
 
+// Map Urutan Hari untuk Sorting Presisi
+const HARI_ORDER: Record<string, number> = {
+  'Senin': 1,
+  'Selasa': 2,
+  'Rabu': 3,
+  'Kamis': 4,
+  'Jumat': 5,
+  'Sabtu': 6,
+  'Minggu': 7,
+}
+
 export default function JadwalMengajarPage() {
   const router = useRouter()
-  const { isOperator, canAccessBimbingan } = useAuthRole()
+  const { isOperator, canAccessBimbingan, loading: loadingRole } = useAuthRole()
 
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -82,7 +93,7 @@ export default function JadwalMengajarPage() {
   const [guruList, setGuruList] = useState<GuruItem[]>([])
   const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
 
-  // State Form Input
+  // State Form Input (Khusus Operator)
   const [hari, setHari] = useState('Senin')
   const [jamMulai, setJamMulai] = useState<string>('1')
   const [jamSelesai, setJamSelesai] = useState<string>('1')
@@ -105,15 +116,18 @@ export default function JadwalMengajarPage() {
         const email = user.email || ''
         setUserEmail(email)
         setSelectedGuruEmail(email)
-        const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
+        const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'PENGGUNA'
         setUserDisplayName(nameFromMeta.toUpperCase())
 
         fetchMasterData()
         fetchJadwal(email, isOperator)
       }
     }
-    init()
-  }, [isOperator])
+
+    if (!loadingRole) {
+      init()
+    }
+  }, [isOperator, loadingRole])
 
   async function fetchMasterData() {
     const { data: dMapel } = await supabase.from('mapel').select('id, nama_mapel, kode_mapel').order('urutan', { ascending: true })
@@ -129,6 +143,7 @@ export default function JadwalMengajarPage() {
     if (dJam) setMasterJamList(dJam)
   }
 
+  // Fungsi Fetch & Sorting Rapi (Senin -> Minggu & Jam Terawal -> Akhir)
   async function fetchJadwal(emailParam?: string | null, operatorMode?: boolean) {
     setLoading(true)
     try {
@@ -145,15 +160,32 @@ export default function JadwalMengajarPage() {
           kelas:kelas_id(nama_kelas),
           mapel:mapel_id(nama_mapel, kode_mapel)
         `)
-        .order('id', { ascending: true })
 
+      // Guru biasa hanya mengambil jadwal miliknya
       if (!operatorMode && emailParam) {
         query = query.eq('guru_email', emailParam)
       }
 
       const { data, error } = await query
+
       if (!error && data) {
-        setJadwalList(data as any)
+        // Logika Sort Presisi: Urutkan berdasarkan Hari (Senin-Minggu) lalu Jam Ke-
+        const sortedData = (data as any[]).sort((a, b) => {
+          const orderHariA = HARI_ORDER[a.hari] || 99
+          const orderHariB = HARI_ORDER[b.hari] || 99
+
+          if (orderHariA !== orderHariB) {
+            return orderHariA - orderHariB
+          }
+
+          const jamA = Number(a.jam_ke || 0)
+          const jamB = Number(b.jam_ke || 0)
+          return jamA - jamB
+        })
+
+        setJadwalList(sortedData)
+      } else {
+        setJadwalList([])
       }
     } catch (err) {
       console.error('Error fetching jadwal:', err)
@@ -165,16 +197,18 @@ export default function JadwalMengajarPage() {
   // Opsi jam dinamis sesuai hari
   const jamOptionsForSelectedHari = masterJamList.filter((j) => j.hari === hari)
 
+  // Simpan Jadwal (Khusus Operator)
   const handleSimpan = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isOperator) return
+
     if (!selectedKelasId || !selectedMapelId) {
       alert('Silakan pilih Kelas dan Mata Pelajaran!')
       return
     }
 
-    const targetEmail = isOperator ? selectedGuruEmail : userEmail
-    if (!targetEmail) {
-      alert('Email guru pengampu wajib dipilih/diisi!')
+    if (!selectedGuruEmail) {
+      alert('Email guru pengampu wajib dipilih!')
       return
     }
 
@@ -194,16 +228,40 @@ export default function JadwalMengajarPage() {
       }
     }
 
-    // Validasi Bentrok Jadwal
-    const bentrok = jadwalList.find(
-      (j) =>
-        j.hari === hari &&
-        Number(j.jam_ke) === Number(jamMulai) &&
-        Number(typeof j.kelas_id === 'number' ? j.kelas_id : 0) === Number(selectedKelasId)
-    )
+    // Validasi Bentrok Jam Blok (Kelas & Guru)
+    const startInput = Number(jamMulai)
+    const endInput = Number(jamSelesai)
+
+    const bentrok = jadwalList.find((j) => {
+      if (j.hari !== hari) return false
+
+      let existingStart = Number(j.jam_ke || 1)
+      let existingEnd = existingStart
+
+      if (j.jam && j.jam.includes('s/d')) {
+        const match = j.jam.match(/Ke-(\d+)\s+s\/d\s+(\d+)/)
+        if (match) {
+          existingStart = Number(match[1])
+          existingEnd = Number(match[2])
+        }
+      }
+
+      const isTimeOverlap = startInput <= existingEnd && endInput >= existingStart
+      if (!isTimeOverlap) return false
+
+      const isSameKelas = Number(j.kelas_id) === Number(selectedKelasId)
+      const isSameGuru = j.guru_email === selectedGuruEmail
+
+      return isSameKelas || isSameGuru
+    })
 
     if (bentrok) {
-      alert(`BENTROK JADWAL! Kelas tersebut sudah terisi pada ${hari}, Jam Ke-${jamMulai}.`)
+      const isSameKelas = Number(bentrok.kelas_id) === Number(selectedKelasId)
+      if (isSameKelas) {
+        alert(`BENTROK KELAS! Kelas yang dipilih sudah memiliki jadwal mengajar pada ${hari} di jam tersebut.`)
+      } else {
+        alert(`BENTROK GURU! Guru yang dipilih (${selectedGuruEmail}) sudah mengajar di kelas lain pada ${hari} di jam tersebut.`)
+      }
       return
     }
 
@@ -218,7 +276,7 @@ export default function JadwalMengajarPage() {
           jam_ke: Number(jamMulai),
           kelas_id: Number(selectedKelasId),
           mapel_id: Number(selectedMapelId),
-          guru_email: targetEmail,
+          guru_email: selectedGuruEmail,
           kelas: selectedKelasObj?.nama_kelas || '',
           mapel: selectedMapelObj?.nama_mapel || '',
         },
@@ -237,7 +295,9 @@ export default function JadwalMengajarPage() {
     }
   }
 
+  // Hapus Jadwal (Khusus Operator)
   const handleDelete = async (id?: number) => {
+    if (!isOperator) return
     if (!id || !confirm('Yakin ingin menghapus jadwal mengajar ini?')) return
 
     try {
@@ -250,12 +310,23 @@ export default function JadwalMengajarPage() {
     }
   }
 
+  // Filter Data Rekap dengan Urutan Rapi
   const filteredRekapList = jadwalList.filter((item) => {
     const matchHari = !filterHari || item.hari === filterHari
     const matchKelas = !filterKelasId || Number(item.kelas_id) === Number(filterKelasId)
     const matchMapel = !filterMapelId || Number(item.mapel_id) === Number(filterMapelId)
     return matchHari && matchKelas && matchMapel
   })
+
+  if (loadingRole) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'}`}>
+        <div className={`p-6 rounded-2xl border text-center space-y-2 shadow-md ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
+          <p className="font-bold text-sm">Memuat Data Jadwal...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <motion.div
@@ -294,7 +365,9 @@ export default function JadwalMengajarPage() {
               </div>
               <div>
                 <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Penjadwalan KBM Terintegrasi</p>
+                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>
+                  {isOperator ? 'Kelola Jadwal KBM (Operator)' : 'Jadwal Mengajar Saya'}
+                </p>
               </div>
             </div>
           </div>
@@ -389,7 +462,7 @@ export default function JadwalMengajarPage() {
                       : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
-                <span>🕒</span> Input &amp; Kelola
+                <span>🕒</span> {isOperator ? 'Input & Kelola' : 'Jadwal Saya'}
               </button>
               <button
                 onClick={() => setActiveTab('rekap')}
@@ -413,19 +486,19 @@ export default function JadwalMengajarPage() {
             </button>
           </div>
 
-          {/* TAB 1: FORM INPUT & JADWAL SAYA */}
+          {/* TAB 1: FORM INPUT (KHUSUS OPERATOR) & JADWAL LIST */}
           {activeTab === 'kelola' && (
             <div className="flex flex-col space-y-4">
               
-              {/* FORM INPUT JADWAL */}
-              <form onSubmit={handleSimpan} className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs shrink-0 print:hidden ${
-                isDarkMode 
-                  ? 'bg-slate-900/90 border-slate-800' 
-                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
-              }`}>
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                  
-                  {isOperator && (
+              {/* FORM INPUT JADWAL HANYA MUNCUL UNTUK OPERATOR */}
+              {isOperator && (
+                <form onSubmit={handleSimpan} className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs shrink-0 print:hidden ${
+                  isDarkMode 
+                    ? 'bg-slate-900/90 border-slate-800' 
+                    : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+                }`}>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                    
                     <div className="sm:col-span-12 md:col-span-3">
                       <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
                         GURU PENGAMPU *
@@ -444,135 +517,134 @@ export default function JadwalMengajarPage() {
                         ))}
                       </select>
                     </div>
-                  )}
 
-                  <div className={isOperator ? 'sm:col-span-6 md:col-span-2' : 'sm:col-span-6 md:col-span-3'}>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
-                      HARI *
-                    </label>
-                    <select
-                      value={hari}
-                      onChange={(e) => {
-                        setHari(e.target.value)
-                        setJamMulai('1')
-                        setJamSelesai('1')
-                      }}
-                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                    >
-                      <option value="Senin">Senin</option>
-                      <option value="Selasa">Selasa</option>
-                      <option value="Rabu">Rabu</option>
-                      <option value="Kamis">Kamis</option>
-                      <option value="Sabtu">Sabtu</option>
-                      <option value="Minggu">Minggu</option>
-                    </select>
-                  </div>
-
-                  {/* OPSI JAM BLOK BERLANJUT */}
-                  <div className={isOperator ? 'sm:col-span-6 md:col-span-3' : 'sm:col-span-6 md:col-span-3'}>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
-                      JAM PELAJARAN *
-                    </label>
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="sm:col-span-6 md:col-span-2">
+                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                        HARI *
+                      </label>
                       <select
-                        value={jamMulai}
+                        value={hari}
                         onChange={(e) => {
-                          const val = e.target.value
-                          setJamMulai(val)
-                          if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
+                          setHari(e.target.value)
+                          setJamMulai('1')
+                          setJamSelesai('1')
                         }}
-                        className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                        className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                           isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                         }`}
                       >
-                        {jamOptionsForSelectedHari.length > 0 ? (
-                          jamOptionsForSelectedHari.map((j) => (
-                            <option key={j.id} value={j.jam_ke}>Jam Ke-{j.jam_ke}</option>
-                          ))
-                        ) : (
-                          [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
-                            <option key={num} value={num}>Jam Ke-{num}</option>
-                          ))
-                        )}
-                      </select>
-
-                      <select
-                        value={jamSelesai}
-                        onChange={(e) => setJamSelesai(e.target.value)}
-                        className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
-                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                        }`}
-                      >
-                        {jamOptionsForSelectedHari.length > 0 ? (
-                          jamOptionsForSelectedHari
-                            .filter((j) => j.jam_ke >= Number(jamMulai))
-                            .map((j) => (
-                              <option key={j.id} value={j.jam_ke}>s/d Ke-{j.jam_ke}</option>
-                            ))
-                        ) : (
-                          [1, 2, 3, 4, 5, 6, 7, 8]
-                            .filter((num) => num >= Number(jamMulai))
-                            .map((num) => (
-                              <option key={num} value={num}>s/d Ke-{num}</option>
-                            ))
-                        )}
+                        <option value="Senin">Senin</option>
+                        <option value="Selasa">Selasa</option>
+                        <option value="Rabu">Rabu</option>
+                        <option value="Kamis">Kamis</option>
+                        <option value="Sabtu">Sabtu</option>
+                        <option value="Minggu">Minggu</option>
                       </select>
                     </div>
+
+                    <div className="sm:col-span-6 md:col-span-3">
+                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                        JAM PELAJARAN *
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <select
+                          value={jamMulai}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setJamMulai(val)
+                            if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
+                          }}
+                          className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                            isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                          }`}
+                        >
+                          {jamOptionsForSelectedHari.length > 0 ? (
+                            jamOptionsForSelectedHari.map((j) => (
+                              <option key={j.id} value={j.jam_ke}>Jam Ke-{j.jam_ke}</option>
+                            ))
+                          ) : (
+                            [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                              <option key={num} value={num}>Jam Ke-{num}</option>
+                            ))
+                          )}
+                        </select>
+
+                        <select
+                          value={jamSelesai}
+                          onChange={(e) => setJamSelesai(e.target.value)}
+                          className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                            isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                          }`}
+                        >
+                          {jamOptionsForSelectedHari.length > 0 ? (
+                            jamOptionsForSelectedHari
+                              .filter((j) => j.jam_ke >= Number(jamMulai))
+                              .map((j) => (
+                                <option key={j.id} value={j.jam_ke}>s/d Ke-{j.jam_ke}</option>
+                              ))
+                          ) : (
+                            [1, 2, 3, 4, 5, 6, 7, 8]
+                              .filter((num) => num >= Number(jamMulai))
+                              .map((num) => (
+                                <option key={num} value={num}>s/d Ke-{num}</option>
+                              ))
+                          )}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-6 md:col-span-2">
+                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                        KELAS *
+                      </label>
+                      <select
+                        value={selectedKelasId}
+                        onChange={(e) => setSelectedKelasId(e.target.value)}
+                        className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                        required
+                      >
+                        <option value="">-- Pilih Kelas --</option>
+                        {kelasList.map((k) => (
+                          <option key={k.id} value={k.id}>{k.nama_kelas}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-6 md:col-span-2">
+                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                        MATA PELAJARAN *
+                      </label>
+                      <select
+                        value={selectedMapelId}
+                        onChange={(e) => setSelectedMapelId(e.target.value)}
+                        className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                        required
+                      >
+                        <option value="">-- Pilih Mapel --</option>
+                        {mapelList.map((m) => (
+                          <option key={m.id} value={m.id}>{m.nama_mapel} ({m.kode_mapel})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-12 md:col-span-1 pt-1 md:pt-0">
+                      <button
+                        type="submit"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 text-xs rounded-xl transition shadow-xs cursor-pointer"
+                      >
+                        + Simpan
+                      </button>
+                    </div>
+
                   </div>
+                </form>
+              )}
 
-                  <div className={isOperator ? 'sm:col-span-6 md:col-span-2' : 'sm:col-span-6 md:col-span-3'}>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
-                      KELAS *
-                    </label>
-                    <select
-                      value={selectedKelasId}
-                      onChange={(e) => setSelectedKelasId(e.target.value)}
-                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                      required
-                    >
-                      <option value="">-- Pilih Kelas --</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama_kelas}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className={isOperator ? 'sm:col-span-6 md:col-span-2' : 'sm:col-span-6 md:col-span-3'}>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
-                      MATA PELAJARAN *
-                    </label>
-                    <select
-                      value={selectedMapelId}
-                      onChange={(e) => setSelectedMapelId(e.target.value)}
-                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                      required
-                    >
-                      <option value="">-- Pilih Mapel --</option>
-                      {mapelList.map((m) => (
-                        <option key={m.id} value={m.id}>{m.nama_mapel} ({m.kode_mapel})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="sm:col-span-12 md:col-span-1 pt-1 md:pt-0">
-                    <button
-                      type="submit"
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 text-xs rounded-xl transition shadow-xs cursor-pointer"
-                    >
-                      + Simpan
-                    </button>
-                  </div>
-
-                </div>
-              </form>
-
-              {/* DAFTAR JADWAL SAYA */}
+              {/* DAFTAR JADWAL SAYA / DAFTAR SEMUA JADWAL */}
               <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs ${
                 isDarkMode 
                   ? 'bg-slate-900/90 border-slate-800' 
@@ -625,14 +697,16 @@ export default function JadwalMengajarPage() {
                             )}
                           </div>
 
-                          <div className="flex justify-end pt-0.5">
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
-                            >
-                              🗑️ Hapus Jadwal
-                            </button>
-                          </div>
+                          {isOperator && (
+                            <div className="flex justify-end pt-0.5">
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
+                              >
+                                🗑️ Hapus Jadwal
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )
                     })
@@ -649,17 +723,17 @@ export default function JadwalMengajarPage() {
                         <th className="py-2.5 px-3">KELAS</th>
                         <th className="py-2.5 px-3">MATA PELAJARAN</th>
                         {isOperator && <th className="py-2.5 px-3">GURU PENGAMPU</th>}
-                        <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
+                        {isOperator && <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>}
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Memuat data jadwal...</td>
+                          <td colSpan={isOperator ? 6 : 4} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Memuat data jadwal...</td>
                         </tr>
                       ) : jadwalList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Belum ada jadwal mengajar tersimpan.</td>
+                          <td colSpan={isOperator ? 6 : 4} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Belum ada jadwal mengajar tersimpan.</td>
                         </tr>
                       ) : (
                         jadwalList.map((item, index) => {
@@ -680,15 +754,17 @@ export default function JadwalMengajarPage() {
                               {isOperator && (
                                 <td className={`py-2 px-3 font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{item.guru_email}</td>
                               )}
-                              <td className="py-2 px-3 text-center print:hidden">
-                                <button
-                                  onClick={() => handleDelete(item.id)}
-                                  className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
-                                  title="Hapus Jadwal"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
+                              {isOperator && (
+                                <td className="py-2 px-3 text-center print:hidden">
+                                  <button
+                                    onClick={() => handleDelete(item.id)}
+                                    className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
+                                    title="Hapus Jadwal"
+                                  >
+                                    🗑️
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           )
                         })
@@ -811,14 +887,16 @@ export default function JadwalMengajarPage() {
                             </p>
                           </div>
 
-                          <div className="flex justify-end pt-0.5">
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
-                            >
-                              🗑️ Hapus
-                            </button>
-                          </div>
+                          {isOperator && (
+                            <div className="flex justify-end pt-0.5">
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
+                              >
+                                🗑️ Hapus
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )
                     })
@@ -835,17 +913,17 @@ export default function JadwalMengajarPage() {
                         <th className="py-2.5 px-3">JAM MENGAJAR</th>
                         <th className="py-2.5 px-3">KELAS</th>
                         <th className="py-2.5 px-3">MATA PELAJARAN</th>
-                        <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>
+                        {isOperator && <th className="py-2.5 px-3 text-center w-20 print:hidden">AKSI</th>}
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Memuat data jadwal...</td>
+                          <td colSpan={isOperator ? 6 : 5} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Memuat data jadwal...</td>
                         </tr>
                       ) : filteredRekapList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Tidak ada data jadwal ditemukan.</td>
+                          <td colSpan={isOperator ? 6 : 5} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Tidak ada data jadwal ditemukan.</td>
                         </tr>
                       ) : (
                         filteredRekapList.map((item, index) => {
@@ -864,15 +942,17 @@ export default function JadwalMengajarPage() {
                                 </span>
                               </td>
                               <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>{namaMapel || '-'}</td>
-                              <td className="py-2 px-3 text-center print:hidden">
-                                <button
-                                  onClick={() => handleDelete(item.id)}
-                                  className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
-                                  title="Hapus Jadwal"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
+                              {isOperator && (
+                                <td className="py-2 px-3 text-center print:hidden">
+                                  <button
+                                    onClick={() => handleDelete(item.id)}
+                                    className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
+                                    title="Hapus Jadwal"
+                                  >
+                                    🗑️
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           )
                         })
