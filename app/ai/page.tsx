@@ -4,14 +4,25 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw' // UNTUK MERENDER TABEL HTML DENGAN BENAR
+import rehypeRaw from 'rehype-raw'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabase = createClient(supabaseUrl.replace(/['"]/g, '').trim(), supabaseAnonKey.replace(/['"]/g, '').trim())
+
+interface MapelItem {
+  id: number
+  nama_mapel: string
+  kode_mapel: string
+}
+
+interface KelasItem {
+  id: number
+  nama_kelas: string
+}
 
 export default function AiToolsPage() {
   const { isOperator } = useAuthRole()
@@ -20,7 +31,6 @@ export default function AiToolsPage() {
   const [activeTabSection, setActiveTabSection] = useState<'admin' | 'modul'>('admin')
   const [selectedDoc, setSelectedDoc] = useState('cp')
 
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
 
   useEffect(() => {
@@ -29,6 +39,10 @@ export default function AiToolsPage() {
       setIsDarkMode(true)
     }
   }, [])
+
+  // MASTER DATA SUPABASE
+  const [mapelList, setMapelList] = useState<MapelItem[]>([])
+  const [kelasList, setKelasList] = useState<KelasItem[]>([])
 
   const [showKopAccordion, setShowKopAccordion] = useState(false)
   const [pakaiKop, setPakaiKop] = useState(true)
@@ -77,11 +91,11 @@ export default function AiToolsPage() {
     alokasiTotal: '72 JP / Tahun',
     jpMinggu: '2 JP/Minggu',
     modelPembelajaran: 'Discovery Learning',
-    namaGuru: '',
+    namaGuru: 'Muzaini Al Kahfi',
     nipGuru: '-',
     kotaTtd: 'Gisting',
     namaKepala: 'SULASTRI, S.Pd., Gr.',
-    nipKepala: 'NUPTK. 6337763664131233',
+    nipKepala: '6337763664131233',
     cpRasional: 'Kurikulum Berbasis Cinta (KBC) mengintegrasikan Panca Cinta Kemenag & 10 Nilai PPRA.',
     cpPerElemen: 'Menganalisis struktur dan fungsi organ tubuh makhluk hidup serta hubungannya dengan adaptasi lingkungan.'
   })
@@ -101,24 +115,72 @@ export default function AiToolsPage() {
     mapel: 'IPA',
     faseKelas: 'Fase D / Kelas VII',
     tahunPelajaran: '2026/2027',
-    namaGuru: '',
+    namaGuru: 'Muzaini Al Kahfi',
     nipGuru: '-',
     kotaTtd: 'Gisting',
     namaKepala: 'SULASTRI, S.Pd., Gr.',
-    nipKepala: 'NUPTK. 6337763664131233'
+    nipKepala: '6337763664131233'
   })
 
   useEffect(() => {
-    async function loadActiveUser() {
+    async function initData() {
+      // 1. PENCARIAN NAMA GURU RESMI SUPABASE
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Muzaini Al Kahfi'
+        let fullName = user.user_metadata?.full_name || user.user_metadata?.nama_guru
+
+        if (!fullName && user.email) {
+          const { data: dataGuru } = await supabase
+            .from('guru')
+            .select('nama_guru')
+            .eq('email', user.email)
+            .maybeSingle()
+
+          if (dataGuru?.nama_guru) {
+            fullName = dataGuru.nama_guru
+          }
+        }
+
+        if (!fullName || fullName.includes('@') || fullName.includes('.')) {
+          fullName = 'Muzaini Al Kahfi'
+        }
+
         setAdminForm(prev => ({ ...prev, namaGuru: fullName }))
         setModulForm(prev => ({ ...prev, namaGuru: fullName }))
       }
+
+      // 2. LOAD MASTER MAPEL & KELAS SUPABASE
+      const { data: dMapel } = await supabase.from('mapel').select('id, nama_mapel, kode_mapel').order('urutan', { ascending: true })
+      if (dMapel && dMapel.length > 0) {
+        setMapelList(dMapel)
+        setFormData(prev => ({ ...prev, mapel: dMapel[0].nama_mapel }))
+        setAdminForm(prev => ({ ...prev, mapel: dMapel[0].nama_mapel }))
+        setModulForm(prev => ({ ...prev, mapel: dMapel[0].nama_mapel }))
+      }
+
+      const { data: dKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
+      if (dKelas && dKelas.length > 0) {
+        setKelasList(dKelas)
+        const initialFaseKelas = `Fase D / ${dKelas[0].nama_kelas}`
+        setFormData(prev => ({ ...prev, faseKelas: initialFaseKelas }))
+        setAdminForm(prev => ({ ...prev, faseKelas: initialFaseKelas }))
+        setModulForm(prev => ({ ...prev, faseKelas: initialFaseKelas }))
+      }
     }
-    loadActiveUser()
+    initData()
   }, [])
+
+  const handleMapelChange = (val: string) => {
+    setFormData(prev => ({ ...prev, mapel: val }))
+    setAdminForm(prev => ({ ...prev, mapel: val }))
+    setModulForm(prev => ({ ...prev, mapel: val }))
+  }
+
+  const handleFaseKelasChange = (val: string) => {
+    setFormData(prev => ({ ...prev, faseKelas: val }))
+    setAdminForm(prev => ({ ...prev, faseKelas: val }))
+    setModulForm(prev => ({ ...prev, faseKelas: val }))
+  }
 
   const aiToolsConfig: Record<string, {
     title: string
@@ -283,8 +345,8 @@ export default function AiToolsPage() {
             tool: currentConfig?.title || 'Asisten Guru AI',
             activeTool,
             selectedDoc: doc.id,
-            mapel: adminForm.mapel || 'IPA',
-            faseKelas: adminForm.faseKelas || 'Fase D / Kelas VII',
+            mapel: formData.mapel,
+            faseKelas: formData.faseKelas,
             materiTopik: adminForm.cpPerElemen || modulForm.rumusanTp,
             spesifikData: formData,
             tanpaKisiKisi: true
@@ -348,7 +410,6 @@ export default function AiToolsPage() {
     }
   }
 
-  // CETAK PDF DENGAN ATURAN TABEL PENGESAHAN DINGIN TANPA BORDER
   const handlePrintPDF = () => {
     const resultElement = document.getElementById('ai-document-result')
     if (!resultElement) return
@@ -417,7 +478,6 @@ export default function AiToolsPage() {
               strong, b { 
                 font-weight: bold; 
               }
-              /* MENYHILANGKAN BORDER UNTUK TABEL LEMBAR PENGESAHAN */
               table.ttd-table, 
               table.ttd-table td, 
               table.ttd-table tr,
@@ -469,8 +529,6 @@ export default function AiToolsPage() {
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
-      
-      {/* 1. FIXED BACKGROUND WATERMARK LOGO SCHOOL */}
       <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
         isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
       }`}>
@@ -482,7 +540,6 @@ export default function AiToolsPage() {
       </div>
 
       <div className="relative z-10">
-        {/* 2. HEADER TOPBAR GLASSMORPHISM */}
         <header className={`border-b px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-xs transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
@@ -520,7 +577,6 @@ export default function AiToolsPage() {
           </div>
         </header>
 
-        {/* 3. TOOL NAVIGATOR */}
         <div className={`border-b px-6 py-3 overflow-x-auto custom-scrollbar transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-100/80 border-slate-300 backdrop-blur-md'
         }`}>
@@ -544,10 +600,7 @@ export default function AiToolsPage() {
           </div>
         </div>
 
-        {/* 4. MAIN CONTAINER */}
         <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
-
-          {/* DYNAMIC HERO BANNER */}
           <div className={`${currentToolData.bgBanner} rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl relative overflow-hidden text-white border transition-all duration-300`}>
             <div className="space-y-3 max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-amber-400 text-slate-950 text-[11px] font-black uppercase px-3 py-1 rounded-full shadow-md">
@@ -566,7 +619,6 @@ export default function AiToolsPage() {
             </button>
           </div>
 
-          {/* FORM SETUP KOP SEKOLAH MODE ACCORDION */}
           {activeTool !== 'chatbot' && (
             <div className={`backdrop-blur-md border rounded-2xl p-4 transition-all shadow-xs ${
               isDarkMode 
@@ -583,7 +635,7 @@ export default function AiToolsPage() {
                   <span>🏫</span>
                   <span>Pengaturan Data Kop Surat Sekolah ({kopSekolah.namaSekolah})</span>
                 </div>
-                <span>{showKopAccordion ? '🔼 Sembunyikan' : '🔽 Ubah Data Kop Surat'}</span>
+                <span>{showKopAccordion ? 'ium Sembunyikan' : '🔽 Ubah Data Kop Surat'}</span>
               </button>
 
               {showKopAccordion && (
@@ -639,7 +691,6 @@ export default function AiToolsPage() {
             </div>
           )}
 
-          {/* DYNAMIC FORM PARAMETER AI */}
           <div className={`backdrop-blur-md border rounded-2xl p-6 space-y-4 shadow-xs ${
             isDarkMode 
               ? 'bg-slate-900/90 border-slate-800' 
@@ -649,20 +700,60 @@ export default function AiToolsPage() {
               isDarkMode ? 'text-white border-slate-800' : 'text-slate-900 border-indigo-200/80'
             }`}>Parameter Input AI</h3>
 
-            {/* KOMPONEN INPUT UMUM */}
             {activeTool !== 'kbc' && activeTool !== 'chatbot' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-4">
                 <div>
                   <label className={`block font-bold mb-1.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Mata Pelajaran / Bidang Studi</label>
-                  <input type="text" value={formData.mapel} onChange={(e) => setFormData({ ...formData, mapel: e.target.value })} className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`} />
+                  {mapelList.length > 0 ? (
+                    <select
+                      value={formData.mapel}
+                      onChange={(e) => handleMapelChange(e.target.value)}
+                      className={`w-full border rounded-xl px-3.5 py-2.5 font-bold cursor-pointer focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      {mapelList.map((m) => (
+                        <option key={m.id} value={m.nama_mapel}>{m.nama_mapel} ({m.kode_mapel})</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData.mapel}
+                      onChange={(e) => handleMapelChange(e.target.value)}
+                      placeholder="Contoh: IPA"
+                      className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  )}
                 </div>
+
                 <div>
-                  <label className={`block font-bold mb-1.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Fase / Kelas (Contoh: Fase D / Kelas VII)</label>
-                  <input type="text" value={formData.faseKelas} onChange={(e) => setFormData({ ...formData, faseKelas: e.target.value })} className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`} />
+                  <label className={`block font-bold mb-1.5 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Fase / Kelas</label>
+                  {kelasList.length > 0 ? (
+                    <select
+                      value={formData.faseKelas}
+                      onChange={(e) => handleFaseKelasChange(e.target.value)}
+                      className={`w-full border rounded-xl px-3.5 py-2.5 font-bold cursor-pointer focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      {kelasList.map((k) => (
+                        <option key={k.id} value={`Fase D / ${k.nama_kelas}`}>Fase D / {k.nama_kelas}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData.faseKelas}
+                      onChange={(e) => handleFaseKelasChange(e.target.value)}
+                      placeholder="Contoh: Fase D / Kelas VII"
+                      className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -697,15 +788,35 @@ export default function AiToolsPage() {
                       </div>
                       <div>
                         <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Mata Pelajaran</label>
-                        <input type="text" value={adminForm.mapel} onChange={(e)=>setAdminForm({...adminForm, mapel:e.target.value})} className={`w-full border rounded-xl p-2.5 font-medium ${
-                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                        }`} />
+                        {mapelList.length > 0 ? (
+                          <select value={adminForm.mapel} onChange={(e)=>handleMapelChange(e.target.value)} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                            isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                          }`}>
+                            {mapelList.map((m) => (
+                              <option key={m.id} value={m.nama_mapel}>{m.nama_mapel}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input type="text" value={adminForm.mapel} onChange={(e)=>handleMapelChange(e.target.value)} className={`w-full border rounded-xl p-2.5 font-medium ${
+                            isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                          }`} />
+                        )}
                       </div>
                       <div>
                         <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>Fase / Kelas</label>
-                        <input type="text" value={adminForm.faseKelas} onChange={(e)=>setAdminForm({...adminForm, faseKelas:e.target.value})} className={`w-full border rounded-xl p-2.5 font-medium ${
-                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                        }`} />
+                        {kelasList.length > 0 ? (
+                          <select value={adminForm.faseKelas} onChange={(e)=>handleFaseKelasChange(e.target.value)} className={`w-full border rounded-xl p-2.5 font-bold cursor-pointer ${
+                            isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                          }`}>
+                            {kelasList.map((k) => (
+                              <option key={k.id} value={`Fase D / ${k.nama_kelas}`}>Fase D / {k.nama_kelas}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input type="text" value={adminForm.faseKelas} onChange={(e)=>handleFaseKelasChange(e.target.value)} className={`w-full border rounded-xl p-2.5 font-medium ${
+                            isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                          }`} />
+                        )}
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -730,7 +841,7 @@ export default function AiToolsPage() {
                         }`} />
                       </div>
                       <div>
-                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>NIP / NUPTK Kepala Sekolah</label>
+                        <label className={`block font-bold mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>NUPTK Kepala Sekolah</label>
                         <input type="text" value={adminForm.nipKepala} onChange={(e)=>setAdminForm({...adminForm, nipKepala:e.target.value})} className={`w-full border rounded-xl p-2.5 font-mono font-medium ${
                           isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'
                         }`} />
@@ -969,7 +1080,6 @@ export default function AiToolsPage() {
             )}
           </div>
 
-          {/* AREA OUTPUT HASIL GENERASI AI DENGAN REHYPE RAW ENABLED */}
           <div className={`backdrop-blur-md border rounded-2xl p-6 space-y-6 min-h-[400px] shadow-xs ${
             isDarkMode 
               ? 'bg-slate-900/90 border-slate-800' 
@@ -983,7 +1093,6 @@ export default function AiToolsPage() {
                 <h4 className={`font-extrabold text-base uppercase ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Hasil Output - {currentToolData.title}</h4>
               </div>
 
-              {/* SAKELAR CENTANG KOP SEKOLAH & TOMBOL CETAK */}
               <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                 {activeTool !== 'chatbot' && (
                   <label className={`flex items-center gap-2 text-xs font-bold cursor-pointer px-3 py-2 rounded-xl border shadow-xs ${
@@ -1042,7 +1151,6 @@ export default function AiToolsPage() {
             )}
           </div>
 
-          {/* BADGE COPYRIGHT FOOTER */}
           <div className="pt-8 pb-4 flex justify-center">
             <div className={`border px-6 py-2.5 rounded-full text-center text-xs font-medium shadow-xs transition-colors duration-300 ${
               isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100 border-slate-300 text-slate-700'
@@ -1052,11 +1160,9 @@ export default function AiToolsPage() {
               <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
             </div>
           </div>
-
         </main>
       </div>
 
-      {/* 5. BOTTOM NAVIGATION DOCK */}
       <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
       }`}>
