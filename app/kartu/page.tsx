@@ -19,10 +19,12 @@ interface KelasOption {
 }
 
 interface ItemKartu {
-  id: number
+  id: number | string
   nama: string
   nomorId: string
   subInfo: string
+  nomorUjian?: string
+  customField?: string
   isKepalaSekolah?: boolean
   fotoUrl?: string
   tipe: 'siswa' | 'guru'
@@ -33,7 +35,6 @@ export default function CetakKartuPage() {
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const { isOperator } = useAuthRole()
 
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
 
   useEffect(() => {
@@ -43,27 +44,38 @@ export default function CetakKartuPage() {
     }
   }, [])
 
+  // STATE JENIS KARTU & UJIAN
   const [jenisKartu, setJenisKartu] = useState<JenisKartu>('pelajar')
   const [namaUjian, setNamaUjian] = useState('ASESMEN SUMATIF AKHIR SEMESTER (SAS)')
-  
-  // Opsi Pengaturan Cetak Terpisah
+  const [prefixNoUjian, setPrefixNoUjian] = useState('2627-07-')
+
+  // DATA KEPALA SEKOLAH DARI DATABASE SUPABASE
+  const [kepsekInfo, setKepsekInfo] = useState({
+    nama: 'SULASTRI, S.Pd., Gr.',
+    nuptk: '6337763664131233'
+  })
+
+  // OPSI PENGATURAN CETAK
   const [includeBackSide, setIncludeBackSide] = useState(true)
   const [includeDigitalSignature, setIncludeDigitalSignature] = useState(true)
   const [includeStamp, setIncludeStamp] = useState(true)
 
+  // DATA KELAS & KARTU
   const [daftarKelas, setDaftarKelas] = useState<KelasOption[]>([])
   const [selectedKelasId, setSelectedKelasId] = useState<number | ''>('')
   const [selectedKelasNama, setSelectedKelasNama] = useState('')
-  
+
   const [cardItems, setCardItems] = useState<ItemKartu[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingKelas, setLoadingKelas] = useState(true)
 
-  // State Modal Detail & Tab View (Depan / Belakang)
+  // STATE MODAL DETAIL & EDIT
   const [selectedModalItem, setSelectedModalItem] = useState<ItemKartu | null>(null)
   const [modalActiveTab, setModalActiveTab] = useState<'front' | 'back'>('front')
+  const [editingItem, setEditingItem] = useState<ItemKartu | null>(null)
 
+  // CHECK AUTH USER
   useEffect(() => {
     async function checkAuthAndUser() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -80,7 +92,32 @@ export default function CetakKartuPage() {
     checkAuthAndUser()
   }, [router])
 
-  // Fetch Daftar Kelas
+  // FETCH DATA KEPALA SEKOLAH DARI DATABASE SUPABASE
+  useEffect(() => {
+    async function fetchKepsekFromDB() {
+      try {
+        const { data, error } = await supabase
+          .from('guru')
+          .select('nama_lengkap, nip, jabatan')
+          .or('jabatan.ilike.%kepala sekolah%,nama_lengkap.ilike.%sulastri%')
+          .limit(1)
+          .maybeSingle()
+
+        if (!error && data) {
+          const cleanNuptk = data.nip && data.nip !== 'EMPTY' && data.nip !== 'NULL' ? data.nip : '-'
+          setKepsekInfo({
+            nama: data.nama_lengkap?.toUpperCase() || 'SULASTRI, S.Pd., Gr.',
+            nuptk: cleanNuptk
+          })
+        }
+      } catch (err) {
+        console.error('Error fetching kepsek from DB:', err)
+      }
+    }
+    fetchKepsekFromDB()
+  }, [])
+
+  // FETCH DAFTAR KELAS
   useEffect(() => {
     async function fetchKelasFromDB() {
       setLoadingKelas(true)
@@ -102,7 +139,7 @@ export default function CetakKartuPage() {
     fetchKelasFromDB()
   }, [])
 
-  // Dynamic Fetching berdasarkan Jenis Kartu
+  // FETCH DATA KARTU DINAMIS (GURU / SISWA)
   useEffect(() => {
     async function loadCardData() {
       setLoading(true)
@@ -143,13 +180,18 @@ export default function CetakKartuPage() {
 
           if (!error && data) {
             const cleanKelas = selectedKelasNama.replace(/^kelas\s+/i, '')
-            const mapped: ItemKartu[] = data.map((s: any) => ({
-              id: s.id,
-              nama: s.nama_lengkap,
-              nomorId: s.nisn || '-',
-              subInfo: cleanKelas,
-              tipe: 'siswa'
-            }))
+            const mapped: ItemKartu[] = data.map((s: any, idx: number) => {
+              const noUrut = String(idx + 1).padStart(3, '0')
+              return {
+                id: s.id,
+                nama: s.nama_lengkap,
+                nomorId: s.nisn || '-',
+                subInfo: cleanKelas,
+                nomorUjian: jenisKartu === 'ujian' ? `${prefixNoUjian}${noUrut}` : undefined,
+                customField: jenisKartu === 'ujian' ? 'Ruang 01 / Sesi 1' : undefined,
+                tipe: 'siswa'
+              }
+            })
             setCardItems(mapped)
           }
         }
@@ -161,7 +203,7 @@ export default function CetakKartuPage() {
     }
 
     loadCardData()
-  }, [jenisKartu, selectedKelasId, selectedKelasNama])
+  }, [jenisKartu, selectedKelasId, selectedKelasNama, prefixNoUjian])
 
   const handleKelasChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
@@ -176,21 +218,150 @@ export default function CetakKartuPage() {
     if (foundKelas) setSelectedKelasNama(foundKelas.nama_kelas)
   }
 
+  // HANDLER EDIT & TAMBAH KARTU
+  const handleSaveEdit = (updatedItem: ItemKartu) => {
+    setCardItems((prev) =>
+      prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+    )
+    setEditingItem(null)
+  }
+
+  const handleAddCustomCard = () => {
+    const newId = `custom-${Date.now()}`
+    const noUrut = String(cardItems.length + 1).padStart(3, '0')
+    const newItem: ItemKartu = {
+      id: newId,
+      nama: 'NAMA PESERTA BARU',
+      nomorId: '1234567890',
+      subInfo: selectedKelasNama ? selectedKelasNama.replace(/^kelas\s+/i, '') : 'VII-A',
+      nomorUjian: jenisKartu === 'ujian' ? `${prefixNoUjian}${noUrut}` : undefined,
+      customField: jenisKartu === 'ujian' ? 'Ruang 01 / Sesi 1' : undefined,
+      tipe: jenisKartu === 'guru' ? 'guru' : 'siswa'
+    }
+    setCardItems((prev) => [newItem, ...prev])
+    setEditingItem(newItem)
+  }
+
   const filteredItems = cardItems.filter(
     (item) =>
       item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.nomorId.includes(searchQuery)
+      item.nomorId.includes(searchQuery) ||
+      (item.nomorUjian && item.nomorUjian.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
-  // PRINT GENERATOR BERDASARKAN OPSI DUPLEX, TTD, DAN STEMPEL
+  // EXPORT WORD (.DOC)
+  const handleExportWord = (targetList: ItemKartu[] = filteredItems) => {
+    if (targetList.length === 0) return
+
+    const cardsHtml = targetList.map((item, index) => {
+      const noUrut = String(index + 1).padStart(3, '0')
+      const noUjianFinal = item.nomorUjian || `${prefixNoUjian}${noUrut}`
+
+      return `
+        <td style="width: 8.5cm; height: 5.4cm; border: 1.5pt solid ${jenisKartu === 'guru' ? '#1e3a8a' : '#065f46'}; padding: 4pt; vertical-align: top; background: #ffffff;">
+          <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">
+            <tr style="border-bottom: 1pt solid ${jenisKartu === 'guru' ? '#1e3a8a' : '#065f46'};">
+              <td style="padding-bottom: 2pt;">
+                <b style="font-size: 8.5pt; color: ${jenisKartu === 'guru' ? '#1e3a8a' : '#065f46'};">SMP MUNA MUSTOFA</b><br/>
+                <span style="font-size: 6pt; color: ${jenisKartu === 'guru' ? '#2563eb' : '#047857'}; font-weight: bold;">
+                  ${jenisKartu === 'guru' ? 'KTA PTK / PEGAWAI' : jenisKartu === 'ujian' ? namaUjian.toUpperCase() : 'KARTU TANDA PELAJAR'}
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top: 4pt;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="width: 1.8cm; height: 2.3cm; border: 1pt solid #94a3b8; text-align: center; font-size: 6pt; color: #64748b; background: #f1f5f9; font-weight: bold;">
+                      FOTO
+                    </td>
+                    <td style="padding-left: 5pt; vertical-align: top; font-size: 6.5pt; color: #0f172a;">
+                      <span style="font-size: 5pt; color: #64748b; font-weight: bold;">NAMA:</span><br/>
+                      <b style="font-size: 7.5pt;">${item.nama}</b><br/>
+                      <table style="width: 100%; margin-top: 2pt; font-size: 6.5pt;">
+                        <tr><td style="width: 1.4cm; color: #475569; font-weight: bold;">${jenisKartu === 'guru' ? 'NIP' : 'NISN'}</td><td>: <b>${item.nomorId}</b></td></tr>
+                        <tr><td style="color: #475569; font-weight: bold;">${jenisKartu === 'guru' ? 'JABATAN' : 'KELAS'}</td><td>: <b>${item.subInfo}</b></td></tr>
+                        ${jenisKartu === 'ujian' ? `<tr><td style="color: #047857; font-weight: bold;">NO. UJIAN</td><td>: <b style="color: #047857;">${noUjianFinal}</b></td></tr>` : ''}
+                        ${jenisKartu === 'ujian' && item.customField ? `<tr><td style="color: #475569; font-weight: bold;">RUANG/SESI</td><td>: <b>${item.customField}</b></td></tr>` : ''}
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            ${
+              jenisKartu === 'ujian'
+                ? `
+                <tr style="border-top: 1pt dashed #a7f3d0;">
+                  <td style="padding-top: 3pt;">
+                    <table style="width: 100%;">
+                      <tr>
+                        <td style="width: 45%; vertical-align: bottom;">
+                          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId}" width="28" height="28" /><br/>
+                          <span style="font-size: 4.5pt; font-weight: bold; color: #065f46;">Verifikasi Peserta Ujian</span>
+                        </td>
+                        <td style="width: 55%; text-align: right; vertical-align: bottom; font-size: 4.5pt; color: #0f172a;">
+                          Kepala Sekolah,<br/><br/>
+                          <b><u>${kepsekInfo.nama}</u></b><br/>
+                          NUPTK. ${kepsekInfo.nuptk}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              `
+                : ''
+            }
+          </table>
+        </td>
+      `
+    })
+
+    let tableRowsHtml = ''
+    for (let i = 0; i < cardsHtml.length; i += 2) {
+      tableRowsHtml += `<tr>${cardsHtml[i]}${cardsHtml[i + 1] || '<td style="width: 8.5cm;"></td>'}</tr>`
+    }
+
+    const fileContent = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <meta charset='utf-8'>
+          <title>Kartu SMP Muna Mustofa</title>
+          <style>
+            @page { size: A4 portrait; margin: 1cm; }
+            table { border-collapse: separate; border-spacing: 0.4cm 0.4cm; }
+          </style>
+        </head>
+        <body>
+          <table>
+            ${tableRowsHtml}
+          </table>
+        </body>
+      </html>
+    `
+
+    const blob = new Blob(['\ufeff', fileContent], { type: 'application/msword' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Kartu_${jenisKartu}_${new Date().toISOString().slice(0, 10)}.doc`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  // PRINT GENERATOR (PDF PRINT)
   const handlePrint = (targetList: ItemKartu[] = filteredItems) => {
     if (targetList.length === 0) return
 
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    const cardsHtml = targetList.map((item) => {
-      // 1. SISI DEPAN
+    const cardsHtml = targetList.map((item, index) => {
+      const noUrut = String(index + 1).padStart(3, '0')
+      const noUjianFinal = item.nomorUjian || `${prefixNoUjian}${noUrut}`
+
+      // SISI DEPAN
       let frontCardHtml = ''
       if (jenisKartu === 'ujian') {
         frontCardHtml = `
@@ -207,17 +378,34 @@ export default function CetakKartuPage() {
               <div class="details">
                 <p class="label">NAMA PESERTA</p>
                 <p class="value-name">${item.nama}</p>
-                <div class="info-row"><span class="info-label">NISN</span><span class="info-val">: ${item.nomorId}</span></div>
-                <div class="info-row"><span class="info-label">KELAS</span><span class="info-val">: ${item.subInfo}</span></div>
-                <div class="info-row"><span class="info-label">NO. UJIAN</span><span class="info-val">: UJ-${item.nomorId}</span></div>
+                <div class="info-container">
+                  <div class="info-row"><span class="info-label">NISN</span><span class="info-val">: ${item.nomorId}</span></div>
+                  <div class="info-row"><span class="info-label">KELAS</span><span class="info-val">: ${item.subInfo}</span></div>
+                  <div class="info-row info-highlight"><span class="info-label">NO. UJIAN</span><span class="info-val">: ${noUjianFinal}</span></div>
+                  ${item.customField ? `<div class="info-row"><span class="info-label">RUANG/SESI</span><span class="info-val">: ${item.customField}</span></div>` : ''}
+                </div>
               </div>
             </div>
-            <div class="card-footer">
-              <div class="footer-info">
-                <p class="qr-title">Verifikasi Peserta Ujian</p>
-                <p class="qr-sub">SMP Muna Mustofa</p>
+            
+            <!-- FOOTER KARTU UJIAN 1 SISI (QR KIRI, TTD KEPSEK KANAN) -->
+            <div class="card-footer footer-ujian">
+              <div class="footer-left">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId}" alt="QR" class="qr-code" />
+                <div class="qr-text">
+                  <p class="qr-title">Verifikasi Peserta</p>
+                  <p class="qr-sub">SMP Muna Mustofa</p>
+                </div>
               </div>
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId}" alt="QR" class="qr-code" />
+
+              <div class="footer-right">
+                <p class="sign-title">Kepala Sekolah,</p>
+                <div class="signature-area">
+                  ${includeStamp ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img-ujian" />` : ''}
+                  ${includeDigitalSignature ? `<img src="/ttd-kepsek.png" alt="TTD" class="signature-img-ujian" />` : ''}
+                </div>
+                <p class="sign-name"><b><u>${kepsekInfo.nama}</u></b></p>
+                <p class="sign-nip">NUPTK. ${kepsekInfo.nuptk}</p>
+              </div>
             </div>
           </div>
         `
@@ -236,8 +424,10 @@ export default function CetakKartuPage() {
               <div class="details">
                 <p class="label">NAMA GURU / PEGAWAI</p>
                 <p class="value-name">${item.nama}</p>
-                <div class="info-row"><span class="info-label">NIP/NUPTK</span><span class="info-val">: ${item.nomorId}</span></div>
-                <div class="info-row"><span class="info-label">JABATAN</span><span class="info-val">: ${item.subInfo}</span></div>
+                <div class="info-container">
+                  <div class="info-row"><span class="info-label">NIP/NUPTK</span><span class="info-val">: ${item.nomorId}</span></div>
+                  <div class="info-row"><span class="info-label">JABATAN</span><span class="info-val">: ${item.subInfo}</span></div>
+                </div>
               </div>
             </div>
             <div class="card-footer">
@@ -264,8 +454,10 @@ export default function CetakKartuPage() {
               <div class="details">
                 <p class="label">NAMA SISWA</p>
                 <p class="value-name">${item.nama}</p>
-                <div class="info-row"><span class="info-label">NISN</span><span class="info-val">: ${item.nomorId}</span></div>
-                <div class="info-row"><span class="info-label">KELAS</span><span class="info-val">: ${item.subInfo}</span></div>
+                <div class="info-container">
+                  <div class="info-row"><span class="info-label">NISN</span><span class="info-val">: ${item.nomorId}</span></div>
+                  <div class="info-row"><span class="info-label">KELAS</span><span class="info-val">: ${item.subInfo}</span></div>
+                </div>
               </div>
             </div>
             <div class="card-footer">
@@ -279,20 +471,20 @@ export default function CetakKartuPage() {
         `
       }
 
-      // 2. SISI BELAKANG (DENGAN ELEMEN TTD & STEMPEL DIPALINGKAN)
+      // SISI BELAKANG (HANYA UNTUK KARTU PELAJAR & GURU)
       let backCardHtml = ''
-      if (includeBackSide) {
+      if (includeBackSide && jenisKartu !== 'ujian') {
         const penandatanganJabatan = item.isKepalaSekolah 
           ? 'Ketua Yayasan PPTQ Muna Mustofa' 
           : 'Kepala SMP Muna Mustofa'
         
         const penandatanganNama = item.isKepalaSekolah 
           ? 'PENGURUS YAYASAN' 
-          : 'SULASTRI, S.Pd., Gr.'
+          : kepsekInfo.nama
 
         const penandatanganNip = item.isKepalaSekolah 
           ? 'Yayasan Muna Mustofa Lampung' 
-          : 'NUPTK. 6337763664131233'
+          : `NUPTK. ${kepsekInfo.nuptk}`
 
         const rulesContent = jenisKartu === 'guru' ? `
           <ol class="rules-list">
@@ -355,21 +547,38 @@ export default function CetakKartuPage() {
             .header-text { flex: 1; }
             .header-text h2 { margin: 0; font-size: 8.5pt; font-weight: 800; color: #065f46; line-height: 1; }
             .header-text p { margin: 0.8mm 0 0 0; font-size: 6pt; color: #047857; font-weight: 700; letter-spacing: 0.5px; }
-            .card-body { display: flex; gap: 3mm; align-items: center; margin-top: 1mm; flex: 1; }
-            .photo { width: 18mm; height: 24mm; background: #f1f5f9; border: 1px solid #94a3b8; border-radius: 2mm; display: flex; align-items: center; justify-content: center; font-size: 6.5pt; color: #64748b; font-weight: bold; flex-shrink: 0; }
-            .details { font-size: 7.5pt; color: #0f172a; flex: 1; overflow: hidden; }
-            .details .label { margin: 0; font-size: 5.5pt; color: #64748b; font-weight: 700; text-transform: uppercase; }
-            .details .value-name { margin: 0.5mm 0 1.5mm 0; font-size: 8.5pt; font-weight: 800; color: #0f172a; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .info-row { display: flex; align-items: center; font-size: 7pt; margin-bottom: 0.8mm; }
-            .info-label { width: 14mm; font-weight: 700; color: #475569; }
-            .info-val { font-weight: 800; color: #0f172a; }
-            .card-footer { border-top: 1px dashed #a7f3d0; padding-top: 1.5mm; display: flex; align-items: center; justify-content: space-between; }
+            
+            .card-body { display: flex; gap: 3mm; align-items: center; margin-top: 1mm; flex: 1; overflow: hidden; }
+            .photo { width: 18mm; height: 23mm; background: #f1f5f9; border: 1px solid #94a3b8; border-radius: 2mm; display: flex; align-items: center; justify-content: center; font-size: 6.5pt; color: #64748b; font-weight: bold; flex-shrink: 0; }
+            .details { display: flex; flex-direction: column; justify-content: center; font-size: 7.5pt; color: #0f172a; flex: 1; overflow: hidden; }
+            .details .label { margin: 0; font-size: 5pt; color: #64748b; font-weight: 700; text-transform: uppercase; }
+            .details .value-name { margin: 0.5mm 0 1mm 0; font-size: 8pt; font-weight: 800; color: #0f172a; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            
+            .info-container { display: flex; flex-direction: column; gap: 0.5mm; margin-top: 0.5mm; }
+            .info-row { display: flex; align-items: center; font-size: 6.5pt; line-height: 1.1; }
+            .info-label { width: 16mm; font-weight: 700; color: #475569; flex-shrink: 0; }
+            .info-val { font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .info-highlight .info-val { color: #047857; font-weight: 900; }
+
+            .card-footer { border-top: 1px dashed #a7f3d0; padding-top: 1mm; display: flex; align-items: center; justify-content: space-between; }
             .card-guru .card-footer { border-top-color: #bfdbfe; }
             .footer-info { font-size: 6.5pt; }
-            .qr-title { margin: 0; font-weight: 800; color: #065f46; font-size: 6.5pt; }
+            .qr-title { margin: 0; font-weight: 800; color: #065f46; font-size: 6pt; }
             .card-guru .qr-title { color: #1e3a8a; }
-            .qr-sub { margin: 0; font-size: 5.5pt; color: #64748b; }
+            .qr-sub { margin: 0; font-size: 4.5pt; color: #64748b; }
             .qr-code { width: 9mm; height: 9mm; flex-shrink: 0; }
+
+            /* LAYOUT KHUSUS FOOTER KARTU UJIAN 1 SISI */
+            .footer-ujian { align-items: flex-end; padding-top: 1mm; }
+            .footer-left { display: flex; align-items: center; gap: 1.5mm; }
+            .qr-text { display: flex; flex-direction: column; }
+            .footer-right { text-align: right; font-size: 5pt; line-height: 1.1; }
+            .footer-right .sign-title { margin: 0; font-weight: 700; color: #0f172a; font-size: 5pt; }
+            .footer-right .signature-area { height: 6.5mm; position: relative; display: flex; align-items: center; justify-content: flex-end; }
+            .footer-right .signature-img-ujian { height: 100%; object-fit: contain; z-index: 2; position: relative; }
+            .footer-right .stamp-img-ujian { height: 8.5mm; position: absolute; right: 4mm; top: -1mm; z-index: 1; opacity: 0.85; }
+            .footer-right .sign-name { margin: 0; font-size: 5.5pt; color: #0f172a; }
+            .footer-right .sign-nip { margin: 0; font-size: 4.5pt; color: #475569; }
 
             /* SISI BELAKANG */
             .card-back { background: #fafafa; }
@@ -384,7 +593,6 @@ export default function CetakKartuPage() {
             .sign-date { margin: 0; font-size: 5pt; color: #64748b; }
             .sign-title { margin: 0; font-weight: 700; color: #0f172a; font-size: 5.5pt; }
             
-            /* AREA STEMPEL & TTD OVERLAY */
             .signature-area { height: 9mm; position: relative; display: flex; align-items: center; justify-content: flex-end; }
             .signature-img { height: 100%; object-fit: contain; z-index: 2; position: relative; }
             .stamp-img { height: 12mm; position: absolute; right: 12mm; top: -2mm; z-index: 1; opacity: 0.85; }
@@ -401,10 +609,10 @@ export default function CetakKartuPage() {
 
     printWindow.document.close()
     printWindow.focus()
-    setTimeout(() => {
+    printWindow.onload = () => {
       printWindow.print()
       printWindow.close()
-    }, 300)
+    }
   }
 
   return (
@@ -489,7 +697,7 @@ export default function CetakKartuPage() {
                   <div>
                     <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Pusat Cetak Kartu Digital</h2>
                     <p className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                      Pilih jenis kartu resmi lalu klik kartu untuk pratinjau Sisi Depan &amp; Belakang.
+                      Pilih jenis kartu resmi, edit data bila perlu, lalu cetak atau ekspor ke Word.
                     </p>
                   </div>
                 </div>
@@ -507,6 +715,34 @@ export default function CetakKartuPage() {
                     <option value="ujian">📝 Kartu Peserta Ujian</option>
                     <option value="guru">👨‍🏫 Kartu Pegawai / Guru</option>
                   </select>
+
+                  {jenisKartu === 'ujian' && (
+                    <>
+                      <select
+                        value={namaUjian}
+                        onChange={(e) => setNamaUjian(e.target.value)}
+                        className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none cursor-pointer ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        <option value="ASESMEN SUMATIF TENGAH SEMESTER (STS)">STS (Tengah Semester)</option>
+                        <option value="ASESMEN SUMATIF AKHIR SEMESTER (SAS)">SAS (Akhir Semester)</option>
+                        <option value="ASESMEN SUMATIF AKHIR TAHUN (SAT)">SAT (Akhir Tahun)</option>
+                        <option value="UJIAN CCT / US SMP MUNA MUSTOFA">Ujian Sekolah / CCT</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        value={prefixNoUjian}
+                        onChange={(e) => setPrefixNoUjian(e.target.value)}
+                        placeholder="Prefix No. (ex: 2627-07-)"
+                        className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none w-32 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                        title="Prefix Nomor Peserta Ujian"
+                      />
+                    </>
+                  )}
 
                   {jenisKartu !== 'guru' && (
                     <select
@@ -528,11 +764,27 @@ export default function CetakKartuPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Cari Nama / ID..."
-                    className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600 w-36 ${
+                    placeholder="🔍 Cari..."
+                    className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600 w-28 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   />
+
+                  <button
+                    onClick={handleAddCustomCard}
+                    className="bg-amber-600 hover:bg-amber-500 text-white font-extrabold px-3 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1 cursor-pointer"
+                    title="Tambah Kartu Susulan Manual"
+                  >
+                    <span>➕</span> Kartu
+                  </button>
+
+                  <button
+                    onClick={() => handleExportWord(filteredItems)}
+                    disabled={filteredItems.length === 0}
+                    className="bg-blue-700 hover:bg-blue-600 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>📄</span> Word ({filteredItems.length})
+                  </button>
 
                   <button
                     onClick={() => handlePrint(filteredItems)}
@@ -544,29 +796,30 @@ export default function CetakKartuPage() {
                 </div>
               </div>
 
-              {/* CHECKBOX OPSI LAYOUT CETAK DENGAN PILIHAN TERPISAH */}
+              {/* CHECKBOX OPSI LAYOUT CETAK */}
               <div className={`flex flex-wrap items-center gap-5 p-3 rounded-2xl border text-xs font-bold ${
                 isDarkMode ? 'bg-slate-800/80 border-slate-700 text-slate-200' : 'bg-white/80 border-slate-300 text-slate-800'
               }`}>
                 <span className={`text-[11px] uppercase tracking-wider font-extrabold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Opsi Pengesahan Kartu:</span>
                 
-                <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-400">
-                  <input
-                    type="checkbox"
-                    checked={includeBackSide}
-                    onChange={(e) => setIncludeBackSide(e.target.checked)}
-                    className="w-4 h-4 text-emerald-700 rounded focus:ring-emerald-600 cursor-pointer"
-                  />
-                  <span>Sertakan Sisi Belakang</span>
-                </label>
+                {jenisKartu !== 'ujian' && (
+                  <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-400">
+                    <input
+                      type="checkbox"
+                      checked={includeBackSide}
+                      onChange={(e) => setIncludeBackSide(e.target.checked)}
+                      className="w-4 h-4 text-emerald-700 rounded focus:ring-emerald-600 cursor-pointer"
+                    />
+                    <span>Sertakan Sisi Belakang</span>
+                  </label>
+                )}
 
                 <label className="flex items-center gap-2 cursor-pointer hover:text-indigo-400">
                   <input
                     type="checkbox"
                     checked={includeDigitalSignature}
                     onChange={(e) => setIncludeDigitalSignature(e.target.checked)}
-                    disabled={!includeBackSide}
-                    className="w-4 h-4 text-emerald-700 rounded focus:ring-emerald-600 cursor-pointer disabled:opacity-40"
+                    className="w-4 h-4 text-emerald-700 rounded focus:ring-emerald-600 cursor-pointer"
                   />
                   <span>TTD Digital Kepsek</span>
                 </label>
@@ -576,19 +829,18 @@ export default function CetakKartuPage() {
                     type="checkbox"
                     checked={includeStamp}
                     onChange={(e) => setIncludeStamp(e.target.checked)}
-                    disabled={!includeBackSide}
-                    className="w-4 h-4 text-emerald-700 rounded focus:ring-emerald-600 cursor-pointer disabled:opacity-40"
+                    className="w-4 h-4 text-emerald-700 rounded focus:ring-emerald-600 cursor-pointer"
                   />
                   <span>Stempel Sekolah</span>
                 </label>
               </div>
             </div>
 
-            {/* PREVIEW CONTAINER */}
+            {/* PREVIEW CONTAINER GRID */}
             <div className="flex-1 flex flex-col items-center justify-center py-4">
-              {jenisKartu !== 'guru' && !selectedKelasId ? (
+              {jenisKartu !== 'guru' && !selectedKelasId && cardItems.length === 0 ? (
                 <p className={`text-xs text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                  Silakan pilih kelas di atas untuk melihat pratinjau kartu.
+                  Silakan pilih kelas di atas atau klik tombol <b>➕ Kartu</b> untuk menambah manual.
                 </p>
               ) : loading ? (
                 <div className={`flex flex-col items-center gap-2 text-xs font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -628,22 +880,36 @@ export default function CetakKartuPage() {
                             </p>
                           </div>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition ${
-                          isDarkMode ? 'bg-slate-900 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-700 group-hover:bg-indigo-600 group-hover:text-white'
-                        }`}>
-                          🔍 Detail
-                        </span>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingItem(item)
+                            }}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500 text-white hover:bg-amber-600 transition"
+                            title="Edit Kartu Ini"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition ${
+                            isDarkMode ? 'bg-slate-900 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-700 group-hover:bg-indigo-600 group-hover:text-white'
+                          }`}>
+                            🔍 Detail
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex gap-3 items-center">
-                        <div className={`w-14 h-18 border rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 overflow-hidden ${
+                        <div className={`w-14 h-20 border rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 overflow-hidden ${
                           isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-500' : 'bg-slate-100 border-slate-300 text-slate-400'
                         }`}>
                           FOTO
                         </div>
-                        <div className="space-y-1 text-xs overflow-hidden">
+                        <div className="space-y-1 text-xs overflow-hidden flex-1">
                           <p className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>NAMA:</p>
                           <p className={`font-bold text-xs leading-tight truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.nama}</p>
+                          
                           <p className={`text-[10px] pt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                             {jenisKartu === 'guru' ? 'NIP/NUPTK: ' : 'NISN: '}
                             <span className={`font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.nomorId}</span>
@@ -652,22 +918,56 @@ export default function CetakKartuPage() {
                             {jenisKartu === 'guru' ? 'JABATAN: ' : 'KELAS: '}
                             <span className={`font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.subInfo}</span>
                           </p>
+
+                          {jenisKartu === 'ujian' && (
+                            <p className="text-[10px] text-emerald-400 font-bold">
+                              NO. UJIAN: <span className="font-mono">{item.nomorUjian || '-'}</span>
+                            </p>
+                          )}
+
+                          {jenisKartu === 'ujian' && item.customField && (
+                            <p className="text-[10px] text-indigo-400 font-bold">
+                              RUANG/SESI: <span>{item.customField}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
 
-                      <div className={`border-t pt-3 flex items-center justify-between ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
-                        <div className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                          <p className={`font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>QR Code ID</p>
-                          <p className="text-[9px]">Sistem Presensi</p>
+                      {/* FOOTER GRID CARD (1 SISI KHUSUS UJIAN) */}
+                      {jenisKartu === 'ujian' ? (
+                        <div className={`border-t pt-2 flex items-center justify-between text-[9px] ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                          <div className="flex items-center gap-1.5">
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId}`}
+                              alt="QR"
+                              className="w-8 h-8 bg-white p-0.5 rounded border border-slate-300"
+                            />
+                            <div>
+                              <p className="font-bold text-emerald-500 leading-tight">Verifikasi</p>
+                              <p className="text-[8px] text-slate-400">SMP Muna Mustofa</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-slate-300">Kepala Sekolah</p>
+                            <p className="font-extrabold text-slate-100 underline leading-tight">{kepsekInfo.nama}</p>
+                            <p className="text-[8px] text-slate-400 font-mono">NUPTK. {kepsekInfo.nuptk}</p>
+                          </div>
                         </div>
-                        <div className={`p-1 border rounded-lg ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-                          <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId !== '-' ? item.nomorId : item.id}`}
-                            alt="QR Code"
-                            className="w-10 h-10"
-                          />
+                      ) : (
+                        <div className={`border-t pt-2 flex items-center justify-between ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                          <div className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                            <p className={`font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>QR Code ID</p>
+                            <p className="text-[9px]">Sistem Presensi</p>
+                          </div>
+                          <div className={`p-1 border rounded-lg ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId !== '-' ? item.nomorId : item.id}`}
+                              alt="QR Code"
+                              className="w-9 h-9"
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -678,7 +978,117 @@ export default function CetakKartuPage() {
         </main>
       </div>
 
-      {/* POPUP MODAL DETAIL DENGAN TOGGLE PRATINJAU SISI DEPAN & BELAKANG */}
+      {/* MODAL EDIT DATA KARTU */}
+      <AnimatePresence>
+        {editingItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`border rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 ${
+                isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'
+              }`}
+            >
+              <div className="flex justify-between items-center border-b pb-3 border-slate-700">
+                <h3 className="font-extrabold text-sm">✏️ Edit Data Kartu</h3>
+                <button
+                  onClick={() => setEditingItem(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="font-bold block mb-1">Nama Lengkap:</label>
+                  <input
+                    type="text"
+                    value={editingItem.nama}
+                    onChange={(e) => setEditingItem({ ...editingItem, nama: e.target.value })}
+                    className={`w-full p-2.5 rounded-xl border font-bold ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-300'
+                    }`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold block mb-1">{jenisKartu === 'guru' ? 'NIP/NUPTK:' : 'NISN:'}</label>
+                    <input
+                      type="text"
+                      value={editingItem.nomorId}
+                      onChange={(e) => setEditingItem({ ...editingItem, nomorId: e.target.value })}
+                      className={`w-full p-2.5 rounded-xl border font-bold ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold block mb-1">{jenisKartu === 'guru' ? 'Jabatan:' : 'Kelas:'}</label>
+                    <input
+                      type="text"
+                      value={editingItem.subInfo}
+                      onChange={(e) => setEditingItem({ ...editingItem, subInfo: e.target.value })}
+                      className={`w-full p-2.5 rounded-xl border font-bold ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-300'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {jenisKartu === 'ujian' && (
+                  <>
+                    <div>
+                      <label className="font-bold block mb-1 text-emerald-400">Nomor Peserta Ujian:</label>
+                      <input
+                        type="text"
+                        value={editingItem.nomorUjian || ''}
+                        placeholder="Contoh: 2627-07-001"
+                        onChange={(e) => setEditingItem({ ...editingItem, nomorUjian: e.target.value })}
+                        className={`w-full p-2.5 rounded-xl border font-bold ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-50 border-slate-300 text-emerald-700'
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold block mb-1 text-indigo-400">Ruang / Sesi:</label>
+                      <input
+                        type="text"
+                        value={editingItem.customField || ''}
+                        placeholder="Contoh: Ruang 02 / Sesi 1"
+                        onChange={(e) => setEditingItem({ ...editingItem, customField: e.target.value })}
+                        className={`w-full p-2.5 rounded-xl border font-bold ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-300'
+                        }`}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  onClick={() => handleSaveEdit(editingItem)}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                >
+                  💾 Simpan Perubahan
+                </button>
+                <button
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* POPUP MODAL PRATINJAU DETAIL */}
       <AnimatePresence>
         {selectedModalItem && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
@@ -711,32 +1121,34 @@ export default function CetakKartuPage() {
                 </div>
               </div>
 
-              {/* TAB SWITCHER DUA SISI */}
-              <div className={`flex p-1 rounded-xl gap-1 text-xs font-extrabold ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                <button
-                  onClick={() => setModalActiveTab('front')}
-                  className={`flex-1 py-1.5 rounded-lg transition ${
-                    modalActiveTab === 'front'
-                      ? isDarkMode ? 'bg-slate-700 text-white shadow-xs' : 'bg-white text-indigo-900 shadow-xs'
-                      : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  🪪 Sisi Depan
-                </button>
-                <button
-                  onClick={() => setModalActiveTab('back')}
-                  className={`flex-1 py-1.5 rounded-lg transition ${
-                    modalActiveTab === 'back'
-                      ? isDarkMode ? 'bg-slate-700 text-white shadow-xs' : 'bg-white text-indigo-900 shadow-xs'
-                      : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  📜 Sisi Belakang
-                </button>
-              </div>
+              {/* TAB SWITCHER (HANYA DITAMPILKAN JIKA BUKAN KARTU UJIAN) */}
+              {jenisKartu !== 'ujian' && (
+                <div className={`flex p-1 rounded-xl gap-1 text-xs font-extrabold ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <button
+                    onClick={() => setModalActiveTab('front')}
+                    className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                      modalActiveTab === 'front'
+                        ? isDarkMode ? 'bg-slate-700 text-white shadow-xs' : 'bg-white text-indigo-900 shadow-xs'
+                        : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    🪪 Sisi Depan
+                  </button>
+                  <button
+                    onClick={() => setModalActiveTab('back')}
+                    className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                      modalActiveTab === 'back'
+                        ? isDarkMode ? 'bg-slate-700 text-white shadow-xs' : 'bg-white text-indigo-900 shadow-xs'
+                        : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    📜 Sisi Belakang
+                  </button>
+                </div>
+              )}
 
-              {/* VIEW CARD DEPAN ATAU BELAKANG */}
-              {modalActiveTab === 'front' ? (
+              {/* TAB SISI DEPAN */}
+              {modalActiveTab === 'front' || jenisKartu === 'ujian' ? (
                 <div className={`border-2 rounded-2xl p-4 space-y-4 shadow-xs ${
                   jenisKartu === 'guru' 
                     ? isDarkMode ? 'bg-blue-950/30 border-blue-800' : 'bg-blue-50 border-blue-700'
@@ -748,7 +1160,7 @@ export default function CetakKartuPage() {
                       <div>
                         <h4 className={`font-black text-xs uppercase leading-none ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>SMP MUNA MUSTOFA</h4>
                         <p className={`text-[9px] font-bold tracking-wider uppercase mt-0.5 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                          {jenisKartu === 'guru' ? 'KTA PTK / PEGAWAI' : jenisKartu === 'ujian' ? 'KARTU PESERTA UJIAN' : 'KARTU TANDA PELAJAR'}
+                          {jenisKartu === 'guru' ? 'KTA PTK / PEGAWAI' : jenisKartu === 'ujian' ? namaUjian : 'KARTU TANDA PELAJAR'}
                         </p>
                       </div>
                     </div>
@@ -760,40 +1172,73 @@ export default function CetakKartuPage() {
                     }`}>
                       FOTO
                     </div>
-                    <div className="space-y-1.5 text-xs">
+                    <div className="space-y-1 text-xs flex-1 overflow-hidden">
                       <div>
                         <p className={`text-[10px] font-bold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Nama Lengkap:</p>
                         <p className={`font-black text-sm leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedModalItem.nama}</p>
                       </div>
-                      <div className="flex gap-4 pt-1">
-                        <div>
-                          <p className={`text-[10px] font-bold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{jenisKartu === 'guru' ? 'NIP/NUPTK:' : 'NISN:'}</p>
-                          <p className={`font-mono font-bold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedModalItem.nomorId}</p>
-                        </div>
-                        <div>
-                          <p className={`text-[10px] font-bold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{jenisKartu === 'guru' ? 'Jabatan:' : 'Kelas:'}</p>
-                          <p className={`font-bold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedModalItem.subInfo}</p>
-                        </div>
+                      <div className="space-y-0.5 pt-1">
+                        <p className={`text-[10px] ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                          <b>{jenisKartu === 'guru' ? 'NIP/NUPTK' : 'NISN'}:</b> {selectedModalItem.nomorId}
+                        </p>
+                        <p className={`text-[10px] ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                          <b>{jenisKartu === 'guru' ? 'Jabatan' : 'Kelas'}:</b> {selectedModalItem.subInfo}
+                        </p>
+                        {jenisKartu === 'ujian' && (
+                          <p className="text-[10px] text-emerald-400 font-extrabold">
+                            <b>NO. UJIAN:</b> {selectedModalItem.nomorUjian || '-'}
+                          </p>
+                        )}
+                        {jenisKartu === 'ujian' && selectedModalItem.customField && (
+                          <p className="text-[10px] text-indigo-400 font-bold">
+                            <b>RUANG/SESI:</b> {selectedModalItem.customField}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className={`border pt-3 flex items-center justify-between p-2.5 rounded-xl ${
-                    isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-300'
-                  }`}>
-                    <div>
-                      <p className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>QR Code Identitas Resmi</p>
-                      <p className={`text-[10px] ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Terintegrasi dengan sistem presensi</p>
+                  {/* FOOTER PREVIEW MODAL */}
+                  {jenisKartu === 'ujian' ? (
+                    <div className={`border-t pt-2.5 flex items-center justify-between p-2 rounded-xl text-xs ${
+                      isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-300'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${selectedModalItem.nomorId}`}
+                          alt="QR Code"
+                          className="w-10 h-10 bg-white p-1 rounded-lg border border-slate-300 shadow-xs"
+                        />
+                        <div>
+                          <p className={`font-extrabold text-[10px] ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>Verifikasi Peserta</p>
+                          <p className={`text-[9px] ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>SMP Muna Mustofa</p>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <p className={`text-[10px] font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Kepala Sekolah,</p>
+                        <p className={`font-black text-xs underline ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{kepsekInfo.nama}</p>
+                        <p className={`text-[9px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK. {kepsekInfo.nuptk}</p>
+                      </div>
                     </div>
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedModalItem.nomorId !== '-' ? selectedModalItem.nomorId : selectedModalItem.id}`}
-                      alt="QR Code"
-                      className="w-14 h-14 bg-white p-1 rounded-lg border border-slate-300 shadow-xs"
-                    />
-                  </div>
+                  ) : (
+                    <div className={`border pt-2.5 flex items-center justify-between p-2 rounded-xl ${
+                      isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-300'
+                    }`}>
+                      <div>
+                        <p className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>QR Code Identitas Resmi</p>
+                        <p className={`text-[10px] ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Terintegrasi dengan sistem presensi</p>
+                      </div>
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedModalItem.nomorId !== '-' ? selectedModalItem.nomorId : selectedModalItem.id}`}
+                        alt="QR Code"
+                        className="w-12 h-12 bg-white p-1 rounded-lg border border-slate-300 shadow-xs"
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
-                /* PRATINJAU SISI BELAKANG */
+                /* TAB SISI BELAKANG */
                 <div className={`border-2 rounded-2xl p-4 space-y-3 shadow-xs text-xs ${
                   isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-400'
                 }`}>
@@ -823,7 +1268,6 @@ export default function CetakKartuPage() {
                       {selectedModalItem.isKepalaSekolah ? 'Ketua Yayasan PPTQ Muna Mustofa,' : 'Kepala SMP Muna Mustofa,'}
                     </p>
 
-                    {/* OVERLAY TTD & STEMPEL DI MODAL */}
                     <div className="h-12 relative flex items-center justify-end my-1">
                       {includeStamp && (
                         <img src="/stempel-sekolah.png" alt="Stempel" className="h-14 absolute right-10 -top-1 opacity-80 pointer-events-none" />
@@ -834,33 +1278,34 @@ export default function CetakKartuPage() {
                     </div>
 
                     <p className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                      <u>{selectedModalItem.isKepalaSekolah ? 'PENGURUS YAYASAN' : 'SULASTRI, S.Pd., Gr.'}</u>
+                      <u>{selectedModalItem.isKepalaSekolah ? 'PENGURUS YAYASAN' : kepsekInfo.nama}</u>
                     </p>
                     <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                      {selectedModalItem.isKepalaSekolah ? 'Yayasan Muna Mustofa' : 'NUPTK. 6337763664131233'}
+                      {selectedModalItem.isKepalaSekolah ? 'Yayasan Muna Mustofa' : `NUPTK. ${kepsekInfo.nuptk}`}
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* ACTION BUTTONS */}
-              <div className="flex gap-3 pt-2">
+              {/* ACTION BUTTONS PRATINJAU */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    handleExportWord([selectedModalItem])
+                    setSelectedModalItem(null)
+                  }}
+                  className="flex-1 bg-blue-700 hover:bg-blue-600 text-white font-extrabold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  📄 Export Word
+                </button>
                 <button
                   onClick={() => {
                     handlePrint([selectedModalItem])
                     setSelectedModalItem(null)
                   }}
-                  className="flex-1 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                  className="flex-1 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   🖨️ Cetak Kartu Ini
-                </button>
-                <button
-                  onClick={() => setSelectedModalItem(null)}
-                  className={`px-4 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer ${
-                    isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  Tutup
                 </button>
               </div>
             </motion.div>
@@ -868,6 +1313,7 @@ export default function CetakKartuPage() {
         )}
       </AnimatePresence>
 
+      {/* BOTTOM NAVIGATION BAR */}
       <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
       }`}>
