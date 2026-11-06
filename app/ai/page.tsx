@@ -32,6 +32,7 @@ export default function AiToolsPage() {
   const [selectedDoc, setSelectedDoc] = useState('cp')
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const [isSavingSoal, setIsSavingSoal] = useState(false)
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme')
@@ -122,22 +123,22 @@ export default function AiToolsPage() {
     nipKepala: '6337763664131233'
   })
 
+  // PERBAIKAN 1: PANCARIAN NAMA GURU MENGGUNAKAN KOLOM nama_lengkap
   useEffect(() => {
     async function initData() {
-      // 1. PENCARIAN NAMA GURU RESMI SUPABASE
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        let fullName = user.user_metadata?.full_name || user.user_metadata?.nama_guru
+        let fullName = user.user_metadata?.full_name || user.user_metadata?.nama_lengkap || user.user_metadata?.nama_guru
 
         if (!fullName && user.email) {
           const { data: dataGuru } = await supabase
             .from('guru')
-            .select('nama_guru')
+            .select('nama_lengkap, nama_guru')
             .eq('email', user.email)
             .maybeSingle()
 
-          if (dataGuru?.nama_guru) {
-            fullName = dataGuru.nama_guru
+          if (dataGuru) {
+            fullName = dataGuru.nama_lengkap || dataGuru.nama_guru
           }
         }
 
@@ -149,7 +150,7 @@ export default function AiToolsPage() {
         setModulForm(prev => ({ ...prev, namaGuru: fullName }))
       }
 
-      // 2. LOAD MASTER MAPEL & KELAS SUPABASE
+      // LOAD MASTER MAPEL & KELAS SUPABASE
       const { data: dMapel } = await supabase.from('mapel').select('id, nama_mapel, kode_mapel').order('urutan', { ascending: true })
       if (dMapel && dMapel.length > 0) {
         setMapelList(dMapel)
@@ -180,6 +181,45 @@ export default function AiToolsPage() {
     setFormData(prev => ({ ...prev, faseKelas: val }))
     setAdminForm(prev => ({ ...prev, faseKelas: val }))
     setModulForm(prev => ({ ...prev, faseKelas: val }))
+  }
+
+  // FITUR BARU: SIMPAN SOAL KE DATABASE SUPABASE
+  const handleSaveBankSoal = async () => {
+    const hasilSoal = generatedResults['soal']
+    if (!hasilSoal) {
+      alert('Belum ada paket soal yang dihasilkan!')
+      return
+    }
+
+    setIsSavingSoal(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      const payload = {
+        nama_guru: adminForm.namaGuru,
+        mapel: formData.mapel,
+        fase_kelas: formData.faseKelas,
+        topik_materi: formData.materiTopik || 'Umum',
+        bentuk_soal: formData.soalTipe,
+        jumlah_soal: parseInt(formData.soalJumlah) || 10,
+        tingkat_kesulitan: formData.soalLevel,
+        isi_soal: hasilSoal,
+        user_id: user?.id || null
+      }
+
+      const { error } = await supabase.from('bank_soal').insert([payload])
+
+      if (error) {
+        throw error
+      }
+
+      alert('✅ Berhasil! Paket Soal berhasil disimpan ke Database Bank Soal.')
+    } catch (err: any) {
+      console.error('Error saving bank soal:', err)
+      alert(`Gagal menyimpan soal: ${err.message || 'Terjadi kesalahan'}`)
+    } finally {
+      setIsSavingSoal(false)
+    }
   }
 
   const aiToolsConfig: Record<string, {
@@ -1106,6 +1146,17 @@ export default function AiToolsPage() {
                     />
                     <span>Gunakan Kop Surat Sekolah</span>
                   </label>
+                )}
+
+                {/* TOMBOL BARU: SIMPAN SOAL KE DATABASE */}
+                {activeTool === 'soal' && generatedResults['soal'] && (
+                  <button 
+                    onClick={handleSaveBankSoal} 
+                    disabled={isSavingSoal} 
+                    className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-xs font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    💾 {isSavingSoal ? 'Menyimpan...' : 'Simpan ke Bank Soal'}
+                  </button>
                 )}
 
                 <button onClick={handlePrintPDF} disabled={!generatedResults[currentResultKey]} className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">

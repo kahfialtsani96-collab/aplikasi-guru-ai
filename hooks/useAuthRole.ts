@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Helper fungsi instansiasi aman agar lolos build SSG Vercel
 function getSupabaseClient() {
   const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
   const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
@@ -28,28 +27,30 @@ export function useAuthRole(): AuthRoleState {
   useEffect(() => {
     async function checkRole() {
       try {
-        // Buat client Supabase di dalam useEffect
         const supabase = getSupabaseClient()
 
-        // 1. Ambil data user yang sedang login dari Supabase Auth
+        // 1. Ambil data user login
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || !user.email) {
           setLoading(false)
           return
         }
 
-        // 2. Cek role pengguna di tabel public.guru berdasarkan email
+        const cleanEmail = user.email.trim().toLowerCase()
+
+        // 2. Cek role di tabel guru menggunakan .ilike() (TIDAK MEMBEDAKAN HURUF BESAR/KECIL)
         const { data: guruData } = await supabase
           .from('guru')
           .select('id, role')
-          .eq('email', user.email)
-          .single()
+          .ilike('email', cleanEmail)
+          .maybeSingle()
 
         if (guruData) {
-          const userRole = (guruData.role as 'operator' | 'guru') || 'guru'
+          const rawRole = (guruData.role || '').toLowerCase()
+          const userRole: 'operator' | 'guru' = rawRole === 'operator' ? 'operator' : 'guru'
           setRole(userRole)
 
-          // 3. Cek apakah guru ini terdaftar sebagai wali kelas di tabel public.kelas
+          // 3. Cek status wali kelas
           const { data: kelasData } = await supabase
             .from('kelas')
             .select('id')
@@ -58,6 +59,9 @@ export function useAuthRole(): AuthRoleState {
           if (kelasData && kelasData.length > 0) {
             setIsWaliKelas(true)
           }
+        } else {
+          // Jika tidak ada di tabel guru, tetapkan role default
+          setRole('guru')
         }
       } catch (err) {
         console.error('Gagal mengambil data role:', err)

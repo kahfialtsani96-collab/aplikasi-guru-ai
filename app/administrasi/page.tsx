@@ -1,23 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-// Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
-const getSupabaseUrl = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
-  return url.replace(/['"]/g, '').trim()
-}
-
-const getSupabaseAnonKey = () => {
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
-  return key.replace(/['"]/g, '').trim()
-}
-
+const getSupabaseUrl = () => (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co').replace(/['"]/g, '').trim()
+const getSupabaseAnonKey = () => (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder').replace(/['"]/g, '').trim()
 const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface SuratAdministrasi {
@@ -35,9 +26,18 @@ interface OptionItem {
   id: number
   nama: string
   extraInfo?: string
+  nisn?: string
+  ttl?: string
+  jk?: string
+  sekolahAsal?: string
+  ortu?: string
+  alamat?: string
+  jabatan?: string
+  nuptk?: string
 }
 
 const KODE_SURAT_MAP: Record<string, string> = {
+  'Surat Keterangan Bersedia Menerima': '421',
   'Surat Keterangan Aktif Siswa': '421',
   'Surat Mutasi Siswa': '422',
   'Surat Undangan Orang Tua/Wali': '005',
@@ -48,52 +48,62 @@ const KODE_SURAT_MAP: Record<string, string> = {
 export default function AdministrasiTUPage() {
   const router = useRouter()
   const { isOperator, loading: loadingRole } = useAuthRole()
+  const previewRef = useRef<HTMLDivElement>(null)
 
   const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
   const [suratList, setSuratList] = useState<SuratAdministrasi[]>([])
-
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
+    if (savedTheme === 'dark') setIsDarkMode(true)
   }, [])
 
-  // Global Filter Periode Akademik
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
   
-  // State Form
-  const [jenisSurat, setJenisSurat] = useState('Surat Keterangan Aktif Siswa')
+  // State Form Utama
+  const [jenisSurat, setJenisSurat] = useState('Surat Keterangan Bersedia Menerima')
   const [penerima, setPenerima] = useState('')
-  const [keterangan, setKeterangan] = useState('')
   const [nomorSurat, setNomorSurat] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Modal Editor Narasi AI
-  const [isModalEditorOpen, setIsModalEditorOpen] = useState(false)
+  // State Detail Parameter Spesifik Surat
+  const [nisn, setNisn] = useState('')
+  const [ttl, setTtl] = useState('')
+  const [jenisKelamin, setJenisKelamin] = useState('Laki-laki')
+  const [sekolahAsal, setSekolahAsal] = useState('')
+  const [namaOrtu, setNamaOrtu] = useState('')
+  const [alamatSiswa, setAlamatSiswa] = useState('')
+  const [tingkatKelas, setTingkatKelas] = useState('Kelas VII (Tujuh)')
+  const [rombel, setRombel] = useState('7B')
 
-  // Toggle Opsi Cetak
+  // Parameter Khusus Guru / SK / Undangan
+  const [jabatanGuru, setJabatanGuru] = useState('Guru Mata Pelajaran')
+  const [nuptkGuru, setNuptkGuru] = useState('-')
+  const [sekolahTujuan, setSekolahTujuan] = useState('')
+  const [keperluanAktif, setKeperluanAktif] = useState('')
+  const [hariTanggal, setHariTanggal] = useState('')
+  const [waktuAcara, setWaktuAcara] = useState('')
+  const [tempatAcara, setTempatAcara] = useState('')
+  const [namaAcara, setNamaAcara] = useState('')
+  const [tugasLokasi, setTugasLokasi] = useState('')
+  const [perihalSk, setPerihalSk] = useState('')
+  const [diktumSk, setDiktumSk] = useState('')
+
+  // Toggle Cetak TTD & Stempel
   const [includeTTD, setIncludeTTD] = useState(true)
   const [includeStempel, setIncludeStempel] = useState(true)
 
-  // Smart Form Options
+  // Smart Options dari Supabase
   const [siswaOptions, setSiswaOptions] = useState<OptionItem[]>([])
   const [guruOptions, setGuruOptions] = useState<OptionItem[]>([])
   const [selectedEntityId, setSelectedEntityId] = useState('')
 
-  // AI Generator State
-  const [isAiGenerating, setIsAiGenerating] = useState(false)
-
   useEffect(() => {
-    if (!loadingRole && !isOperator) {
-      router.push('/')
-    }
+    if (!loadingRole && !isOperator) router.push('/')
   }, [loadingRole, isOperator, router])
 
   useEffect(() => {
@@ -113,14 +123,13 @@ export default function AdministrasiTUPage() {
   }, [selectedSemester, selectedTahunAjaran])
 
   useEffect(() => {
-    if (!editingId && jenisSurat) {
-      generateAutoNomorSurat(jenisSurat)
-    }
+    if (!editingId && jenisSurat) generateAutoNomorSurat(jenisSurat)
   }, [jenisSurat, selectedTahunAjaran, editingId])
 
   const generateAutoNomorSurat = async (jenis: string) => {
     const kodeKlasifikasi = KODE_SURAT_MAP[jenis] || '421'
     const tahun = selectedTahunAjaran.split('/')[0] || '2026'
+    const bulanRomawi = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][new Date().getMonth()]
 
     const { count, error } = await supabase
       .from('surat_administrasi')
@@ -131,27 +140,46 @@ export default function AdministrasiTUPage() {
     if (!error) {
       const nextIndex = (count || 0) + 1
       const formattedIndex = String(nextIndex).padStart(3, '0')
-      const autoNomor = `${kodeKlasifikasi}/${formattedIndex}/SMP-MM/${tahun}`
-      setNomorSurat(autoNomor)
+      setNomorSurat(`${kodeKlasifikasi}/${formattedIndex}/SMP.MM/${bulanRomawi}/${tahun}`)
     }
   }
 
+  // ACCURATE FETCH DARI STRUKTUR TABEL SUPABASE
   const fetchSmartOptions = async () => {
-    const { data: dataSiswa } = await supabase.from('siswa').select('id, nama_lengkap, nisn').order('nama_lengkap')
+    // 1. Fetch Siswa
+    const { data: dataSiswa } = await supabase.from('siswa').select('*').order('id')
     if (dataSiswa) {
-      setSiswaOptions(dataSiswa.map((s: Record<string, any>) => ({ 
-        id: Number(s.id), 
-        nama: String(s.nama_lengkap || ''), 
-        extraInfo: `NISN: ${s.nisn || '-'}` 
-      })))
+      setSiswaOptions(dataSiswa.map((s: Record<string, any>) => {
+        const namaReal = s.nama_lengkap || s.nama || ''
+        return {
+          id: Number(s.id), 
+          nama: String(namaReal), 
+          extraInfo: `NISN: ${s.nisn || '-'}`,
+          nisn: s.nisn || '',
+          ttl: `${s.tempat_lahir || ''}, ${s.tanggal_lahir || ''}`,
+          jk: s.jenis_kelamin || 'Laki-laki',
+          sekolahAsal: s.sekolah_asal || '',
+          ortu: s.nama_ayah || s.nama_ibu || s.nama_wali || '',
+          alamat: s.alamat || ''
+        }
+      }))
     }
 
-    const { data: dataGuru } = await supabase.from('guru').select('id, nama_guru').order('nama_guru')
+    // 2. Fetch Guru (Menggunakan Kolom: nama_lengkap, jabatan, mapel, NUPTK)
+    const { data: dataGuru } = await supabase.from('guru').select('*').order('id')
     if (dataGuru) {
-      setGuruOptions(dataGuru.map((g: Record<string, any>) => ({ 
-        id: Number(g.id), 
-        nama: String(g.nama_guru || g.nama_lengkap || '') 
-      })))
+      setGuruOptions(dataGuru.map((g: Record<string, any>) => {
+        const namaReal = g.nama_lengkap || g.nama_guru || g.nama || ''
+        const jabatan = g.jabatan || g.mapel || 'Guru Mata Pelajaran'
+        const nuptkVal = g.NUPTK || g.nuptk || g.nip || '-'
+        return {
+          id: Number(g.id), 
+          nama: String(namaReal),
+          jabatan: String(jabatan),
+          nuptk: String(nuptkVal),
+          extraInfo: `Jabatan: ${jabatan} | NUPTK: ${nuptkVal}`
+        }
+      }))
     }
   }
 
@@ -164,67 +192,59 @@ export default function AdministrasiTUPage() {
       .eq('tahun_ajaran', selectedTahunAjaran)
       .order('id', { ascending: false })
 
-    if (error) console.error('Error fetch surat:', error.message)
-    if (data) setSuratList(data)
+    if (!error && data) setSuratList(data)
     setLoading(false)
   }
 
   const resetForm = () => {
-    setJenisSurat('Surat Keterangan Aktif Siswa')
+    setJenisSurat('Surat Keterangan Bersedia Menerima')
     setPenerima('')
-    setKeterangan('')
     setSelectedEntityId('')
+    setNisn('')
+    setTtl('')
+    setSekolahAsal('')
+    setNamaOrtu('')
+    setAlamatSiswa('')
+    setTingkatKelas('Kelas VII (Tujuh)')
+    setRombel('7B')
+    setJabatanGuru('Guru Mata Pelajaran')
+    setNuptkGuru('-')
+    setSekolahTujuan('')
+    setKeperluanAktif('')
+    setHariTanggal('')
+    setWaktuAcara('')
+    setTempatAcara('')
+    setNamaAcara('')
+    setTugasLokasi('')
+    setPerihalSk('')
+    setDiktumSk('')
     setEditingId(null)
-    generateAutoNomorSurat('Surat Keterangan Aktif Siswa')
-  }
-
-  const handleGenerateAiNarasi = async () => {
-    if (!keterangan.trim()) {
-      alert('Ketik poin/maksud singkat pada kolom Keterangan terlebih dahulu agar AI dapat merangkai narasi!')
-      return
-    }
-
-    setIsAiGenerating(true)
-    try {
-      const promptText = `Buatkan narasi formal dan santun untuk ${jenisSurat} yang ditujukan kepada ${penerima || 'Penerima'}. Keperluan / Poin Maksud: ${keterangan}. Buat dalam 1-2 paragraf resmi tanpa salam pembuka berlebihan, dan murni hanya isi narasi surat saja.`
-      
-      const response = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'Asisten AI Persuratan TU',
-          materiTopik: promptText
-        })
-      })
-
-      if (response.ok) {
-        const resData = await response.json()
-        if (resData.result) {
-          setKeterangan(String(resData.result).trim())
-        }
-      } else {
-        alert('Gagal menghubungi AI Server.')
-      }
-    } catch (err: any) {
-      alert('Terjadi kesalahan AI: ' + err.message)
-    } finally {
-      setIsAiGenerating(false)
-    }
+    generateAutoNomorSurat('Surat Keterangan Bersedia Menerima')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!nomorSurat.trim() || !penerima.trim()) {
-      alert('Nomor Surat dan Penerima wajib diisi!')
+      alert('Nomor Surat dan Nama Penerima wajib diisi!')
       return
     }
 
     setLoading(true)
+    
+    // Ambil isi teks langsung dari preview yang mungkin disunting pengguna secara manual
+    const liveEditableHtml = previewRef.current ? previewRef.current.innerHTML : ''
+
+    const jsonPayload = {
+      nisn, ttl, jenisKelamin, sekolahAsal, namaOrtu, alamatSiswa, tingkatKelas, rombel,
+      jabatanGuru, nuptkGuru, sekolahTujuan, keperluanAktif, hariTanggal, waktuAcara, tempatAcara, namaAcara, tugasLokasi, perihalSk, diktumSk,
+      customHtml: liveEditableHtml
+    }
+
     const payload = {
       nomor_surat: nomorSurat.trim(),
       jenis_surat: jenisSurat,
       penerima: penerima.trim(),
-      keterangan: keterangan.trim(),
+      keterangan: JSON.stringify(jsonPayload),
       semester: selectedSemester,
       tahun_ajaran: selectedTahunAjaran,
     }
@@ -236,17 +256,17 @@ export default function AdministrasiTUPage() {
           alert('Berhasil memperbarui arsip surat!')
           resetForm()
           fetchSurat()
-        } else alert('Gagal mengupdate surat: ' + error.message)
+        } else alert('Gagal update: ' + error.message)
       } else {
         const { error } = await supabase.from('surat_administrasi').insert([payload])
         if (!error) {
           alert('Berhasil menyimpan arsip surat!')
           resetForm()
           fetchSurat()
-        } else alert('Gagal menyimpan surat: ' + error.message)
+        } else alert('Gagal simpan: ' + error.message)
       }
     } catch (err: any) {
-      alert('Terjadi kesalahan: ' + err.message)
+      alert('Error: ' + err.message)
     } finally {
       setLoading(false)
     }
@@ -256,132 +276,285 @@ export default function AdministrasiTUPage() {
     setEditingId(surat.id)
     setJenisSurat(surat.jenis_surat)
     setPenerima(surat.penerima)
-    setKeterangan(surat.keterangan || '')
     setNomorSurat(surat.nomor_surat)
+
+    try {
+      if (surat.keterangan && surat.keterangan.startsWith('{')) {
+        const p = JSON.parse(surat.keterangan)
+        setNisn(p.nisn || '')
+        setTtl(p.ttl || '')
+        setJenisKelamin(p.jenisKelamin || 'Laki-laki')
+        setSekolahAsal(p.sekolahAsal || '')
+        setNamaOrtu(p.namaOrtu || '')
+        setAlamatSiswa(p.alamatSiswa || '')
+        setTingkatKelas(p.tingkatKelas || 'Kelas VII (Tujuh)')
+        setRombel(p.rombel || '7B')
+        setJabatanGuru(p.jabatanGuru || 'Guru Mata Pelajaran')
+        setNuptkGuru(p.nuptkGuru || '-')
+        setSekolahTujuan(p.sekolahTujuan || '')
+        setKeperluanAktif(p.keperluanAktif || '')
+        setHariTanggal(p.hariTanggal || '')
+        setWaktuAcara(p.waktuAcara || '')
+        setTempatAcara(p.tempatAcara || '')
+        setNamaAcara(p.namaAcara || '')
+        setTugasLokasi(p.tugasLokasi || '')
+        setPerihalSk(p.perihalSk || '')
+        setDiktumSk(p.diktumSk || '')
+      }
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   const handleDelete = async (id: number) => {
     if (!confirm('Hapus arsip surat ini?')) return
     const { error } = await supabase.from('surat_administrasi').delete().eq('id', id)
     if (!error) fetchSurat()
-    else alert('Gagal menghapus surat: ' + error.message)
   }
 
-  const handlePrintSurat = (surat: SuratAdministrasi) => {
-    let rawNarasi = surat.keterangan || ''
-    
-    if (rawNarasi.includes('### 💡 Catatan') || rawNarasi.includes('Catatan Pedagogi') || rawNarasi.includes('Catatan Praktis') || rawNarasi.includes('Dokumen ini dibuat secara otomatis')) {
-      rawNarasi = rawNarasi.split(/### 💡 Catatan|Catatan Pedagogi|Catatan Praktis|Dokumen ini dibuat secara otomatis/i)[0]
+  // GENERATOR HTML PREVIEW REAL-TIME
+  const renderSuratHtmlBody = (suratData?: SuratAdministrasi) => {
+    const jns = suratData ? suratData.jenis_surat : jenisSurat
+    const noSurat = suratData ? suratData.nomor_surat : nomorSurat
+    const pnama = (suratData ? suratData.penerima : penerima) || '................................'
+    const sem = suratData ? (suratData.semester || selectedSemester) : selectedSemester
+    const ta = suratData ? (suratData.tahun_ajaran || selectedTahunAjaran) : selectedTahunAjaran
+
+    let dataObj = {
+      nisn: nisn || '................',
+      ttl: ttl || '................',
+      jenisKelamin: jenisKelamin || 'Laki-laki',
+      sekolahAsal: sekolahAsal || '................',
+      namaOrtu: namaOrtu || '................',
+      alamatSiswa: alamatSiswa || '................',
+      tingkatKelas: tingkatKelas || 'Kelas VII (Tujuh)',
+      rombel: rombel || '7B',
+      jabatanGuru: jabatanGuru || 'Guru Mata Pelajaran',
+      nuptkGuru: nuptkGuru || '-',
+      sekolahTujuan: sekolahTujuan || '................',
+      keperluanAktif: keperluanAktif || 'Keperluan Administrasi Sekolah',
+      hariTanggal: hariTanggal || 'Sabtu, 14 November 2026',
+      waktuAcara: waktuAcara || '08.00 WIB s.d. Selesai',
+      tempatAcara: tempatAcara || 'Aula SMP Muna Mustofa',
+      namaAcara: namaAcara || 'Rapat Evaluasi Capaian Pembelajaran & Penerimaan Rapor',
+      tugasLokasi: tugasLokasi || 'Dinas Pendidikan Kabupaten Tanggamus',
+      perihalSk: perihalSk || 'PENETAPAN TIM PENGEMBANG KURIKULUM SEKOLAH',
+      diktumSk: diktumSk || 'Menetapkan nama yang tercantum dalam lampiran keputusan ini sebagai Tim Pengembang Kurikulum SMP Muna Mustofa.'
     }
 
-    const cleanNarasi = rawNarasi
-      .replace(/#{1,6}\s?/g, '')
-      .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/---/g, '')
-      .replace(/Paragraf \d+:\s?[^\n]+/gi, '')
-      .replace(/\*Dokumen ini dibuat secara otomatis.*?\*/gi, '')
-      .trim()
-
-    let namaPenerima = surat.penerima
-    let nisnPenerima = '-'
-    const nisnMatch = surat.penerima.match(/(.*?)\s*\(NISN:\s*([\d-]+)\)/i)
-    if (nisnMatch) {
-      namaPenerima = nisnMatch[1].trim()
-      nisnPenerima = nisnMatch[2].trim()
+    if (suratData && suratData.keterangan && suratData.keterangan.startsWith('{')) {
+      try {
+        dataObj = { ...dataObj, ...JSON.parse(suratData.keterangan) }
+      } catch (e) { console.error(e) }
     }
 
+    // 1. SURAT KETERANGAN BERSEDIA MENERIMA
+    if (jns === 'Surat Keterangan Bersedia Menerima') {
+      return `
+        <div style="font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; color: #000;">
+          <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block; margin-bottom: 12px;" onError="this.style.display='none'" />
+          <div style="text-align: center; margin: 10px 0;">
+            <h2 style="font-size: 12pt; font-weight: bold; text-decoration: underline; margin: 0; text-transform: uppercase;">SURAT KETERANGAN BERSEDIA MENERIMA</h2>
+            <p style="font-size: 10.5pt; margin: 2px 0 0 0;">Nomor: ${noSurat}</p>
+          </div>
+          <div style="margin-top: 10px; text-align: justify;">
+            <p style="margin: 0 0 6px 0;">Yang bertanda tangan di bawah ini Kepala SMP Muna Mustofa, Kecamatan Gisting, Kabupaten Tanggamus, Provinsi Lampung, menerangkan bahwa:</p>
+            <table style="margin: 4px 0 4px 15px; width: 95%; font-size: 11pt; border-collapse: collapse;">
+              <tr><td width="35%" style="padding: 2px 0;">Nama Siswa</td><td width="3%">:</td><td><b>${pnama.toUpperCase()}</b></td></tr>
+              <tr><td style="padding: 2px 0;">NISN</td><td>:</td><td>${dataObj.nisn}</td></tr>
+              <tr><td style="padding: 2px 0;">Tempat, Tanggal Lahir</td><td>:</td><td>${dataObj.ttl}</td></tr>
+              <tr><td style="padding: 2px 0;">Jenis Kelamin</td><td>:</td><td>${dataObj.jenisKelamin}</td></tr>
+              <tr><td style="padding: 2px 0;">Sekolah Asal</td><td>:</td><td>${dataObj.sekolahAsal}</td></tr>
+              <tr><td style="padding: 2px 0;">Nama Orang Tua / Wali</td><td>:</td><td>${dataObj.namaOrtu}</td></tr>
+              <tr><td style="padding: 2px 0;">Alamat Siswa</td><td>:</td><td>${dataObj.alamatSiswa}</td></tr>
+            </table>
+            <p style="margin: 8px 0 4px 0;">Berdasarkan permohonan dari pihak orang tua/wali siswa yang bersangkutan serta mempertimbangkan ketersediaan daya tampung pada sekolah kami, menyatakan <b>BERSEDIA MENERIMA</b> siswa tersebut untuk pindah/masuk menjadi siswa SMP Muna Mustofa pada:</p>
+            <table style="margin: 4px 0 4px 15px; width: 95%; font-size: 11pt; border-collapse: collapse;">
+              <tr><td width="35%" style="padding: 2px 0;">Tingkat / Kelas</td><td width="3%">:</td><td><b>${dataObj.tingkatKelas}</b></td></tr>
+              <tr><td style="padding: 2px 0;">Rombongan Belajar (Rombel)</td><td>:</td><td><b>${dataObj.rombel}</b></td></tr>
+            </table>
+            <p style="margin: 8px 0 0 0;">Surat keterangan ini diterbitkan sebagai dasar bagi sekolah asal untuk mengeluarkan Surat Keterangan Pindah/Keluar resmi dan memproses mutasi siswa pada sistem Dapodik. Demikian surat keterangan ini dibuat untuk dipergunakan sebagaimana mestinya.</p>
+          </div>
+          ${renderTTDArea()}
+        </div>
+      `
+    }
+
+    // 2. SURAT MUTASI SISWA (KELUAR)
+    if (jns === 'Surat Mutasi Siswa') {
+      return `
+        <div style="font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.45; color: #000;">
+          <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block; margin-bottom: 12px;" onError="this.style.display='none'" />
+          <div style="text-align: center; margin: 10px 0;">
+            <h2 style="font-size: 12.5pt; font-weight: bold; text-decoration: underline; margin: 0; text-transform: uppercase;">SURAT KETERANGAN MUTASI SISWA</h2>
+            <p style="font-size: 10.5pt; margin: 2px 0 0 0;">Nomor: ${noSurat}</p>
+          </div>
+          <div style="margin-top: 10px; text-align: justify;">
+            <p style="margin: 0 0 6px 0;">Yang bertanda tangan di bawah ini Kepala SMP Muna Mustofa, Kecamatan Gisting, Kabupaten Tanggamus, Provinsi Lampung menerangkan bahwa:</p>
+            <table style="margin: 6px 0 10px 15px; width: 95%; font-size: 11pt; border-collapse: collapse;">
+              <tr><td width="30%" style="padding: 2px 0;">Nama Siswa</td><td width="3%">:</td><td><b>${pnama.toUpperCase()}</b></td></tr>
+              <tr><td style="padding: 2px 0;">NISN</td><td>:</td><td>${dataObj.nisn}</td></tr>
+              <tr><td style="padding: 2px 0;">Kelas / Rombel Terakhir</td><td>:</td><td>${dataObj.tingkatKelas} (${dataObj.rombel})</td></tr>
+              <tr><td style="padding: 2px 0;">Periode Akademik</td><td>:</td><td>Semester ${sem} / TA ${ta}</td></tr>
+            </table>
+            <p style="margin: 8px 0;">Berdasarkan permohonan resmi dari Orang Tua/Wali siswa serta persetujuan pihak sekolah, dengan ini menerangkan bahwa siswa tersebut di atas telah <b>RESMI DISETUJUI MUTASI / PINDAH KELUAR</b> dari SMP Muna Mustofa ke <b>${dataObj.sekolahTujuan.toUpperCase()}</b>.</p>
+            <p style="margin: 8px 0 0 0;">Surat mutasi ini diterbitkan untuk dipergunakan sebagai kelengkapan berkas administrasi dan pengurusan mutasi siswa pada sistem Dapodik di sekolah tujuan. Demikian surat ini dibuat untuk dapat dipergunakan sebagaimana mestinya.</p>
+          </div>
+          ${renderTTDArea()}
+        </div>
+      `
+    }
+
+    // 3. SURAT KETERANGAN AKTIF SISWA
+    if (jns === 'Surat Keterangan Aktif Siswa') {
+      return `
+        <div style="font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.45; color: #000;">
+          <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block; margin-bottom: 12px;" onError="this.style.display='none'" />
+          <div style="text-align: center; margin: 10px 0;">
+            <h2 style="font-size: 12.5pt; font-weight: bold; text-decoration: underline; margin: 0; text-transform: uppercase;">SURAT KETERANGAN AKTIF BELAJAR</h2>
+            <p style="font-size: 10.5pt; margin: 2px 0 0 0;">Nomor: ${noSurat}</p>
+          </div>
+          <div style="margin-top: 10px; text-align: justify;">
+            <p style="margin: 0 0 6px 0;">Yang bertanda tangan di bawah ini Kepala SMP Muna Mustofa, Kecamatan Gisting, Kabupaten Tanggamus, Provinsi Lampung menerangkan bahwa:</p>
+            <table style="margin: 6px 0 10px 15px; width: 95%; font-size: 11pt; border-collapse: collapse;">
+              <tr><td width="30%" style="padding: 2px 0;">Nama Siswa</td><td width="3%">:</td><td><b>${pnama.toUpperCase()}</b></td></tr>
+              <tr><td style="padding: 2px 0;">NISN</td><td>:</td><td>${dataObj.nisn}</td></tr>
+              <tr><td style="padding: 2px 0;">Tempat, Tanggal Lahir</td><td>:</td><td>${dataObj.ttl}</td></tr>
+              <tr><td style="padding: 2px 0;">Tingkat / Rombel</td><td>:</td><td>${dataObj.tingkatKelas} / ${dataObj.rombel}</td></tr>
+            </table>
+            <p style="margin: 8px 0;">Adalah benar nama yang tercantum di atas merupakan siswa terdaftar dan <b>AKTIF</b> mengikuti kegiatan pembelajaran di SMP Muna Mustofa pada Semester ${sem} Tahun Ajaran ${ta}.</p>
+            <p style="margin: 8px 0 0 0;">Surat keterangan ini dibuat untuk keperluan: <b>${dataObj.keperluanAktif}</b>. Demikian surat keterangan ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.</p>
+          </div>
+          ${renderTTDArea()}
+        </div>
+      `
+    }
+
+    // 4. SURAT UNDANGAN ORANG TUA / WALI
+    if (jns.includes('Undangan')) {
+      return `
+        <div style="font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.45; color: #000;">
+          <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block; margin-bottom: 12px;" onError="this.style.display='none'" />
+          <div style="text-align: center; margin: 10px 0;">
+            <h2 style="font-size: 12.5pt; font-weight: bold; text-decoration: underline; margin: 0; text-transform: uppercase;">SURAT UNDANGAN</h2>
+            <p style="font-size: 10.5pt; margin: 2px 0 0 0;">Nomor: ${noSurat}</p>
+          </div>
+          <div style="margin-top: 10px; text-align: justify;">
+            <p style="margin: 0 0 10px 0;">Kepada Yth.<br/><b>Bapak/Ibu Orang Tua / Wali Murid dari: ${pnama.toUpperCase()}</b><br/>Di Tempat</p>
+            <p style="margin: 0 0 6px 0;">Dengan hormat,</p>
+            <p style="margin: 0 0 8px 0;">Sehubungan dengan pelaksanaan kegiatan sekolah, kami dari SMP Muna Mustofa mengharapkan kehadiran Bapak/Ibu Orang Tua/Wali Murid pada pertemuan yang akan dilaksanakan pada:</p>
+            <table style="margin: 6px 0 10px 20px; width: 90%; font-size: 11pt; border-collapse: collapse;">
+              <tr><td width="30%" style="padding: 2px 0;">Hari / Tanggal</td><td width="3%">:</td><td><b>${dataObj.hariTanggal}</b></td></tr>
+              <tr><td style="padding: 2px 0;">Waktu</td><td>:</td><td>${dataObj.waktuAcara}</td></tr>
+              <tr><td style="padding: 2px 0;">Tempat</td><td>:</td><td>${dataObj.tempatAcara}</td></tr>
+              <tr><td style="padding: 2px 0;">Acara / Agenda</td><td>:</td><td><b>${dataObj.namaAcara}</b></td></tr>
+            </table>
+            <p style="margin: 10px 0 0 0;">Mengingat pentingnya acara tersebut, kami sangat mengharapkan kehadiran Bapak/Ibu tepat pada waktunya. Demikian surat undangan ini kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih.</p>
+          </div>
+          ${renderTTDArea()}
+        </div>
+      `
+    }
+
+    // 5. SURAT TUGAS GURU / PEGAWAI
+    if (jns.includes('Tugas')) {
+      return `
+        <div style="font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.45; color: #000;">
+          <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block; margin-bottom: 12px;" onError="this.style.display='none'" />
+          <div style="text-align: center; margin: 10px 0;">
+            <h2 style="font-size: 12.5pt; font-weight: bold; text-decoration: underline; margin: 0; text-transform: uppercase;">SURAT TUGAS</h2>
+            <p style="font-size: 10.5pt; margin: 2px 0 0 0;">Nomor: ${noSurat}</p>
+          </div>
+          <div style="margin-top: 10px; text-align: justify;">
+            <p style="margin: 0 0 6px 0;">Yang bertanda tangan di bawah ini Kepala SMP Muna Mustofa, Kecamatan Gisting, Kabupaten Tanggamus, Provinsi Lampung <b>MENUGASKAN KEPADA:</b></p>
+            <table style="margin: 6px 0 10px 15px; width: 95%; font-size: 11pt; border-collapse: collapse;">
+              <tr><td width="30%" style="padding: 2px 0;">Nama Guru / Pegawai</td><td width="3%">:</td><td><b>${pnama.toUpperCase()}</b></td></tr>
+              <tr><td style="padding: 2px 0;">Jabatan / Mapel</td><td style="padding: 2px 0;">:</td><td>${dataObj.jabatanGuru}</td></tr>
+              <tr><td style="padding: 2px 0;">NUPTK / NIP</td><td style="padding: 2px 0;">:</td><td>${dataObj.nuptkGuru}</td></tr>
+              <tr><td style="padding: 2px 0;">Instansi / Unit Kerja</td><td style="padding: 2px 0;">:</td><td>SMP Muna Mustofa</td></tr>
+            </table>
+            <p style="margin: 8px 0 4px 0;">Untuk melaksanakan tugas kedinasan / kegiatan di <b>${dataObj.tugasLokasi}</b> pada Semester ${sem} Tahun Ajaran ${ta}.</p>
+            <p style="margin: 8px 0 0 0;">Demikian surat tugas ini diterbitkan agar dapat dilaksanakan dengan penuh rasa tanggung jawab dan setelah selesai melaksanakan tugas harap menyampaikan laporan kepada Kepala Sekolah.</p>
+          </div>
+          ${renderTTDArea()}
+        </div>
+      `
+    }
+
+    // 6. SURAT KEPUTUSAN KEPALA SEKOLAH (SK)
+    return `
+      <div style="font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; color: #000;">
+        <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block; margin-bottom: 12px;" onError="this.style.display='none'" />
+        <div style="text-align: center; margin: 10px 0;">
+          <h2 style="font-size: 12pt; font-weight: bold; margin: 0; text-transform: uppercase;">SURAT KEPUTUSAN KEPALA SMP MUNA MUSTOFA</h2>
+          <p style="font-size: 10.5pt; margin: 2px 0 0 0;">Nomor: ${noSurat}</p>
+          <p style="font-size: 11pt; font-weight: bold; margin: 4px 0 0 0; text-transform: uppercase;">TENTANG:<br/>${dataObj.perihalSk}</p>
+        </div>
+        <div style="margin-top: 10px; text-align: justify;">
+          <p style="margin: 0 0 4px 0;"><b>Menimbang :</b> Bahwa demi kelancaran kegiatan administrasi dan pembelajaran di SMP Muna Mustofa, dipandang perlu menerbitkan Keputusan Kepala Sekolah.</p>
+          <p style="margin: 0 0 6px 0;"><b>Mengingat :</b> Undang-Undang No. 20 Tahun 2003 tentang Sistem Pendidikan Nasional dan Peraturan Satuan Pendidikan SMP Muna Mustofa.</p>
+          <div style="text-align: center; font-weight: bold; margin: 8px 0 4px 0;">MEMUTUSKAN:</div>
+          <p style="margin: 0 0 4px 0;"><b>Menetapkan :</b></p>
+          <p style="margin: 0 0 4px 0;"><b>KESATU :</b> ${dataObj.diktumSk}</p>
+          <p style="margin: 0 0 4px 0;"><b>KEDUA :</b> Menugaskan saudara/i <b>${pnama.toUpperCase()}</b> untuk melaksanakan keputusan ini dengan penuh tanggung jawab.</p>
+          <p style="margin: 0 0 0 0;"><b>KETIGA :</b> Keputusan ini mulai berlaku sejak tanggal ditetapkan dan apabila terdapat kekeliruan akan diperbaiki sebagaimana mestinya.</p>
+        </div>
+        ${renderTTDArea()}
+      </div>
+    `
+  }
+
+  const renderTTDArea = () => `
+    <div style="margin-top: 25px; float: right; width: 250px; text-align: left; page-break-inside: avoid;">
+      <p style="margin:0;">Gisting, ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}<br/>
+      Kepala SMP Muna Mustofa,</p>
+      
+      <div style="height: 65px; margin: 4px 0; position: relative; display: flex; align-items: center;">
+        ${includeStempel ? `<img src="/stempel-sekolah.png" style="height: 70px; position: absolute; left: -20px; top: -5px; opacity: 0.85;" alt="Stempel" onError="this.style.display='none'" />` : ''}
+        ${includeTTD ? `<img src="/ttd-kepsek.png" style="height: 55px; position: relative; z-index: 2;" alt="TTD" onError="this.style.display='none'" />` : ''}
+      </div>
+
+      <p style="margin:0;"><b><u>SULASTRI, S.Pd., Gr.</u></b><br/>
+      NUPTK. 6337763664131233</p>
+    </div>
+    <div style="clear: both;"></div>
+  `
+
+  // CETAK PDF LANGSUNG DARI CONTENT PREVIEW EDITABLE
+  const handlePrintSurat = (suratData?: SuratAdministrasi) => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
+
+    // Mengambil HTML dari Live Preview (Termasuk suntingan bebas pengguna)
+    let htmlContent = ''
+    if (!suratData && previewRef.current) {
+      htmlContent = previewRef.current.innerHTML
+    } else {
+      htmlContent = renderSuratHtmlBody(suratData)
+    }
 
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>${surat.jenis_surat} - ${surat.nomor_surat}</title>
+          <title></title>
           <style>
-            @page { size: A4 portrait; margin: 15mm 20mm; }
+            @page { 
+              size: A4 portrait; 
+              margin: 8mm 15mm; 
+            }
+            @media print { 
+              html, body { 
+                margin: 0 !important; 
+                padding: 0 !important; 
+              } 
+            }
             * { box-sizing: border-box; }
-            body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.5; color: #000; margin: 0; padding: 0; }
-            
-            .kop-header { text-align: center; border-bottom: 3px double #000; padding-bottom: 2mm; margin-bottom: 5mm; position: relative; }
-            .kop-logo { position: absolute; left: 0; top: 0; width: 22mm; height: 22mm; object-fit: contain; }
-            .kop-arab { font-size: 14pt; margin: 0; font-family: 'Traditional Arabic', 'Amiri', serif; font-weight: bold; }
-            .kop-yayasan { font-size: 10.5pt; font-weight: bold; margin: 0; text-transform: uppercase; }
-            .kop-sekolah { font-size: 16pt; font-weight: bold; margin: 1mm 0; text-transform: uppercase; }
-            .kop-alamat { font-size: 9pt; margin: 0; font-style: italic; }
-
-            .title-area { text-align: center; margin: 5mm 0 4mm 0; }
-            .title-area h2 { font-size: 12.5pt; font-weight: bold; text-decoration: underline; margin: 0; text-transform: uppercase; }
-            .title-area p { font-size: 10.5pt; margin: 1mm 0 0 0; }
-
-            .content-area { margin-top: 4mm; text-align: justify; }
-            .identity-table { margin: 3mm 0 3mm 6mm; width: 95%; font-size: 11pt; }
-            .identity-table td { padding: 1mm 0; vertical-align: top; }
-
-            .ttd-container { margin-top: 8mm; float: right; width: 70mm; text-align: left; page-break-inside: avoid; }
-            .signature-box { height: 20mm; position: relative; display: flex; align-items: center; margin: 1mm 0; }
-            .stamp-img { height: 22mm; position: absolute; left: -8mm; top: -2mm; z-index: 1; opacity: 0.85; }
-            .signature-img { height: 18mm; z-index: 2; position: relative; }
-            .clear { clear: both; }
+            body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; padding: 0; }
           </style>
         </head>
         <body>
-          <div class="kop-header">
-            <img src="/logo-smp.jpg" alt="Logo" class="kop-logo" />
-            <p class="kop-arab">المعهد الإسلامي منى مصطفى</p>
-            <p class="kop-yayasan">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
-            <p class="kop-sekolah">SMP MUNA MUSTOFA</p>
-            <p class="kop-alamat">CAMPANG KECAMATAN GISTING KABUPATEN TANGGAMUS</p>
-            <p class="kop-alamat">NPSN: 71407877 | SK IZIN OPERASIONAL: 503/029/IPO/VIII/36/2026</p>
-            <p class="kop-alamat">Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
-          </div>
-
-          <div class="title-area">
-            <h2>${surat.jenis_surat.toUpperCase()}</h2>
-            <p>Nomor: ${surat.nomor_surat}</p>
-          </div>
-
-          <div class="content-area">
-            <p>Yang bertanda tangan di bawah ini Kepala SMP Muna Mustofa Gisting Tanggamus, menerangkan bahwa:</p>
-            
-            <table class="identity-table">
-              <tr>
-                <td width="30%">Nama / Ditujukan</td>
-                <td width="3%">:</td>
-                <td><b>${namaPenerima}</b></td>
-              </tr>
-              ${nisnPenerima !== '-' ? `
-                <tr>
-                  <td>NISN</td>
-                  <td>:</td>
-                  <td>${nisnPenerima}</td>
-                </tr>
-              ` : ''}
-              <tr>
-                <td>Periode Akademik</td>
-                <td>:</td>
-                <td>Semester ${surat.semester || selectedSemester} / TA ${surat.tahun_ajaran || selectedTahunAjaran}</td>
-              </tr>
-            </table>
-
-            <p style="margin-top: 4mm; white-space: pre-line;">${cleanNarasi}</p>
-
-            <p style="margin-top: 4mm;">Demikian surat keterangan ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.</p>
-          </div>
-
-          <div class="ttd-container">
-            <p style="margin:0;">Gisting, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br/>
-            Kepala SMP Muna Mustofa,</p>
-            
-            <div class="signature-box">
-              ${includeStempel ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img" />` : ''}
-              ${includeTTD ? `<img src="/ttd-kepsek.png" alt="TTD" class="signature-img" />` : ''}
-            </div>
-
-            <p style="margin:0;"><b><u>SULASTRI, S.Pd., Gr.</u></b><br/>
-            NUPTK. 6337763664131233</p>
-          </div>
-          <div class="clear"></div>
+          ${htmlContent}
         </body>
       </html>
     `)
@@ -415,240 +588,242 @@ export default function AdministrasiTUPage() {
     <motion.div
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      transition={{ duration: 0.4 }}
       className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 overflow-y-auto ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
-      
-      {/* WATERMARK LOGO */}
-      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
-        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
-      }`}>
-        <img src="/logo-smp.jpg" alt="Watermark SMP Muna Mustofa" className="w-[850px] h-[850px] object-contain max-w-none" />
-      </div>
-
       <div className="relative z-10 flex flex-col min-h-screen">
         
         {/* HEADER TOPBAR */}
-        <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs transition-colors duration-300 ${
+        <header className={`border-b px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 shrink-0 shadow-xs ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
         }`}>
           <div className="flex items-center gap-2.5">
-            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
+            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
             <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
-                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
-              }`}>
-                <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
+              <div className="w-8 h-8 rounded-xl overflow-hidden border p-0.5 shadow-xs bg-white">
+                <img src="/logo-smp.jpg" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div>
                 <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[10px] sm:text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Administrasi &amp; Persuratan TU</p>
+                <p className="text-[10px] sm:text-[11px] font-bold text-emerald-500 mt-0.5">Administrasi Persuratan TU (Live Editor)</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
-            <div className={`border text-xs font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-xs ${
+          <div className="flex items-center gap-2">
+            <div className={`border text-xs font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
-              <span className={`text-[9px] sm:text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
-              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
-                isDarkMode ? 'bg-slate-900 text-indigo-300' : 'bg-slate-100 text-indigo-900'
-              }`}>
+              <span className="text-[9px] uppercase text-slate-400">Periode:</span>
+              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className="bg-transparent font-bold">
                 <option value="Ganjil">Ganjil</option>
                 <option value="Genap">Genap</option>
               </select>
-              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
-                isDarkMode ? 'bg-slate-900 text-indigo-300' : 'bg-slate-100 text-indigo-900'
-              }`}>
+              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className="bg-transparent font-bold">
                 {Array.from({ length: 10 }, (_, i) => {
-                  const startYear = 2024 + i
-                  const tahunOption = `${startYear}/${startYear + 1}`
-                  return <option key={tahunOption} value={tahunOption}>{tahunOption}</option>
+                  const y = 2024 + i
+                  return <option key={y} value={`${y}/${y + 1}`}>{y}/{y + 1}</option>
                 })}
               </select>
             </div>
-
-            <div className={`border text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
-              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
-            }`}>
-              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
-                {userDisplayName.charAt(0)}
-              </span>
-              <span className="max-w-[80px] sm:max-w-none truncate">{userDisplayName}</span>
-              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
-                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
-              }`}>
-                Operator
-              </span>
-            </div>
-
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut()
-                router.replace('/login')
-              }}
-              className={`border p-2 rounded-xl transition cursor-pointer ${
-                isDarkMode 
-                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
-                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
-              }`}
-              title="Keluar"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
+            <span className="text-xs font-extrabold px-2.5 py-1 rounded-xl bg-indigo-600 text-white">{userDisplayName}</span>
           </div>
         </header>
 
         {/* MAIN CONTAINER */}
-        <main className="max-w-7xl w-full mx-auto p-3.5 sm:p-4 flex-1 flex flex-col space-y-4 pb-28 sm:pb-16">
+        <main className="max-w-7xl w-full mx-auto p-4 flex-1 flex flex-col space-y-4 pb-20">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
             
-            {/* FORM INPUT SURAT */}
-            <form onSubmit={handleSubmit} className={`lg:col-span-5 p-4 sm:p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs space-y-4 ${
-              isDarkMode 
-                ? 'bg-slate-900/90 border-slate-800' 
-                : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+            {/* PANEL KIRI: FORM INPUT PARAMETER SURAT */}
+            <form onSubmit={handleSubmit} className={`lg:col-span-5 p-5 border rounded-2xl flex flex-col justify-between space-y-4 ${
+              isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200'
             }`}>
-              <div className="space-y-3">
-                <div className={`flex items-center gap-2 border-b pb-2 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
-                  <span className="text-indigo-500 text-base">📑</span>
-                  <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                    {editingId ? 'Edit Arsip Surat' : 'Buat / Registrasi Surat TU'}
-                  </h3>
+              <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-indigo-500 text-base">📑</span>
+                    <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {editingId ? 'Edit Arsip Surat' : 'Form Parameter Surat'}
+                    </h3>
+                  </div>
                 </div>
 
                 <div>
-                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>1. Jenis Surat *</label>
+                  <label className="block text-[10px] font-extrabold uppercase mb-1">1. Jenis Surat Baku *</label>
                   <select
                     value={jenisSurat}
                     onChange={(e) => {
                       setJenisSurat(e.target.value)
                       setPenerima('')
                     }}
-                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                   >
-                    <option value="Surat Keterangan Aktif Siswa">Surat Keterangan Aktif Siswa</option>
-                    <option value="Surat Mutasi Siswa">Surat Mutasi Siswa</option>
-                    <option value="Surat Undangan Orang Tua/Wali">Surat Undangan Orang Tua/Wali</option>
-                    <option value="Surat Tugas Guru">Surat Tugas Guru</option>
-                    <option value="Surat Keputusan Kepala Sekolah">Surat Keputusan Kepala Sekolah</option>
+                    <option value="Surat Keterangan Bersedia Menerima">1. Surat Keterangan Bersedia Menerima</option>
+                    <option value="Surat Mutasi Siswa">2. Surat Mutasi Siswa (Keluar)</option>
+                    <option value="Surat Keterangan Aktif Siswa">3. Surat Keterangan Aktif Siswa</option>
+                    <option value="Surat Undangan Orang Tua/Wali">4. Surat Undangan Orang Tua/Wali</option>
+                    <option value="Surat Tugas Guru">5. Surat Tugas Guru / Pegawai</option>
+                    <option value="Surat Keputusan Kepala Sekolah">6. Surat Keputusan (SK) Kepala Sekolah</option>
                   </select>
                 </div>
 
-                {jenisSurat.includes('Siswa') ? (
+                {/* DROPDOWN ENTITAS SUPABASE */}
+                {jenisSurat.includes('Siswa') || jenisSurat.includes('Menerima') || jenisSurat.includes('Undangan') ? (
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>2. Pilih Siswa *</label>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1">2. Pilih Siswa (Database Supabase)</label>
                     <select
                       value={selectedEntityId}
                       onChange={(e) => {
                         setSelectedEntityId(e.target.value)
                         const found = siswaOptions.find(s => String(s.id) === e.target.value)
-                        if (found) setPenerima(`${found.nama} (${found.extraInfo})`)
+                        if (found) {
+                          setPenerima(found.nama)
+                          setNisn(found.nisn || '')
+                          setTtl(found.ttl || '')
+                          setJenisKelamin(found.jk || 'Laki-laki')
+                          setSekolahAsal(found.sekolahAsal || '')
+                          setNamaOrtu(found.ortu || '')
+                          setAlamatSiswa(found.alamat || '')
+                        }
                       }}
-                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer mb-1 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
-                      <option value="">-- Pilih Nama Siswa --</option>
+                      <option value="">-- Pilih Siswa Terdaftar / Atau Isi Manual --</option>
                       {siswaOptions.map(s => (
-                        <option key={s.id} value={s.id}>{s.nama} - {s.extraInfo}</option>
+                        <option key={s.id} value={s.id}>{s.nama} ({s.extraInfo})</option>
                       ))}
                     </select>
                   </div>
-                ) : jenisSurat.includes('Guru') ? (
+                ) : (
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>2. Pilih Guru *</label>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1">2. Pilih Guru / Pegawai (Database Supabase)</label>
                     <select
                       value={selectedEntityId}
                       onChange={(e) => {
                         setSelectedEntityId(e.target.value)
                         const found = guruOptions.find(g => String(g.id) === e.target.value)
-                        if (found) setPenerima(found.nama)
+                        if (found) {
+                          setPenerima(found.nama)
+                          setJabatanGuru(found.jabatan || 'Guru Mata Pelajaran')
+                          setNuptkGuru(found.nuptk || '-')
+                        }
                       }}
-                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer mb-1 ${
+                      className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
-                      <option value="">-- Pilih Nama Guru --</option>
+                      <option value="">-- Pilih Guru Terdaftar / Atau Isi Manual --</option>
                       {guruOptions.map(g => (
-                        <option key={g.id} value={g.id}>{g.nama}</option>
+                        <option key={g.id} value={g.id}>{g.nama} ({g.extraInfo})</option>
                       ))}
                     </select>
                   </div>
-                ) : null}
+                )}
 
                 <div>
-                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>3. Penerima / Ditujukan Kepada *</label>
+                  <label className="block text-[10px] font-extrabold uppercase mb-1">3. Nama Lengkap Subjek / Penerima *</label>
                   <input
                     type="text"
                     value={penerima}
                     onChange={(e) => setPenerima(e.target.value)}
-                    placeholder="Nama Siswa / Guru / Instansi"
-                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                    placeholder="Nama Siswa / Guru / Ortu Wali"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                     required
                   />
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>4. Keterangan / Narasi Surat</label>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setIsModalEditorOpen(true)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition shadow-xs cursor-pointer ${
-                          isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
-                        }`}
-                        title="Buka Editor Layar Penuh"
-                      >
-                        🔍 Layar Penuh
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleGenerateAiNarasi}
-                        disabled={isAiGenerating}
-                        className="text-[10px] bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black px-2.5 py-0.5 rounded-md transition shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                      >
-                        <span>✨</span>
-                        <span>{isAiGenerating ? 'AI Menyusun...' : 'Buat via AI'}</span>
-                      </button>
+                {/* FORM SPESIFIK PARAMETER SURAT */}
+                {jenisSurat === 'Surat Keterangan Bersedia Menerima' && (
+                  <div className="p-3 border rounded-xl space-y-2 bg-indigo-50/50 dark:bg-slate-800/50 border-indigo-200 dark:border-slate-700">
+                    <p className="text-[10px] font-extrabold uppercase text-indigo-600 dark:text-indigo-400">Parameter Bersedia Menerima:</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <input type="text" value={nisn} onChange={e => setNisn(e.target.value)} placeholder="NISN Siswa" className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                      <select value={jenisKelamin} onChange={e => setJenisKelamin(e.target.value)} className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900">
+                        <option value="Laki-laki">Laki-laki</option>
+                        <option value="Perempuan">Perempuan</option>
+                      </select>
+                    </div>
+                    <input type="text" value={ttl} onChange={e => setTtl(e.target.value)} placeholder="Tempat, Tanggal Lahir" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <input type="text" value={sekolahAsal} onChange={e => setSekolahAsal(e.target.value)} placeholder="Sekolah Asal" className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                      <input type="text" value={namaOrtu} onChange={e => setNamaOrtu(e.target.value)} placeholder="Nama Ortu / Wali" className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    </div>
+                    <input type="text" value={alamatSiswa} onChange={e => setAlamatSiswa(e.target.value)} placeholder="Alamat Lengkap Siswa" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <input type="text" value={tingkatKelas} onChange={e => setTingkatKelas(e.target.value)} placeholder="Tingkat/Kelas" className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                      <input type="text" value={rombel} onChange={e => setRombel(e.target.value)} placeholder="Rombel" className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
                     </div>
                   </div>
-                  <textarea
-                    rows={6}
-                    value={keterangan}
-                    onChange={(e) => setKeterangan(e.target.value)}
-                    placeholder="Tulis maksud singkat lalu klik 'Buat via AI' untuk merangkai narasi..."
-                    className={`w-full border rounded-xl p-3 text-xs font-medium focus:outline-none focus:border-indigo-600 leading-relaxed resize-y ${
-                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                    }`}
-                  />
-                </div>
+                )}
 
-                <div className={`p-2.5 rounded-xl border ${isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-indigo-50/80 border-indigo-200/80'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-extrabold uppercase tracking-wider ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>5. Nomor Surat Resmi *</label>
-                    <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${isDarkMode ? 'bg-indigo-950 text-indigo-300' : 'bg-indigo-200 text-indigo-900'}`}>Auto / Editable</span>
+                {jenisSurat === 'Surat Mutasi Siswa' && (
+                  <div className="p-3 border rounded-xl space-y-2 bg-indigo-50/50 dark:bg-slate-800/50 border-indigo-200 dark:border-slate-700">
+                    <p className="text-[10px] font-extrabold uppercase text-indigo-600 dark:text-indigo-400">Parameter Mutasi Keluar:</p>
+                    <input type="text" value={nisn} onChange={e => setNisn(e.target.value)} placeholder="NISN Siswa" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={sekolahTujuan} onChange={e => setSekolahTujuan(e.target.value)} placeholder="Nama Sekolah Tujuan (Misal: MTsS Pelita)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <input type="text" value={tingkatKelas} onChange={e => setTingkatKelas(e.target.value)} placeholder="Kelas Terakhir" className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                      <input type="text" value={rombel} onChange={e => setRombel(e.target.value)} placeholder="Rombel" className="p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    </div>
                   </div>
+                )}
+
+                {jenisSurat === 'Surat Keterangan Aktif Siswa' && (
+                  <div className="p-3 border rounded-xl space-y-2 bg-indigo-50/50 dark:bg-slate-800/50 border-indigo-200 dark:border-slate-700">
+                    <p className="text-[10px] font-extrabold uppercase text-indigo-600 dark:text-indigo-400">Parameter Aktif Siswa:</p>
+                    <input type="text" value={nisn} onChange={e => setNisn(e.target.value)} placeholder="NISN Siswa" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={ttl} onChange={e => setTtl(e.target.value)} placeholder="Tempat, Tanggal Lahir" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={keperluanAktif} onChange={e => setKeperluanAktif(e.target.value)} placeholder="Keperluan Surat (Misal: Persyaratan KIP)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                  </div>
+                )}
+
+                {jenisSurat.includes('Undangan') && (
+                  <div className="p-3 border rounded-xl space-y-2 bg-indigo-50/50 dark:bg-slate-800/50 border-indigo-200 dark:border-slate-700">
+                    <p className="text-[10px] font-extrabold uppercase text-indigo-600 dark:text-indigo-400">Parameter Surat Undangan:</p>
+                    <input type="text" value={hariTanggal} onChange={e => setHariTanggal(e.target.value)} placeholder="Hari, Tanggal (Sabtu, 14 Nov 2026)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={waktuAcara} onChange={e => setWaktuAcara(e.target.value)} placeholder="Waktu (08.00 WIB s.d. Selesai)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={tempatAcara} onChange={e => setTempatAcara(e.target.value)} placeholder="Tempat (Aula SMP Muna Mustofa)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={namaAcara} onChange={e => setNamaAcara(e.target.value)} placeholder="Nama Acara (Rapat Evaluasi Rapor)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                  </div>
+                )}
+
+                {jenisSurat.includes('Tugas') && (
+                  <div className="p-3 border rounded-xl space-y-2 bg-indigo-50/50 dark:bg-slate-800/50 border-indigo-200 dark:border-slate-700">
+                    <p className="text-[10px] font-extrabold uppercase text-indigo-600 dark:text-indigo-400">Parameter Surat Tugas Guru:</p>
+                    <input type="text" value={jabatanGuru} onChange={e => setJabatanGuru(e.target.value)} placeholder="Jabatan / Mapel" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={nuptkGuru} onChange={e => setNuptkGuru(e.target.value)} placeholder="NUPTK / NIP" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <input type="text" value={tugasLokasi} onChange={e => setTugasLokasi(e.target.value)} placeholder="Lokasi Penugasan (Dinas Pendidikan Tanggamus)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                  </div>
+                )}
+
+                {jenisSurat.includes('Keputusan') && (
+                  <div className="p-3 border rounded-xl space-y-2 bg-indigo-50/50 dark:bg-slate-800/50 border-indigo-200 dark:border-slate-700">
+                    <p className="text-[10px] font-extrabold uppercase text-indigo-600 dark:text-indigo-400">Parameter SK Kepala Sekolah:</p>
+                    <input type="text" value={perihalSk} onChange={e => setPerihalSk(e.target.value)} placeholder="Perihal SK (Penetapan Tim Pengembang Kurikulum)" className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                    <textarea rows={2} value={diktumSk} onChange={e => setDiktumSk(e.target.value)} placeholder="Isi Poin Keputusan Utama..." className="w-full p-1.5 rounded border text-xs bg-white dark:bg-slate-900" />
+                  </div>
+                )}
+
+                <div className="p-2.5 rounded-xl border bg-indigo-50/80 dark:bg-slate-800/80 border-indigo-200 dark:border-slate-700">
+                  <label className="block text-[10px] font-extrabold uppercase mb-1">Nomor Surat Resmi *</label>
                   <input
                     type="text"
                     value={nomorSurat}
                     onChange={(e) => setNomorSurat(e.target.value)}
-                    placeholder="Contoh: 421/001/SMP-MM/2026"
-                    className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold focus:outline-none focus:border-indigo-600 ${
+                    placeholder="421/001/SMP.MM/XI/2026"
+                    className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold ${
                       isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
                     required
@@ -656,315 +831,110 @@ export default function AdministrasiTUPage() {
                 </div>
               </div>
 
-              <div className={`flex gap-2 pt-2 border-t shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/60'}`}>
+              <div className="flex gap-2 pt-2 border-t">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-extrabold text-xs transition shadow-xs cursor-pointer"
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-extrabold text-xs shadow-md transition"
                 >
-                  {loading ? 'Menyimpan...' : editingId ? 'Update Surat' : '+ Simpan Arsip Surat'}
+                  {loading ? 'Menyimpan...' : editingId ? 'Update Arsip' : '+ Simpan Arsip Surat'}
                 </button>
-
+                <button
+                  type="button"
+                  onClick={() => handlePrintSurat()}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-extrabold text-xs shadow-md transition flex items-center gap-1"
+                >
+                  <span>🖨️</span>
+                  <span>Cetak PDF</span>
+                </button>
                 {editingId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className={`px-3 border text-xs font-bold rounded-xl transition cursor-pointer ${
-                      isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
+                  <button type="button" onClick={resetForm} className="px-3 border text-xs font-bold rounded-xl bg-white text-slate-700">
                     Batal
                   </button>
                 )}
               </div>
             </form>
 
-            {/* ARSIP SURAT: CARD LIST (MOBILE) & TABEL (DESKTOP) */}
-            <div className={`lg:col-span-7 backdrop-blur-md border rounded-2xl p-4 sm:p-5 flex flex-col shadow-xs ${
-              isDarkMode 
-                ? 'bg-slate-900/90 border-slate-800' 
-                : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+            {/* PANEL KANAN: LIVE PREVIEW DOKUMEN A4 & EDITABLE */}
+            <div className={`lg:col-span-7 backdrop-blur-md border rounded-2xl p-5 flex flex-col space-y-4 ${
+              isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200'
             }`}>
-              <div className={`flex items-center justify-between border-b pb-2.5 shrink-0 gap-3 flex-wrap ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
-                <div className="flex items-center gap-2">
-                  <span className="text-indigo-500 text-base">📂</span>
-                  <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Arsip Surat Keluar TU</h3>
+              
+              {/* LIVE PREVIEW CONTAINER DENGAN ATRIBUT CONTENTEDITABLE */}
+              <div className="flex-1 border rounded-xl p-4 bg-white text-black shadow-inner overflow-y-auto max-h-[60vh]">
+                <div className="flex items-center justify-between border-b pb-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">📄 Live Preview (Dapat Di-edit Langsung)</span>
+                    <span className="text-[9px] text-amber-600 font-bold">✏️ Klik teks di bawah untuk edit manual!</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-bold">
+                    <label className="flex items-center gap-1 cursor-pointer select-none">
+                      <input type="checkbox" checked={includeTTD} onChange={e => setIncludeTTD(e.target.checked)} className="rounded accent-indigo-600" />
+                      <span>TTD</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer select-none">
+                      <input type="checkbox" checked={includeStempel} onChange={e => setIncludeStempel(e.target.checked)} className="rounded accent-indigo-600" />
+                      <span>Stempel</span>
+                    </label>
+                  </div>
                 </div>
 
-                <div className={`flex items-center gap-3 border px-3 py-1 rounded-xl text-xs font-bold shadow-xs ${
-                  isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-700'
-                }`}>
-                  <span className={`text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Cetak:</span>
-                  <label className="flex items-center gap-1 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={includeTTD}
-                      onChange={(e) => setIncludeTTD(e.target.checked)}
-                      className="rounded accent-indigo-600"
-                    />
-                    <span>TTD</span>
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={includeStempel}
-                      onChange={(e) => setIncludeStempel(e.target.checked)}
-                      className="rounded accent-indigo-600"
-                    />
-                    <span>Stempel</span>
-                  </label>
-                </div>
+                {/* AREA EDITABLE: DIJAMIN BISA DIKETIK LANGSUNG */}
+                <div
+                  ref={previewRef}
+                  contentEditable={true}
+                  suppressContentEditableWarning={true}
+                  className="focus:outline-none focus:ring-1 focus:ring-indigo-300 p-2 rounded transition"
+                  dangerouslySetInnerHTML={{ __html: renderSuratHtmlBody() }}
+                />
+              </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* TABEL ARSIP RINGKAS DI BAWAH PREVIEW */}
+              <div className="border-t pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-extrabold uppercase">Arsip Surat Keluar ({filteredSurat.length})</h4>
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Cari No. / Penerima..."
-                    className={`border rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-indigo-600 flex-1 sm:w-40 ${
-                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                    }`}
+                    placeholder="🔍 Cari Arsip..."
+                    className="border rounded-lg px-2 py-0.5 text-xs font-bold bg-white dark:bg-slate-800"
                   />
-                  <button
-                    onClick={fetchSurat}
-                    className={`text-[11px] border px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
-                      isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    🔄 Refresh
-                  </button>
+                </div>
+
+                <div className="max-h-36 overflow-y-auto border rounded-lg">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-[10px]">
+                      <tr>
+                        <th className="p-2">NO. SURAT</th>
+                        <th className="p-2">JENIS</th>
+                        <th className="p-2">PENERIMA</th>
+                        <th className="p-2 text-center">AKSI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredSurat.map(s => (
+                        <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                          <td className="p-2 font-mono font-bold text-indigo-600">{s.nomor_surat}</td>
+                          <td className="p-2 font-semibold">{s.jenis_surat}</td>
+                          <td className="p-2 font-bold">{s.penerima}</td>
+                          <td className="p-2 text-center space-x-1 whitespace-nowrap">
+                            <button onClick={() => handlePrintSurat(s)} className="px-2 py-0.5 text-[10px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold rounded">🖨️ Cetak</button>
+                            <button onClick={() => handleEdit(s)} className="px-2 py-0.5 text-[10px] bg-amber-50 border border-amber-200 text-amber-700 font-bold rounded">✏️ Edit</button>
+                            <button onClick={() => handleDelete(s.id)} className="px-2 py-0.5 text-[10px] bg-rose-50 border border-rose-200 text-rose-600 font-bold rounded">🗑️</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              {/* 1. MOBILE CARD VIEW (md:hidden) */}
-              <div className="block md:hidden mt-3 space-y-3">
-                {loading ? (
-                  <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
-                    Memuat arsip surat...
-                  </div>
-                ) : filteredSurat.length === 0 ? (
-                  <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
-                    Belum ada arsip surat tercatat di periode ini.
-                  </div>
-                ) : (
-                  filteredSurat.map((s) => (
-                    <div
-                      key={s.id}
-                      className={`p-3.5 rounded-xl border transition shadow-xs flex flex-col gap-2 ${
-                        isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-indigo-200/90'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-xs font-bold text-indigo-400">
-                          {s.nomor_surat}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
-                          isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
-                        }`}>
-                          {s.jenis_surat}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1 border-t border-b py-2 my-0.5 border-slate-700/40">
-                        <span className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                          👤 Penerima: {s.penerima}
-                        </span>
-                        <p className={`text-[11px] font-medium line-clamp-3 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                          📖 {s.keterangan || '-'}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1.5 pt-0.5">
-                        <button
-                          onClick={() => handlePrintSurat(s)}
-                          className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-indigo-100"
-                        >
-                          🖨️ Cetak
-                        </button>
-                        <button
-                          onClick={() => handleEdit(s)}
-                          className="px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-amber-100"
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(s.id)}
-                          className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-100"
-                        >
-                          🗑️ Hapus
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* 2. DESKTOP TABEL HTML (hidden md:block) */}
-              <div className={`hidden md:block mt-3 overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
-                    <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
-                      <th className="py-2.5 px-3">NO. SURAT</th>
-                      <th className="py-2.5 px-3">JENIS SURAT</th>
-                      <th className="py-2.5 px-3">PENERIMA</th>
-                      <th className="py-2.5 px-3">KEPERLUAN / NARASI</th>
-                      <th className="py-2.5 px-3 text-center w-28">AKSI</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
-                    {loading ? (
-                      <tr>
-                        <td colSpan={5} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
-                          Memuat arsip surat...
-                        </td>
-                      </tr>
-                    ) : filteredSurat.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
-                          Belum ada arsip surat tercatat di periode ini.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredSurat.map((s) => (
-                        <tr key={s.id} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
-                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-400 whitespace-nowrap">{s.nomor_surat}</td>
-                          <td className={`py-2.5 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{s.jenis_surat}</td>
-                          <td className={`py-2.5 px-3 font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{s.penerima}</td>
-                          <td className={`py-2.5 px-3 font-medium line-clamp-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{s.keterangan || '-'}</td>
-                          <td className="py-2.5 px-3 text-center space-x-1 whitespace-nowrap">
-                            <button
-                              onClick={() => handlePrintSurat(s)}
-                              className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 p-1.5 rounded-lg border border-indigo-200 transition cursor-pointer"
-                              title="Cetak Surat Resmi"
-                            >
-                              🖨️
-                            </button>
-                            <button
-                              onClick={() => handleEdit(s)}
-                              className="bg-amber-50 text-amber-700 hover:bg-amber-100 p-1.5 rounded-lg border border-amber-200 transition cursor-pointer"
-                              title="Edit Surat"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => handleDelete(s.id)}
-                              className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
-                              title="Hapus Surat"
-                            >
-                              🗑️
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </div>
 
           </div>
         </main>
-
-        {/* MODAL EDITOR NARASI LAYAR PENUH */}
-        {isModalEditorOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border flex flex-col max-h-[85vh] overflow-hidden ${
-              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-            }`}>
-              <div className="px-5 py-3.5 bg-indigo-900 text-white flex items-center justify-between">
-                <h3 className="font-extrabold text-sm flex items-center gap-2">
-                  <span>📝</span> Editor Fokus Narasi Surat
-                </h3>
-                <button
-                  onClick={() => setIsModalEditorOpen(false)}
-                  className="text-white hover:bg-white/20 rounded-lg p-1 transition cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="p-5 flex-1 flex flex-col space-y-3">
-                <p className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Sunting dan sesuaikan teks narasi surat resmi di bawah ini dengan nyaman.
-                </p>
-                <textarea
-                  value={keterangan}
-                  onChange={(e) => setKeterangan(e.target.value)}
-                  className={`w-full flex-1 min-h-[300px] border rounded-xl p-4 text-sm font-medium leading-relaxed focus:outline-none focus:border-indigo-600 resize-none font-serif ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`}
-                  placeholder="Ketik atau edit narasi surat..."
-                />
-              </div>
-              <div className={`px-5 py-3 border-t flex justify-end gap-2 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
-                <button
-                  onClick={() => setIsModalEditorOpen(false)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
-                >
-                  Selesai Menyunting
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* FOOTER BADGE */}
-        <div className="pb-20 sm:pb-16 pt-2 flex justify-center shrink-0">
-          <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
-            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
-          }`}>
-            <span>Aplikasi Guru AI</span>
-            <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
-          </div>
-        </div>
       </div>
-
-      {/* BOTTOM NAVIGATION DOCK */}
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
-        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <span className="text-base">🕒</span>
-            <span>Dashboard</span>
-          </Link>
-
-          {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <span className="text-base">👥</span>
-              <span>Siswa</span>
-            </Link>
-          )}
-
-          {isOperator && (
-            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <span className="text-base">👨‍🏫</span>
-              <span>Guru</span>
-            </Link>
-          )}
-
-          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <span className="text-base">🎓</span>
-            <span>Akademik</span>
-          </Link>
-
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <span className="text-base">🖨️</span>
-            <span>Laporan</span>
-          </Link>
-        </div>
-      </div>
-
     </motion.div>
   )
 }

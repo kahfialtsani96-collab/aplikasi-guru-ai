@@ -98,15 +98,19 @@ export default function CetakKartuPage() {
       try {
         const { data, error } = await supabase
           .from('guru')
-          .select('nama_lengkap, nip, jabatan')
-          .or('jabatan.ilike.%kepala sekolah%,nama_lengkap.ilike.%sulastri%')
-          .limit(1)
-          .maybeSingle()
+          .select('*')
+          .limit(10)
 
-        if (!error && data) {
-          const cleanNuptk = data.nip && data.nip !== 'EMPTY' && data.nip !== 'NULL' ? data.nip : '-'
+        if (!error && data && data.length > 0) {
+          const kepsekObj = data.find((g: any) => 
+            (g.jabatan && g.jabatan.toLowerCase().includes('kepala sekolah')) ||
+            (g.nama_lengkap && g.nama_lengkap.toLowerCase().includes('sulastri'))
+          ) || data[0]
+
+          const rawNuptk = kepsekObj.NUPTK || kepsekObj.nuptk || kepsekObj.nip
+          const cleanNuptk = rawNuptk && rawNuptk !== 'EMPTY' && rawNuptk !== 'NULL' ? rawNuptk : '6337763664131233'
           setKepsekInfo({
-            nama: data.nama_lengkap?.toUpperCase() || 'SULASTRI, S.Pd., Gr.',
+            nama: (kepsekObj.nama_lengkap || kepsekObj.nama || 'SULASTRI, S.Pd., Gr.').toUpperCase(),
             nuptk: cleanNuptk
           })
         }
@@ -139,31 +143,42 @@ export default function CetakKartuPage() {
     fetchKelasFromDB()
   }, [])
 
-  // FETCH DATA KARTU DINAMIS (GURU / SISWA)
+  // FETCH DATA KARTU DINAMIS (GURU/SISWA) DENGAN SAFE FALLBACK
   useEffect(() => {
     async function loadCardData() {
       setLoading(true)
       try {
         if (jenisKartu === 'guru') {
+          // MEMANGGIL SEMUA KOLOM DARI TABEL GURU
           const { data, error } = await supabase
             .from('guru')
-            .select('id, nip, nama_lengkap, mapel, jabatan')
-            .order('nama_lengkap', { ascending: true })
+            .select('*')
 
-          if (!error && data) {
+          if (error) {
+            console.error('Supabase Error Fetching Guru:', error)
+          }
+
+          if (data && data.length > 0) {
             const mapped: ItemKartu[] = data.map((g: any) => {
-              const cleanNip = g.nip && g.nip !== 'EMPTY' && g.nip !== 'NULL' ? g.nip : '-'
-              const isKepsek = g.jabatan?.toLowerCase().includes('kepala sekolah') || g.nama_lengkap?.toLowerCase().includes('sulastri')
+              const rawNuptk = g.NUPTK || g.nuptk || g.nip
+              const cleanNuptk = rawNuptk && rawNuptk !== 'EMPTY' && rawNuptk !== 'NULL' ? String(rawNuptk) : '-'
+              
+              const namaGuru = g.nama_lengkap || g.nama_guru || g.nama || 'GURU'
+              const isKepsek = (g.jabatan && String(g.jabatan).toLowerCase().includes('kepala sekolah')) || 
+                               String(namaGuru).toLowerCase().includes('sulastri')
+
               return {
                 id: g.id,
-                nama: g.nama_lengkap || 'GURU',
-                nomorId: cleanNip,
+                nama: String(namaGuru),
+                nomorId: cleanNuptk,
                 subInfo: g.jabatan || g.mapel || 'Guru / Staf TU',
                 isKepalaSekolah: isKepsek,
                 tipe: 'guru'
               }
             })
             setCardItems(mapped)
+          } else {
+            setCardItems([])
           }
         } else {
           if (!selectedKelasId) {
@@ -174,9 +189,8 @@ export default function CetakKartuPage() {
 
           const { data, error } = await supabase
             .from('siswa')
-            .select('id, nisn, nama_lengkap, kelas_id')
+            .select('*')
             .eq('kelas_id', selectedKelasId)
-            .order('nama_lengkap', { ascending: true })
 
           if (!error && data) {
             const cleanKelas = selectedKelasNama.replace(/^kelas\s+/i, '')
@@ -184,7 +198,7 @@ export default function CetakKartuPage() {
               const noUrut = String(idx + 1).padStart(3, '0')
               return {
                 id: s.id,
-                nama: s.nama_lengkap,
+                nama: s.nama_lengkap || s.nama || 'SISWA',
                 nomorId: s.nisn || '-',
                 subInfo: cleanKelas,
                 nomorUjian: jenisKartu === 'ujian' ? `${prefixNoUjian}${noUrut}` : undefined,
@@ -279,7 +293,7 @@ export default function CetakKartuPage() {
                       <span style="font-size: 5pt; color: #64748b; font-weight: bold;">NAMA:</span><br/>
                       <b style="font-size: 7.5pt;">${item.nama}</b><br/>
                       <table style="width: 100%; margin-top: 2pt; font-size: 6.5pt;">
-                        <tr><td style="width: 1.4cm; color: #475569; font-weight: bold;">${jenisKartu === 'guru' ? 'NIP' : 'NISN'}</td><td>: <b>${item.nomorId}</b></td></tr>
+                        <tr><td style="width: 1.4cm; color: #475569; font-weight: bold;">${jenisKartu === 'guru' ? 'NUPTK' : 'NISN'}</td><td>: <b>${item.nomorId}</b></td></tr>
                         <tr><td style="color: #475569; font-weight: bold;">${jenisKartu === 'guru' ? 'JABATAN' : 'KELAS'}</td><td>: <b>${item.subInfo}</b></td></tr>
                         ${jenisKartu === 'ujian' ? `<tr><td style="color: #047857; font-weight: bold;">NO. UJIAN</td><td>: <b style="color: #047857;">${noUjianFinal}</b></td></tr>` : ''}
                         ${jenisKartu === 'ujian' && item.customField ? `<tr><td style="color: #475569; font-weight: bold;">RUANG/SESI</td><td>: <b>${item.customField}</b></td></tr>` : ''}
@@ -387,7 +401,6 @@ export default function CetakKartuPage() {
               </div>
             </div>
             
-            <!-- FOOTER KARTU UJIAN 1 SISI (QR KIRI, TTD KEPSEK KANAN) -->
             <div class="card-footer footer-ujian">
               <div class="footer-left">
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${item.nomorId}" alt="QR" class="qr-code" />
@@ -425,7 +438,7 @@ export default function CetakKartuPage() {
                 <p class="label">NAMA GURU / PEGAWAI</p>
                 <p class="value-name">${item.nama}</p>
                 <div class="info-container">
-                  <div class="info-row"><span class="info-label">NIP/NUPTK</span><span class="info-val">: ${item.nomorId}</span></div>
+                  <div class="info-row"><span class="info-label">NUPTK</span><span class="info-val">: ${item.nomorId}</span></div>
                   <div class="info-row"><span class="info-label">JABATAN</span><span class="info-val">: ${item.subInfo}</span></div>
                 </div>
               </div>
@@ -706,8 +719,13 @@ export default function CetakKartuPage() {
                   <select
                     value={jenisKartu}
                     onChange={(e) => {
-                      setJenisKartu(e.target.value as JenisKartu)
+                      const val = e.target.value as JenisKartu
+                      setJenisKartu(val)
                       setSearchQuery('')
+                      if (val === 'guru') {
+                        setSelectedKelasId('')
+                        setSelectedKelasNama('')
+                      }
                     }}
                     className="bg-indigo-600 text-white font-extrabold border border-indigo-700 rounded-xl px-3.5 py-2 text-xs focus:outline-none cursor-pointer shadow-xs"
                   >
@@ -849,7 +867,7 @@ export default function CetakKartuPage() {
                 </div>
               ) : filteredItems.length === 0 ? (
                 <p className={`text-xs text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                  Tidak ada data ditemukan.
+                  Tidak ada data ditemukan. (Pastikan RLS tabel <b>guru</b> di Supabase sudah diizinkan untuk dibaca)
                 </p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 w-full">
@@ -911,7 +929,7 @@ export default function CetakKartuPage() {
                           <p className={`font-bold text-xs leading-tight truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.nama}</p>
                           
                           <p className={`text-[10px] pt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                            {jenisKartu === 'guru' ? 'NIP/NUPTK: ' : 'NISN: '}
+                            {jenisKartu === 'guru' ? 'NUPTK: ' : 'NISN: '}
                             <span className={`font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{item.nomorId}</span>
                           </p>
                           <p className={`text-[10px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -933,7 +951,7 @@ export default function CetakKartuPage() {
                         </div>
                       </div>
 
-                      {/* FOOTER GRID CARD (1 SISI KHUSUS UJIAN) */}
+                      {/* FOOTER GRID CARD */}
                       {jenisKartu === 'ujian' ? (
                         <div className={`border-t pt-2 flex items-center justify-between text-[9px] ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
                           <div className="flex items-center gap-1.5">
@@ -1015,7 +1033,7 @@ export default function CetakKartuPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold block mb-1">{jenisKartu === 'guru' ? 'NIP/NUPTK:' : 'NISN:'}</label>
+                    <label className="font-bold block mb-1">{jenisKartu === 'guru' ? 'NUPTK:' : 'NISN:'}</label>
                     <input
                       type="text"
                       value={editingItem.nomorId}
@@ -1121,7 +1139,7 @@ export default function CetakKartuPage() {
                 </div>
               </div>
 
-              {/* TAB SWITCHER (HANYA DITAMPILKAN JIKA BUKAN KARTU UJIAN) */}
+              {/* TAB SWITCHER */}
               {jenisKartu !== 'ujian' && (
                 <div className={`flex p-1 rounded-xl gap-1 text-xs font-extrabold ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
                   <button
@@ -1179,7 +1197,7 @@ export default function CetakKartuPage() {
                       </div>
                       <div className="space-y-0.5 pt-1">
                         <p className={`text-[10px] ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                          <b>{jenisKartu === 'guru' ? 'NIP/NUPTK' : 'NISN'}:</b> {selectedModalItem.nomorId}
+                          <b>{jenisKartu === 'guru' ? 'NUPTK' : 'NISN'}:</b> {selectedModalItem.nomorId}
                         </p>
                         <p className={`text-[10px] ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                           <b>{jenisKartu === 'guru' ? 'Jabatan' : 'Kelas'}:</b> {selectedModalItem.subInfo}

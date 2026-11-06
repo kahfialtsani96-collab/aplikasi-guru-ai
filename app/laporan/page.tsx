@@ -51,7 +51,7 @@ export default function LaporanPage() {
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
 
-  // Identitas TTD & Kop
+  // Identitas TTD & Kop (Dengan Fallback & Storage)
   const [namaGuru, setNamaGuru] = useState('Guru Pengampu')
   const [nipGuru, setNipGuru] = useState('-')
   const [namaKepsek, setNamaKepsek] = useState('SULASTRI, S.Pd., Gr.')
@@ -67,6 +67,9 @@ export default function LaporanPage() {
   const [filterKelasLeger, setFilterKelasLeger] = useState('')
   const [filterKelasJurnal, setFilterKelasJurnal] = useState('')
   const [filterKelasBimbingan, setFilterKelasBimbingan] = useState('')
+  
+  // FILTER CETAK BANK SOAL
+  const [filterMapelBankSoal, setFilterMapelBankSoal] = useState('')
 
   // Rapor Per Siswa
   const [filterKelasRapor, setFilterKelasRapor] = useState('')
@@ -77,6 +80,26 @@ export default function LaporanPage() {
   const [kelasRiwayatAbsensi, setKelasRiwayatAbsensi] = useState('')
   const [kelasNilai, setKelasNilai] = useState('')
   const [mapelNilai, setMapelNilai] = useState('')
+
+  // LOAD PENGATURAN TTD DARI LOCALSTORAGE SAAT PERTAMA KALI
+  useEffect(() => {
+    const savedPengaturan = localStorage.getItem('pengaturan_laporan')
+    if (savedPengaturan) {
+      try {
+        const parsed = JSON.parse(savedPengaturan)
+        if (parsed.namaGuru) setNamaGuru(parsed.namaGuru)
+        if (parsed.nipGuru) setNipGuru(parsed.nipGuru)
+        if (parsed.namaKepsek) setNamaKepsek(parsed.namaKepsek)
+        if (parsed.nipKepsek) setNipKepsek(parsed.nipKepsek)
+        if (parsed.pemprov) setPemprov(parsed.pemprov)
+        if (parsed.namaSekolah) setNamaSekolah(parsed.namaSekolah)
+        if (parsed.alamatSekolah) setAlamatSekolah(parsed.alamatSekolah)
+        if (parsed.kotaTtd) setKotaTtd(parsed.kotaTtd)
+      } catch (e) {
+        console.error('Error parsing local storage settings:', e)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     setCurrentDateStr(
@@ -89,91 +112,149 @@ export default function LaporanPage() {
 
     async function getUserData() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const email = user.email || ''
-        setUserEmail(email)
-        const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
-        setUserDisplayName(nameFromMeta.toUpperCase())
+      if (!user || !user.email) return
 
-        fetchProfilGuru(email, nameFromMeta)
-        fetchMasterData()
-      }
-    }
-    getUserData()
-  }, [])
+      const cleanEmail = user.email.trim().toLowerCase()
+      setUserEmail(cleanEmail)
 
-  async function fetchProfilGuru(email: string, defaultName: string) {
-    try {
-      const { data } = await supabase
+      // Query langsung ke tabel guru berdasarkan email yang 100% cocok
+      const { data: dataGuruLogin, error } = await supabase
         .from('guru')
-        .select('nama_lengkap, nip')
-        .eq('email', email)
+        .select('id, nama_lengkap, role, NUPTK, nuptk, nip')
+        .ilike('email', cleanEmail)
         .maybeSingle()
 
-      if (data) {
-        setNamaGuru(data.nama_lengkap || defaultName)
-        setNipGuru(data.nip || '-')
-      } else {
-        setNamaGuru(defaultName)
+      if (error) {
+        console.error('Error fetching guru:', error)
       }
-    } catch (err) {
-      console.error('Error fetching profil guru:', err)
-    }
-  }
 
-  async function fetchMasterData() {
+      if (dataGuruLogin) {
+        // Tampilkan Nama Lengkap Resmi Guru
+        setUserDisplayName(dataGuruLogin.nama_lengkap.toUpperCase())
+        
+        const isUserStrictOperator = (dataGuruLogin.role || '').toLowerCase() === 'operator'
+        
+        const rawNuptk = dataGuruLogin.NUPTK || dataGuruLogin.nuptk || dataGuruLogin.nip
+        const cleanNuptk = rawNuptk && rawNuptk !== 'EMPTY' && rawNuptk !== 'NULL' ? String(rawNuptk) : '-'
+
+        if (!localStorage.getItem('pengaturan_laporan')) {
+          setNamaGuru(dataGuruLogin.nama_lengkap)
+          setNipGuru(cleanNuptk)
+        }
+
+        // Kunci mapel berdasarkan ID Guru
+        fetchMasterData(dataGuruLogin.id, isUserStrictOperator)
+      } else {
+        // Fallback jika data guru belum terbaca
+        const fallbackName = user.user_metadata?.full_name || cleanEmail.split('@')[0]
+        setUserDisplayName(fallbackName.toUpperCase())
+        fetchMasterData(null, isOperator)
+      }
+    }
+
+    getUserData()
+  }, [isOperator])
+
+  // AMBIL MASTER DATA MAPEL BERDASARKAN ID GURU & ROLE PROFIL KETAT
+  async function fetchMasterData(guruId: number | null, isStrictOperator: boolean) {
     try {
-      const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
-      const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
-      const { data: dataSiswa } = await supabase.from('siswa').select('id, nama_lengkap, nisn, kelas_id').order('nama_lengkap', { ascending: true })
+      if (!isStrictOperator && guruId) {
+        // JIKA GURU: Ambil HANYA mapel milik guru tersebut dari tabel guru_mapel
+        const { data: listGuruMapel, error: errGuruMapel } = await supabase
+          .from('guru_mapel')
+          .select(`
+            mapel_id,
+            mapel:mapel_id (
+              id,
+              nama_mapel
+            )
+          `)
+          .eq('guru_id', guruId)
+
+        if (!errGuruMapel && listGuruMapel && listGuruMapel.length > 0) {
+          const formattedMapel = listGuruMapel
+            .map((item: any) => item.mapel)
+            .filter(Boolean)
+            .map((m: any) => ({ id: m.id, nama: m.nama_mapel }))
+            .sort((a: any, b: any) => a.nama.localeCompare(b.nama))
+
+          setMapelList(formattedMapel)
+
+          if (formattedMapel.length > 0) {
+            setFilterMapelBankSoal(formattedMapel[0].nama)
+          }
+        } else {
+          setMapelList([])
+        }
+      } else {
+        // JIKA HANYA OPERATOR MURNI: Tampilkan seluruh mata pelajaran sekolah
+        const { data: dataMapel } = await supabase
+          .from('mapel')
+          .select('id, nama_mapel')
+          .order('nama_mapel', { ascending: true })
+
+        if (dataMapel) {
+          setMapelList(dataMapel.map(m => ({ id: m.id, nama: m.nama_mapel })))
+        }
+      }
+
+      // Load Master Kelas & Siswa
+      const { data: dataKelas } = await supabase
+        .from('kelas')
+        .select('id, nama_kelas')
+        .order('nama_kelas', { ascending: true })
+
+      const { data: dataSiswa } = await supabase
+        .from('siswa')
+        .select('id, nama_lengkap, nisn, kelas_id')
+        .order('nama_lengkap', { ascending: true })
 
       if (dataKelas) setKelasList(dataKelas.map(k => ({ id: k.id, nama: k.nama_kelas })))
-      if (dataMapel) setMapelList(dataMapel.map(m => ({ id: m.id, nama: m.nama_mapel })))
       if (dataSiswa) setSiswaList(dataSiswa)
+
     } catch (err) {
       console.error('Error fetching master data:', err)
     }
   }
 
   const headerKopHTML = `
-    <div style="text-align: center; margin-bottom: 20px; font-family: 'Times New Roman', serif; color: #000;">
-      <div style="font-size: 18pt; font-weight: bold; font-family: 'Traditional Arabic', 'Amiri', serif; line-height: 1.2; margin-bottom: 4px;">
+    <div style="text-align: center; margin-bottom: 8px; font-family: 'Times New Roman', serif; color: #000;">
+      <div style="font-size: 14pt; font-weight: bold; font-family: 'Traditional Arabic', 'Amiri', serif; line-height: 1.0; margin-bottom: 1px;">
         المعهد الإسلامي منى مصطفى
       </div>
-      <h3 style="margin: 0; font-size: 11pt; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">
+      <h3 style="margin: 0; font-size: 9pt; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">
         ${pemprov}
       </h3>
-      <h1 style="margin: 2px 0; font-size: 16pt; text-transform: uppercase; font-weight: bold;">
+      <h1 style="margin: 1px 0; font-size: 13pt; text-transform: uppercase; font-weight: bold;">
         ${namaSekolah}
       </h1>
-      <h4 style="margin: 0; font-size: 10.5pt; text-transform: uppercase; font-weight: bold;">
+      <h4 style="margin: 0; font-size: 8.5pt; text-transform: uppercase; font-weight: bold;">
         CAMPANG KECAMATAN GISTING KAB. TANGGAMUS
       </h4>
-      <p style="margin: 2px 0; font-size: 9.5pt; font-weight: bold;">
+      <p style="margin: 1px 0; font-size: 8pt; font-weight: bold;">
         NPSN: 71407877 SK IZIN OPERASIONAL : 503/029/IPO/VIII/36/2026
       </p>
       
-      <div style="border-top: 1.5px solid #000; margin-top: 6px; padding-top: 4px; font-size: 9.5pt; font-style: italic;">
-        <span><em>Address :</em> ${alamatSekolah}</span><br/>
-        <span><em>Email:</em> munamustofa1922@gmail.com &nbsp; <em>Website:</em> https://smpmunamustofa.netlify.app/#sambutan</span>
+      <div style="border-top: 1.2px solid #000; margin-top: 3px; padding-top: 2px; font-size: 8pt; font-style: italic;">
+        <span><em>Address :</em> ${alamatSekolah}</span> | <span><em>Email:</em> munamustofa1922@gmail.com</span>
       </div>
-      <div style="border-bottom: 1px solid #000; margin-top: 4px;"></div>
+      <div style="border-bottom: 1px solid #000; margin-top: 1px;"></div>
     </div>
   `
 
   const footerTtdHTML = `
-    <div style="margin-top: 40px; font-family: 'Times New Roman', serif; font-size: 11pt; page-break-inside: avoid; color: #000;">
+    <div style="margin-top: 25px; font-family: 'Times New Roman', serif; font-size: 9.5pt; page-break-inside: avoid; color: #000;">
       <table style="width: 100%; border: none;">
         <tr>
           <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
             Mengetahui,<br/>
-            <strong>Kepala Sekolah</strong><br/><br/><br/><br/><br/>
+            <strong>Kepala Sekolah</strong><br/><br/><br/><br/>
             <u><strong>${namaKepsek}</strong></u><br/>
             ${nipKepsek}
           </td>
           <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
             ${kotaTtd}, ${currentDateStr}<br/>
-            <strong>Guru Pengampu / Wali Kelas</strong><br/><br/><br/><br/><br/>
+            <strong>Guru Pengampu / Wali Kelas</strong><br/><br/><br/><br/>
             <u><strong>${namaGuru}</strong></u><br/>
             NIP/NUPTK: ${nipGuru}
           </td>
@@ -182,7 +263,6 @@ export default function LaporanPage() {
     </div>
   `
 
-  // EXPORT KE EXCEL (CSV)
   const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
     const csvContent = 'data:text/csv;charset=utf-8,' 
       + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n')
@@ -195,7 +275,156 @@ export default function LaporanPage() {
     document.body.removeChild(link)
   }
 
-  // CETAK CETAK UTAMA (REKAP KELAS)
+  // HANDLER CETAK BANK SOAL
+  const handlePrintBankSoal = async () => {
+    let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
+    if (filterMapelBankSoal) {
+      query = query.eq('mapel', filterMapelBankSoal)
+    }
+
+    const { data: soalData, error } = await query
+
+    if (error || !soalData || soalData.length === 0) {
+      alert(`Tidak ada naskah bank soal tersimpan ${filterMapelBankSoal ? `untuk mata pelajaran ${filterMapelBankSoal}` : ''}.`)
+      return
+    }
+
+    const formatSentenceCase = (str: string) => {
+      if (!str) return ''
+      const prefixMatch = str.match(/^([A-D]\.\s*)(.*)/)
+      if (prefixMatch) {
+        const prefix = prefixMatch[1]
+        const body = prefixMatch[2].toLowerCase()
+        return prefix + body.charAt(0).toUpperCase() + body.slice(1)
+      }
+      const lower = str.toLowerCase()
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    }
+
+    const cleanAndFormatContent = (text: string) => {
+      let cleaned = text
+      cleaned = cleaned.replace(/#+/g, '')
+
+      cleaned = cleaned.replace(/DOKUMEN PEDAGOGI GURU[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+      cleaned = cleaned.replace(/PAKET NASKAH UJIAN[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+      cleaned = cleaned.replace(/Satuan Pendidikan:[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+      cleaned = cleaned.replace(/TUJUAN PEDAGOGIS[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+      cleaned = cleaned.replace(/Cakupan Materi:[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+      cleaned = cleaned.replace(/Indikator Ketercapaian:[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+      cleaned = cleaned.replace(/PAKET SOAL[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+      cleaned = cleaned.replace(/Petunjuk Pengerjaan:[\s\S]*?(?=\d+\.|\b[A-Z]\.\s*TOPIK)/i, '')
+
+      cleaned = cleaned.replace(/III\.\s*KUNCI JAWABAN[\s\S]*/i, '')
+      cleaned = cleaned.replace(/IV\.\s*PEDOMAN PENILAIAN[\s\S]*/i, '')
+      cleaned = cleaned.replace(/VI\.\s*LEMBAR PENGESAHAN[\s\S]*/i, '')
+
+      cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1')
+
+      const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+      
+      let htmlOutput = ''
+      let inSoal = false
+
+      lines.forEach((line) => {
+        if (/^[A-Z]\.\s*TOPIK:/i.test(line) || line.toUpperCase().includes('TOPIK:')) {
+          return
+        } 
+        if (/^\d+\.\s*(Sistem Organ|Konsep Zat|Gaya:)/i.test(line)) {
+          return
+        }
+        if (/^\d+\./.test(line)) {
+          if (inSoal) {
+            htmlOutput += `</div>`
+          }
+          htmlOutput += `<div class="soal-item"><div class="pertanyaan">${line}</div>`
+          inSoal = true
+        } 
+        else if (/^[A-D]\./.test(line)) {
+          const cleanLine = formatSentenceCase(line)
+          htmlOutput += `<div class="opsi">${cleanLine}</div>`
+        } 
+        else {
+          htmlOutput += `<div class="teks-tambahan">${line}</div>`
+        }
+      })
+
+      if (inSoal) {
+        htmlOutput += `</div>`
+      }
+
+      return htmlOutput
+    }
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>NASKAH SOAL ULANGAN - ${namaSekolah}</title>
+            <style>
+              @page { margin: 0.8cm 1.2cm; size: A4; }
+              body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.25; font-size: 9pt; }
+              .header-identitas { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 8.5pt; }
+              .header-identitas td { border: 1px solid #000; padding: 2px 5px; }
+              .naskah-container { page-break-after: always; }
+              .naskah-container:last-child { page-break-after: avoid; }
+              .soal-item { margin-bottom: 6px; page-break-inside: avoid; }
+              .pertanyaan { text-align: justify; margin-bottom: 2px; }
+              .opsi { margin-left: 14px; margin-bottom: 1px; text-align: justify; }
+              .teks-tambahan { margin-left: 14px; font-style: italic; margin-bottom: 2px; }
+            </style>
+          </head>
+          <body>
+            ${
+              soalData.map((s) => `
+                <div class="naskah-container">
+                  ${headerKopHTML}
+                  <h3 style="text-align: center; text-transform: uppercase; margin: 0 0 6px 0; font-size: 10pt; letter-spacing: 0.5px;">
+                    NASKAH SOAL ULANGAN / ASESMEN SUMATIF
+                  </h3>
+                  <table class="header-identitas">
+                    <tr>
+                      <td style="width: 16%;"><b>Mata Pelajaran</b></td>
+                      <td style="width: 34%;">: ${s.mapel}</td>
+                      <td style="width: 16%;"><b>Nama Siswa</b></td>
+                      <td style="width: 34%;">: ...........................................................</td>
+                    </tr>
+                    <tr>
+                      <td><b>Kelas / Fase</b></td>
+                      <td>: ${s.fase_kelas}</td>
+                      <td><b>No. Absen / NIS</b></td>
+                      <td>: ...........................................................</td>
+                    </tr>
+                    <tr>
+                      <td><b>Bentuk Soal</b></td>
+                      <td>: ${s.bentuk_soal} (${s.jumlah_soal} Soal)</td>
+                      <td><b>Hari / Tanggal</b></td>
+                      <td>: ...........................................................</td>
+                    </tr>
+                    <tr>
+                      <td><b>Waktu Pengerjaan</b></td>
+                      <td>: 90 - 120 Menit</td>
+                      <td><b>Nilai / Paraf</b></td>
+                      <td>: </td>
+                    </tr>
+                  </table>
+                  <p style="font-size: 8pt; font-style: italic; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 2px;">
+                    <b>Petunjuk Pengerjaan:</b> Periksalah lembar naskah soal sebelum mengerjakan. Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (X) pada huruf A, B, C, atau D pada lembar jawaban!
+                  </p>
+                  <div class="soal-body">
+                    ${cleanAndFormatContent(s.isi_soal)}
+                  </div>
+                </div>
+              `).join('')
+            }
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+      setTimeout(() => { printWindow.print() }, 500)
+    }
+  }
+
   const handlePrintDocument = async (jenis: string) => {
     let judulDoc = 'LAPORAN AKADEMIK'
     let contentBody = ''
@@ -357,9 +586,9 @@ export default function LaporanPage() {
                       <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
                       <td style="border: 1px solid #000; padding: 6px; text-align: center;">${a.tanggal || '-'}</td>
                       <td style="border: 1px solid #000; padding: 6px; text-align: center;">${a.jam_ke || '-'}</td>
-                      <td style="border: 1px solid #000; padding: 6px;"><b>${a.kelas}</b> -${a.mapel}</td>
+                      <td style="border: 1px solid #000; padding: 6px;"><b>${a.kelas || ''}</b> ${a.mapel ? `- ${a.mapel}` : ''}</td>
                       <td style="border: 1px solid #000; padding: 6px;">${a.materi || '-'}</td>
-                      <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${a.status}</td>
+                      <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${a.status || 'SELESAI'}</td>
                     </tr>
                   `).join('')
                 : `<tr><td colspan="6" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada data agenda mengajar tersimpan.</td></tr>`
@@ -409,7 +638,6 @@ export default function LaporanPage() {
     executePrint(judulDoc, contentBody)
   }
 
-  // CETAK RAPOR INDIVIDU PER SISWA
   const handlePrintRaporSiswa = async () => {
     if (!selectedSiswaRapor) {
       alert('Pilih siswa terlebih dahulu untuk mencetak Lembar Rapor!')
@@ -419,7 +647,12 @@ export default function LaporanPage() {
     const targetSiswa = siswaList.find(s => s.id === Number(selectedSiswaRapor))
     if (!targetSiswa) return
 
-    const { data: kelasSiswa } = await supabase.from('kelas').select('nama_kelas').eq('id', targetSiswa.kelas_id || 0).single()
+    let namaKelasStr = '-'
+    if (targetSiswa.kelas_id) {
+      const { data: kelasSiswa } = await supabase.from('kelas').select('nama_kelas').eq('id', targetSiswa.kelas_id).maybeSingle()
+      if (kelasSiswa) namaKelasStr = kelasSiswa.nama_kelas
+    }
+
     const { data: nilaiSiswa } = await supabase.from('nilai').select('*').eq('siswa_id', targetSiswa.id).eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
     const { data: absensiSiswa } = await supabase.from('absensi').select('status').eq('siswa_id', targetSiswa.id).eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
 
@@ -438,7 +671,7 @@ export default function LaporanPage() {
           <td style="width: 15%; border: none;"><b>Nama Siswa</b></td>
           <td style="width: 35%; border: none;">: ${targetSiswa.nama_lengkap}</td>
           <td style="width: 15%; border: none;"><b>Kelas</b></td>
-          <td style="width: 35%; border: none;">: ${kelasSiswa?.nama_kelas || '-'}</td>
+          <td style="width: 35%; border: none;">: ${namaKelasStr}</td>
         </tr>
         <tr>
           <td style="border: none;"><b>NISN</b></td>
@@ -500,7 +733,6 @@ export default function LaporanPage() {
     executePrint(judulDoc, contentBody)
   }
 
-  // EXPORT LEGER KE EXCEL
   const handleExportLegerExcel = async () => {
     let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
     if (filterKelasLeger) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasLeger))
@@ -525,7 +757,6 @@ export default function LaporanPage() {
     downloadCSV(`Leger_Nilai_${selectedSemester}_${selectedTahunAjaran.replace('/', '-')}`, ['No', 'Nama Siswa', 'Kelas', 'Tugas', 'UTS', 'UAS', 'Rata-Rata'], rows)
   }
 
-  // RIWAYAT HARIAN ABSENSI
   const handlePrintRiwayatAbsensi = async () => {
     let query = supabase.from('absensi').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('tanggal', { ascending: false })
 
@@ -556,7 +787,7 @@ export default function LaporanPage() {
                   <tr>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${a.tanggal || '-'}</td>
-                    <td style="border: 1px solid #000; padding: 5px;">${a.nama_siswa}</td>
+                    <td style="border: 1px solid #000; padding: 5px;">${a.nama_siswa || '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${a.kelas || '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px;">${a.mapel || '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">${a.status}</td>
@@ -571,7 +802,6 @@ export default function LaporanPage() {
     executePrint(judulDoc, contentBody)
   }
 
-  // RIWAYAT INPUT NILAI
   const handlePrintRiwayatNilai = async () => {
     let query = supabase.from('nilai').select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('created_at', { ascending: false })
     if (kelasNilai) query = query.eq('kelas_id', Number(kelasNilai))
@@ -646,7 +876,18 @@ export default function LaporanPage() {
   }
 
   const handleSimpanPengaturan = () => {
-    alert('Pengaturan profil guru & kop surat cetakan laporan berhasil diperbarui!')
+    const dataToSave = {
+      namaGuru,
+      nipGuru,
+      namaKepsek,
+      nipKepsek,
+      pemprov,
+      namaSekolah,
+      alamatSekolah,
+      kotaTtd
+    }
+    localStorage.setItem('pengaturan_laporan', JSON.stringify(dataToSave))
+    alert('✅ Pengaturan profil guru, kepsek & kop surat cetakan berhasil disimpan secara permanen!')
   }
 
   return (
@@ -707,6 +948,7 @@ export default function LaporanPage() {
               </select>
             </div>
 
+            {/* HEADER PROFIL: MENAMPILKAN NAMA LENGKAP BUKAN EMAIL */}
             <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
@@ -774,6 +1016,45 @@ export default function LaporanPage() {
           {activeTab === 'pusat' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
               
+              {/* CETAK BANK SOAL BERDASARKAN MAPEL GURU */}
+              <div className="md:col-span-2 bg-gradient-to-r from-amber-700 via-orange-800 to-amber-950 text-white rounded-2xl p-4 shadow-md space-y-3">
+                <div className="flex items-center gap-2 font-extrabold text-sm">
+                  <span>❓</span>
+                  <h3>Cetak Naskah Soal Ulangan (Murni Soal &amp; Hemat Kertas)</h3>
+                </div>
+                <p className="text-xs text-amber-100 font-medium">Cetak naskah soal ulangan yang bersih (tanpa judul topik/sekat materi), huruf opsi rapi, dan sangat hemat kertas.</p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-amber-200">
+                      {isOperator ? 'PILAH BERDASARKAN MATA PELAJARAN' : 'MATA PELAJARAN YANG DIAMPU'}
+                    </label>
+                    <select
+                      value={filterMapelBankSoal}
+                      onChange={(e) => setFilterMapelBankSoal(e.target.value)}
+                      className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none"
+                    >
+                      {mapelList.length === 0 ? (
+                        <option value="">(Belum Ada Mapel Terdaftar)</option>
+                      ) : (
+                        mapelList.map((m) => (
+                          <option key={m.id} value={m.nama}>{m.nama}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      onClick={handlePrintBankSoal}
+                      className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black py-1.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>🖨️</span> Cetak Naskah Soal Siswa
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* CETAK RAPOR INDIVIDU SISWA */}
               <div className="md:col-span-2 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 text-white rounded-2xl p-4 shadow-md space-y-3">
                 <div className="flex items-center gap-2 font-extrabold text-sm">
