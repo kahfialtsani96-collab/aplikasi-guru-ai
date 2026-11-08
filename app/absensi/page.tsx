@@ -31,6 +31,15 @@ interface OptionItem {
   nama: string
 }
 
+interface MasterJamItem {
+  id: number
+  hari: string
+  jam_ke: number
+  waktu_mulai: string
+  waktu_selesai: string
+  keterangan: string
+}
+
 interface AbsensiRecord {
   id?: number | string
   tanggal: string
@@ -41,6 +50,7 @@ interface AbsensiRecord {
   guru_email?: string
   semester?: string
   tahun_ajaran?: string
+  jam_ke?: string
 }
 
 interface StatusAbsensiMap {
@@ -76,10 +86,14 @@ export default function AbsensiPage() {
 
   const [tanggal, setTanggal] = useState('')
   const [todayStr, setTodayStr] = useState('')
+  const [hari, setHari] = useState('Senin')
+  const [jamMulai, setJamMulai] = useState('1')
+  const [jamSelesai, setJamSelesai] = useState('1')
 
   // Dynamic Options
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
+  const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
 
   const [selectedKelasId, setSelectedKelasId] = useState('')
   const [selectedMapelId, setSelectedMapelId] = useState('')
@@ -104,10 +118,20 @@ export default function AbsensiPage() {
   const isCooldownRef = useRef<boolean>(false)
 
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const today = `${year}-${month}-${day}`
+    
     setTodayStr(today)
     setTanggal(today)
     setFilterTanggal(today) // Default filter rekap ke hari ini!
+
+    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][now.getDay()]
+    if (namaHari !== 'Jumat') {
+      setHari(namaHari)
+    }
 
     async function getUserData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -118,11 +142,18 @@ export default function AbsensiPage() {
         setUserDisplayName(nameFromMeta.toUpperCase())
 
         fetchJadwalGuru(email)
+        fetchMasterJam()
       }
     }
 
     getUserData()
   }, [])
+
+  // Fetch Slot Waktu dari Master Jam
+  async function fetchMasterJam() {
+    const { data } = await supabase.from('master_jam').select('*').order('jam_ke', { ascending: true })
+    if (data) setMasterJamList(data)
+  }
 
   // Fetch Jadwal Guru
   async function fetchJadwalGuru(email: string) {
@@ -173,7 +204,7 @@ export default function AbsensiPage() {
     }
   }
 
-  // Load Siswa
+  // Load Siswa (Dukungan Opsi "Semua Kelas" & Pengurutan A-Z)
   useEffect(() => {
     async function fetchSiswa() {
       if (!selectedKelasId) {
@@ -184,24 +215,34 @@ export default function AbsensiPage() {
 
       setLoadingSiswa(true)
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('siswa')
-          .select('id, nisn, nama_lengkap, kelas_id')
-          .eq('kelas_id', Number(selectedKelasId))
+          .select('id, nisn, nama_lengkap, kelas_id, kelas:kelas_id(nama_kelas)')
           .order('nama_lengkap', { ascending: true })
+
+        if (selectedKelasId !== 'ALL') {
+          query = query.eq('kelas_id', Number(selectedKelasId))
+        }
+
+        const { data, error } = await query
 
         if (!error && data) {
           setSiswaList(data)
 
           if (selectedMapelId && tanggal) {
-            const { data: existingAbsensi } = await supabase
+            let absensiQuery = supabase
               .from('absensi')
               .select('siswa_id, status')
-              .eq('kelas_id', Number(selectedKelasId))
               .eq('mapel_id', Number(selectedMapelId))
               .eq('tanggal', tanggal)
               .eq('semester', selectedSemester)
               .eq('tahun_ajaran', selectedTahunAjaran)
+
+            if (selectedKelasId !== 'ALL') {
+              absensiQuery = absensiQuery.eq('kelas_id', Number(selectedKelasId))
+            }
+
+            const { data: existingAbsensi } = await absensiQuery
 
             const initialMap: StatusAbsensiMap = {}
             if (existingAbsensi) {
@@ -331,7 +372,7 @@ export default function AbsensiPage() {
     } else {
       setScanStatus({
         type: 'error',
-        msg: `❌ NISN/ID: "${textClean}" Tidak Ditemukan di Kelas Ini!`
+        msg: `❌ NISN/ID: "${textClean}" Tidak Ditemukan!`
       })
     }
 
@@ -361,7 +402,9 @@ export default function AbsensiPage() {
       }
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
-      if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
+      
+      // ✅ Perbaikan filter nama mapel
+      if (filterMapelId) query = query.eq('mapel', filterMapelId)
       
       // Jika filter tanggal diisi, prioritaskan filter tanggal tersebut
       if (filterTanggal) {
@@ -408,6 +451,8 @@ export default function AbsensiPage() {
     })
   }
 
+  const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
+
   // Simpan Absensi ke Supabase
   const handleSimpanAbsensi = async () => {
     if (!selectedKelasId || !selectedMapelId || !tanggal) {
@@ -434,33 +479,68 @@ export default function AbsensiPage() {
 
     setSaving(true)
     try {
-      const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
 
-      const rowsToInsert = processedSiswa.map((siswa) => ({
-        tanggal,
-        kelas_id: Number(selectedKelasId),
-        mapel_id: Number(selectedMapelId),
-        siswa_id: siswa.id,
-        kelas: selectedKelasObj?.nama || '',
-        mapel: selectedMapelObj?.nama || '',
-        nama_siswa: siswa.nama_lengkap,
-        nisn: siswa.nisn || '',
-        status: absensiMap[String(siswa.id)],
-        semester: selectedSemester,
-        tahun_ajaran: selectedTahunAjaran,
-        guru_email: userEmail
-      }))
+      const startJamObj = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(jamMulai))
+      const endJamObj = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(jamSelesai))
 
-      // Hapus data presensi lama di tanggal & mapel tersebut, lalu masukkan data baru
-      await supabase
-        .from('absensi')
-        .delete()
-        .eq('kelas_id', Number(selectedKelasId))
-        .eq('mapel_id', Number(selectedMapelId))
-        .eq('tanggal', tanggal)
-        .eq('semester', selectedSemester)
-        .eq('tahun_ajaran', selectedTahunAjaran)
+      let jamFormattedText = `Jam Ke-${jamMulai}`
+      if (startJamObj && endJamObj) {
+        const wMulai = startJamObj.waktu_mulai.slice(0, 5)
+        const wSelesai = endJamObj.waktu_selesai.slice(0, 5)
+        
+        if (Number(jamMulai) === Number(jamSelesai)) {
+          jamFormattedText = `Jam Ke-${jamMulai} (${wMulai} - ${wSelesai})`
+        } else {
+          jamFormattedText = `Jam Ke-${jamMulai} s/d ${jamSelesai} (${wMulai} - ${wSelesai})`
+        }
+      }
+
+      const rowsToInsert = processedSiswa.map((siswa) => {
+        let namaKelasVal = siswa.kelas?.nama_kelas || ''
+        if (!namaKelasVal && selectedKelasId !== 'ALL') {
+          const kObj = kelasList.find((k) => k.id === Number(selectedKelasId))
+          namaKelasVal = kObj?.nama || ''
+        }
+
+        return {
+          tanggal,
+          jam_ke: jamFormattedText,
+          kelas_id: siswa.kelas_id || (selectedKelasId !== 'ALL' ? Number(selectedKelasId) : null),
+          mapel_id: Number(selectedMapelId),
+          siswa_id: siswa.id,
+          kelas: namaKelasVal,
+          mapel: selectedMapelObj?.nama || '',
+          nama_siswa: siswa.nama_lengkap,
+          nisn: siswa.nisn || '',
+          status: absensiMap[String(siswa.id)],
+          semester: selectedSemester,
+          tahun_ajaran: selectedTahunAjaran,
+          guru_email: userEmail
+        }
+      })
+
+      // Hapus data presensi lama di tanggal & mapel tersebut untuk siswa yang diproses
+      if (selectedKelasId === 'ALL') {
+        const studentIds = processedSiswa.map((s) => s.id)
+        await supabase
+          .from('absensi')
+          .delete()
+          .in('siswa_id', studentIds)
+          .eq('mapel_id', Number(selectedMapelId))
+          .eq('tanggal', tanggal)
+          .eq('semester', selectedSemester)
+          .eq('tahun_ajaran', selectedTahunAjaran)
+      } else {
+        await supabase
+          .from('absensi')
+          .delete()
+          .eq('kelas_id', Number(selectedKelasId))
+          .eq('mapel_id', Number(selectedMapelId))
+          .eq('tanggal', tanggal)
+          .eq('semester', selectedSemester)
+          .eq('tahun_ajaran', selectedTahunAjaran)
+      }
 
       const { error } = await supabase
         .from('absensi')
@@ -470,9 +550,14 @@ export default function AbsensiPage() {
         alert('Gagal menyimpan absensi: ' + error.message)
       } else {
         alert(`Berhasil menyimpan presensi ${processedSiswa.length} siswa!`)
-        // Otomatis arahkan filter rekap ke tanggal & kelas yang baru disimpan
+        // Otomatis arahkan filter rekap ke tanggal yang baru disimpan
         setFilterTanggal(tanggal)
-        setFilterKelasId(selectedKelasId)
+        if (selectedKelasId !== 'ALL') {
+          setFilterKelasId(selectedKelasId)
+        }
+        if (selectedMapelObj) {
+          setFilterMapelId(selectedMapelObj.nama)
+        }
         setActiveTab('rekap')
       }
     } catch (err: any) {
@@ -482,8 +567,11 @@ export default function AbsensiPage() {
     }
   }
 
-  const siswaBelumAbsen = siswaList.filter((s) => !absensiMap[String(s.id)])
-  const siswaSudahAbsen = siswaList.filter((s) => absensiMap[String(s.id)])
+  // Memastikan siswa selalu terurut A-Z berdasarkan nama_lengkap
+  const sortedSiswaList = [...siswaList].sort((a, b) => a.nama_lengkap.localeCompare(b.nama_lengkap))
+
+  const siswaBelumAbsen = sortedSiswaList.filter((s) => !absensiMap[String(s.id)])
+  const siswaSudahAbsen = sortedSiswaList.filter((s) => absensiMap[String(s.id)])
 
   const totalData = rekapList.length
   const totalHadir = rekapList.filter(item => item.status === 'HADIR').length
@@ -674,14 +762,73 @@ export default function AbsensiPage() {
                       type="date"
                       value={tanggal}
                       max={todayStr}
-                      onChange={(e) => setTanggal(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setTanggal(val)
+                        if (val) {
+                          const d = new Date(val)
+                          const nHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
+                          if (nHari !== 'Jumat') setHari(nHari)
+                        }
+                      }}
                       className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
 
-                  <div className="sm:col-span-6 md:col-span-3">
+                  {/* JAM MENGAJAR */}
+                  <div className="sm:col-span-12 md:col-span-3">
+                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>JAM MENGAJAR *</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <select
+                        value={jamMulai}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setJamMulai(val)
+                          if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
+                        }}
+                        className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        {jamOptionsForHari.length > 0 ? (
+                          jamOptionsForHari.map((j) => (
+                            <option key={j.id} value={j.jam_ke}>Jam Ke-{j.jam_ke}</option>
+                          ))
+                        ) : (
+                          [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                            <option key={num} value={num}>Jam Ke-{num}</option>
+                          ))
+                        )}
+                      </select>
+
+                      <select
+                        value={jamSelesai}
+                        onChange={(e) => setJamSelesai(e.target.value)}
+                        className={`w-full border rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        {jamOptionsForHari.length > 0 ? (
+                          jamOptionsForHari
+                            .filter((j) => j.jam_ke >= Number(jamMulai))
+                            .map((j) => (
+                              <option key={j.id} value={j.jam_ke}>s/d Ke-{j.jam_ke}</option>
+                            ))
+                        ) : (
+                          [1, 2, 3, 4, 5, 6, 7, 8]
+                            .filter((num) => num >= Number(jamMulai))
+                            .map((num) => (
+                              <option key={num} value={num}>s/d Ke-{num}</option>
+                            ))
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* DENGAN OPSI SEMUA KELAS */}
+                  <div className="sm:col-span-6 md:col-span-2">
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS DIAJAR *</label>
                     <select
                       value={selectedKelasId}
@@ -691,6 +838,7 @@ export default function AbsensiPage() {
                       }`}
                     >
                       <option value="">-- Pilih Kelas --</option>
+                      <option value="ALL">✨ -- Semua Kelas --</option>
                       {kelasList.map((k) => (
                         <option key={k.id} value={k.id}>{k.nama}</option>
                       ))}
@@ -713,24 +861,24 @@ export default function AbsensiPage() {
                     </select>
                   </div>
 
-                  <div className="sm:col-span-6 md:col-span-2">
+                  <div className="sm:col-span-6 md:col-span-1">
                     <button
                       type="button"
                       onClick={() => setModeInput(modeInput === 'manual' ? 'qr' : 'manual')}
                       className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold py-2.5 px-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                     >
-                      <span>{modeInput === 'manual' ? '📷 Mode QR' : '✍️ Mode Manual'}</span>
+                      <span>{modeInput === 'manual' ? '📷 QR' : '✍️ Manual'}</span>
                     </button>
                   </div>
 
-                  <div className="sm:col-span-12 md:col-span-2">
+                  <div className="sm:col-span-12 md:col-span-1">
                     <button
                       type="button"
                       onClick={handleSimpanAbsensi}
                       disabled={saving || !selectedKelasId || !selectedMapelId}
                       className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-700 text-white font-black py-2.5 px-3 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <span>💾</span> {saving ? 'Simpan...' : 'Simpan Presensi'}
+                      <span>💾</span> {saving ? 'Wait...' : 'Simpan'}
                     </button>
                   </div>
 
@@ -799,7 +947,7 @@ export default function AbsensiPage() {
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
                       1. Belum Absen ({siswaBelumAbsen.length} Orang)
                     </span>
-                    <span className={`text-[10px] font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Urut A–Z</span>
+                    <span className={`text-[10px] font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Terurut A–Z</span>
                   </div>
 
                   <div className={`overflow-y-auto rounded-xl border max-h-[500px] ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
@@ -808,23 +956,24 @@ export default function AbsensiPage() {
                         <tr className={`border-b font-extrabold uppercase text-[10px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                           <th className="py-2.5 px-2.5 w-8 text-center">NO</th>
                           <th className="py-2.5 px-2.5">NAMA LENGKAP SISWA</th>
+                          {selectedKelasId === 'ALL' && <th className="py-2.5 px-2.5 text-center">KELAS</th>}
                           <th className="py-2.5 px-2.5 text-center w-36">INPUT MANUAL</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                         {!selectedKelasId || !selectedMapelId ? (
                           <tr>
-                            <td colSpan={3} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                            <td colSpan={selectedKelasId === 'ALL' ? 4 : 3} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
                               Silakan pilih Tanggal, Kelas, dan Mapel.
                             </td>
                           </tr>
                         ) : loadingSiswa ? (
                           <tr>
-                            <td colSpan={3} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Memuat daftar siswa...</td>
+                            <td colSpan={selectedKelasId === 'ALL' ? 4 : 3} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Memuat daftar siswa...</td>
                           </tr>
                         ) : siswaBelumAbsen.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="py-10 text-center text-emerald-400 font-extrabold">
+                            <td colSpan={selectedKelasId === 'ALL' ? 4 : 3} className="py-10 text-center text-emerald-400 font-extrabold">
                               🎉 Semua siswa sudah terabsen!
                             </td>
                           </tr>
@@ -840,6 +989,15 @@ export default function AbsensiPage() {
                                     NISN: {siswa.nisn || '-'}
                                   </span>
                                 </td>
+                                {selectedKelasId === 'ALL' && (
+                                  <td className="py-2 px-2.5 text-center">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      isDarkMode ? 'bg-slate-800 text-indigo-300 border border-slate-700' : 'bg-slate-100 text-indigo-900 border border-slate-300'
+                                    }`}>
+                                      {siswa.kelas?.nama_kelas || '-'}
+                                    </span>
+                                  </td>
+                                )}
                                 <td className="py-2 px-2.5 text-center">
                                   <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
                                     <button
@@ -901,6 +1059,7 @@ export default function AbsensiPage() {
                         <tr className={`border-b font-extrabold uppercase text-[10px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                           <th className="py-2.5 px-2.5 w-8 text-center">NO</th>
                           <th className="py-2.5 px-2.5">NAMA LENGKAP SISWA</th>
+                          {selectedKelasId === 'ALL' && <th className="py-2.5 px-2.5 text-center">KELAS</th>}
                           <th className="py-2.5 px-2.5 text-center w-24">STATUS</th>
                           <th className="py-2.5 px-2.5 text-center w-10">BATAL</th>
                         </tr>
@@ -908,7 +1067,7 @@ export default function AbsensiPage() {
                       <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
                         {siswaSudahAbsen.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                            <td colSpan={selectedKelasId === 'ALL' ? 5 : 4} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
                               Belum ada siswa yang di-scan QR atau diisi manual.
                             </td>
                           </tr>
@@ -922,6 +1081,15 @@ export default function AbsensiPage() {
                                 <td className={`py-2 px-2.5 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                                   {siswa.nama_lengkap}
                                 </td>
+                                {selectedKelasId === 'ALL' && (
+                                  <td className="py-2 px-2.5 text-center">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      isDarkMode ? 'bg-slate-800 text-indigo-300 border border-slate-700' : 'bg-slate-100 text-indigo-900 border border-slate-300'
+                                    }`}>
+                                      {siswa.kelas?.nama_kelas || '-'}
+                                    </span>
+                                  </td>
+                                )}
                                 <td className="py-2 px-2.5 text-center">
                                   <span
                                     className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
@@ -1019,7 +1187,7 @@ export default function AbsensiPage() {
                   >
                     <option value="">Semua Mapel</option>
                     {mapelList.map((m) => (
-                      <option key={m.id} value={m.id}>{m.nama}</option>
+                      <option key={m.id} value={m.nama}>{m.nama}</option>
                     ))}
                   </select>
                 </div>
@@ -1085,7 +1253,7 @@ export default function AbsensiPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className={`font-mono font-bold text-xs ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                            📅 {item.tanggal}
+                            📅 {item.tanggal} {item.jam_ke ? `(${item.jam_ke})` : ''}
                           </span>
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
@@ -1140,7 +1308,7 @@ export default function AbsensiPage() {
                     <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                       <tr className={`border-b font-extrabold uppercase text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                         <th className="py-2.5 px-3 w-12 text-center">NO</th>
-                        <th className="py-2.5 px-3">TANGGAL</th>
+                        <th className="py-2.5 px-3">TANGGAL &amp; JAM</th>
                         <th className="py-2.5 px-3">KELAS</th>
                         <th className="py-2.5 px-3">MATA PELAJARAN</th>
                         <th className="py-2.5 px-3">NAMA SISWA</th>
@@ -1163,7 +1331,10 @@ export default function AbsensiPage() {
                         rekapList.map((item, index) => (
                           <tr key={item.id || index} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
                             <td className={`py-2 px-3 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>{index + 1}</td>
-                            <td className={`py-2 px-3 font-mono font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{item.tanggal}</td>
+                            <td className={`py-2 px-3 font-mono font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                              <div>{item.tanggal}</div>
+                              <div className="text-[10px] text-indigo-400 font-sans">{item.jam_ke || '-'}</div>
+                            </td>
                             <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.kelas}</td>
                             <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>{item.mapel}</td>
                             <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.nama_siswa}</td>

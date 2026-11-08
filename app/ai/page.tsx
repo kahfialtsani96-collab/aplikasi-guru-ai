@@ -34,6 +34,12 @@ export default function AiToolsPage() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
   const [isSavingSoal, setIsSavingSoal] = useState(false)
 
+  // MODAL SIMPAN SOAL SPESIFIK KELAS & MAPEL
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveTargetMapel, setSaveTargetMapel] = useState('')
+  const [saveTargetKelas, setSaveTargetKelas] = useState('')
+  const [saveNamaGuru, setSaveNamaGuru] = useState('')
+
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme')
     if (savedTheme === 'dark') {
@@ -65,7 +71,7 @@ export default function AiToolsPage() {
 
   const [formData, setFormData] = useState({
     mapel: 'IPA',
-    faseKelas: 'Fase D / Kelas VII',
+    faseKelas: 'Fase D / Kelas VII A',
     materiTopik: '',
     jenisPerangkat: 'Modul Ajar / RPP Plus',
     dlPilar: 'Mindful Learning',
@@ -87,12 +93,12 @@ export default function AiToolsPage() {
     satuanPendidikan: 'SMP MUNA MUSTOFA',
     mapel: 'IPA',
     kodeTp: 'IPA.7.1',
-    faseKelas: 'Fase D / Kelas VII',
+    faseKelas: 'Fase D / Kelas VII A',
     tahunPelajaran: '2026/2027',
     alokasiTotal: '72 JP / Tahun',
     jpMinggu: '2 JP/Minggu',
     modelPembelajaran: 'Discovery Learning',
-    namaGuru: 'Muzaini Al Kahfi',
+    namaGuru: 'Guru Pengampu',
     nipGuru: '-',
     kotaTtd: 'Gisting',
     namaKepala: 'SULASTRI, S.Pd., Gr.',
@@ -114,49 +120,48 @@ export default function AiToolsPage() {
     namaMadrasah: 'SMP MUNA MUSTOFA',
     alamatMadrasah: 'Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376',
     mapel: 'IPA',
-    faseKelas: 'Fase D / Kelas VII',
+    faseKelas: 'Fase D / Kelas VII A',
     tahunPelajaran: '2026/2027',
-    namaGuru: 'Muzaini Al Kahfi',
+    namaGuru: 'Guru Pengampu',
     nipGuru: '-',
     kotaTtd: 'Gisting',
     namaKepala: 'SULASTRI, S.Pd., Gr.',
     nipKepala: '6337763664131233'
   })
 
-  // PERBAIKAN 1: PANCARIAN NAMA GURU MENGGUNAKAN KOLOM nama_lengkap
+  // INIT USER LOGIN REAL DARI TABEL GURU & MASTER DATA SUPABASE
   useEffect(() => {
     async function initData() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        let fullName = user.user_metadata?.full_name || user.user_metadata?.nama_lengkap || user.user_metadata?.nama_guru
+      let realFullName = 'Guru Pengampu'
 
-        if (!fullName && user.email) {
-          const { data: dataGuru } = await supabase
-            .from('guru')
-            .select('nama_lengkap, nama_guru')
-            .eq('email', user.email)
-            .maybeSingle()
+      if (user && user.email) {
+        const cleanEmail = user.email.trim().toLowerCase()
+        const { data: dataGuru } = await supabase
+          .from('guru')
+          .select('nama_lengkap')
+          .ilike('email', cleanEmail)
+          .maybeSingle()
 
-          if (dataGuru) {
-            fullName = dataGuru.nama_lengkap || dataGuru.nama_guru
-          }
+        if (dataGuru && dataGuru.nama_lengkap) {
+          realFullName = dataGuru.nama_lengkap
+        } else if (user.user_metadata?.full_name) {
+          realFullName = user.user_metadata.full_name
         }
-
-        if (!fullName || fullName.includes('@') || fullName.includes('.')) {
-          fullName = 'Muzaini Al Kahfi'
-        }
-
-        setAdminForm(prev => ({ ...prev, namaGuru: fullName }))
-        setModulForm(prev => ({ ...prev, namaGuru: fullName }))
       }
 
+      setAdminForm(prev => ({ ...prev, namaGuru: realFullName }))
+      setModulForm(prev => ({ ...prev, namaGuru: realFullName }))
+      setSaveNamaGuru(realFullName)
+
       // LOAD MASTER MAPEL & KELAS SUPABASE
-      const { data: dMapel } = await supabase.from('mapel').select('id, nama_mapel, kode_mapel').order('urutan', { ascending: true })
+      const { data: dMapel } = await supabase.from('mapel').select('id, nama_mapel, kode_mapel').order('nama_mapel', { ascending: true })
       if (dMapel && dMapel.length > 0) {
         setMapelList(dMapel)
         setFormData(prev => ({ ...prev, mapel: dMapel[0].nama_mapel }))
         setAdminForm(prev => ({ ...prev, mapel: dMapel[0].nama_mapel }))
         setModulForm(prev => ({ ...prev, mapel: dMapel[0].nama_mapel }))
+        setSaveTargetMapel(dMapel[0].nama_mapel)
       }
 
       const { data: dKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
@@ -166,6 +171,7 @@ export default function AiToolsPage() {
         setFormData(prev => ({ ...prev, faseKelas: initialFaseKelas }))
         setAdminForm(prev => ({ ...prev, faseKelas: initialFaseKelas }))
         setModulForm(prev => ({ ...prev, faseKelas: initialFaseKelas }))
+        setSaveTargetKelas(dKelas[0].nama_kelas)
       }
     }
     initData()
@@ -175,6 +181,7 @@ export default function AiToolsPage() {
     setFormData(prev => ({ ...prev, mapel: val }))
     setAdminForm(prev => ({ ...prev, mapel: val }))
     setModulForm(prev => ({ ...prev, mapel: val }))
+    setSaveTargetMapel(val)
   }
 
   const handleFaseKelasChange = (val: string) => {
@@ -183,22 +190,43 @@ export default function AiToolsPage() {
     setModulForm(prev => ({ ...prev, faseKelas: val }))
   }
 
-  // FITUR BARU: SIMPAN SOAL KE DATABASE SUPABASE
-  const handleSaveBankSoal = async () => {
+  // BUKA MODAL KONFIRMASI SIMPAN SOAL
+  const handleOpenSaveModal = () => {
     const hasilSoal = generatedResults['soal']
     if (!hasilSoal) {
       alert('Belum ada paket soal yang dihasilkan!')
       return
     }
+    setShowSaveModal(true)
+  }
+
+  // EKSEKUSI SIMPAN SOAL KE DATABASE (OTOMATIS DENGAN NAMA GURU LOGIN & KELAS PILIHAN)
+  const handleConfirmSaveBankSoal = async () => {
+    const hasilSoal = generatedResults['soal']
+    if (!hasilSoal) return
 
     setIsSavingSoal(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
+      // Ambil nama guru asli dari tabel guru jika user login terdaftar
+      let finalNamaGuru = saveNamaGuru
+      if (user && user.email) {
+        const { data: dbGuru } = await supabase
+          .from('guru')
+          .select('nama_lengkap')
+          .ilike('email', user.email.trim().toLowerCase())
+          .maybeSingle()
+
+        if (dbGuru && dbGuru.nama_lengkap) {
+          finalNamaGuru = dbGuru.nama_lengkap
+        }
+      }
+
       const payload = {
-        nama_guru: adminForm.namaGuru,
-        mapel: formData.mapel,
-        fase_kelas: formData.faseKelas,
+        nama_guru: finalNamaGuru, // OTOMATIS SESUAI GURU LOGIN
+        mapel: saveTargetMapel || formData.mapel,
+        fase_kelas: `Fase D / ${saveTargetKelas}`, // SINKRON UNTUK FILTER CEK LAPORAN
         topik_materi: formData.materiTopik || 'Umum',
         bentuk_soal: formData.soalTipe,
         jumlah_soal: parseInt(formData.soalJumlah) || 10,
@@ -213,7 +241,8 @@ export default function AiToolsPage() {
         throw error
       }
 
-      alert('✅ Berhasil! Paket Soal berhasil disimpan ke Database Bank Soal.')
+      alert(`✅ Berhasil! Paket Soal ${saveTargetMapel} Kelas ${saveTargetKelas} tersimpan atas nama Guru: ${finalNamaGuru}`)
+      setShowSaveModal(false)
     } catch (err: any) {
       console.error('Error saving bank soal:', err)
       alert(`Gagal menyimpan soal: ${err.message || 'Terjadi kesalahan'}`)
@@ -361,7 +390,7 @@ export default function AiToolsPage() {
 
   const copyrightFooterHTML = `
     <div style="text-align: center; margin-top: 35px; padding-top: 12px; border-top: 1px solid #000; font-size: 9.5pt; color: #000; font-family: 'Times New Roman', serif; page-break-inside: avoid;">
-      Dokumen ini dibuat secara otomatis menggunakan <strong>Aplikasi Guru AI</strong> - Created & Developed by <strong>Muzaini Al Kahfi</strong> &copy; 2026
+      Dokumen ini dibuat secara otomatis menggunakan <strong>Aplikasi Guru AI</strong> - Created & Developed by <strong>MUZAINI AL KAHFI</strong> &copy; 2026
     </div>
   `
 
@@ -788,7 +817,7 @@ export default function AiToolsPage() {
                       type="text"
                       value={formData.faseKelas}
                       onChange={(e) => handleFaseKelasChange(e.target.value)}
-                      placeholder="Contoh: Fase D / Kelas VII"
+                      placeholder="Contoh: Fase D / Kelas VII A"
                       className={`w-full border rounded-xl px-3.5 py-2.5 font-medium focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
@@ -1148,14 +1177,14 @@ export default function AiToolsPage() {
                   </label>
                 )}
 
-                {/* TOMBOL BARU: SIMPAN SOAL KE DATABASE */}
+                {/* TOMBOL SIMPAN SOAL MEMBUKA MODAL KELAS & MAPEL */}
                 {activeTool === 'soal' && generatedResults['soal'] && (
                   <button 
-                    onClick={handleSaveBankSoal} 
+                    onClick={handleOpenSaveModal} 
                     disabled={isSavingSoal} 
-                    className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-xs font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                    className="flex-1 sm:flex-none bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-xl text-xs font-black disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    💾 {isSavingSoal ? 'Menyimpan...' : 'Simpan ke Bank Soal'}
+                    💾 Simpan ke Bank Soal
                   </button>
                 )}
 
@@ -1214,7 +1243,86 @@ export default function AiToolsPage() {
         </main>
       </div>
 
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
+      {/* POP-UP (MODAL) KONFIRMASI SIMPAN SOAL SPESIFIK KELAS & MAPEL */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className={`max-w-md w-full border rounded-3xl p-6 shadow-2xl space-y-5 ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-extrabold text-base flex items-center gap-2">
+                <span>💾</span> Simpan Soal ke Database
+              </h3>
+              <button 
+                onClick={() => setShowSaveModal(false)}
+                className="text-slate-400 hover:text-rose-500 font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Pilih Mata Pelajaran dan Kelas yang sesuai agar soal ini langsung sinkron dengan filter pencetakan di menu <b>Laporan</b>.
+            </p>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold mb-1">Mata Pelajaran</label>
+                <select
+                  value={saveTargetMapel}
+                  onChange={(e) => setSaveTargetMapel(e.target.value)}
+                  className="w-full border rounded-xl p-2.5 font-bold dark:bg-slate-800 dark:border-slate-700"
+                >
+                  {mapelList.map((m) => (
+                    <option key={m.id} value={m.nama_mapel}>{m.nama_mapel}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">Kelas Target cetakan</label>
+                <select
+                  value={saveTargetKelas}
+                  onChange={(e) => setSaveTargetKelas(e.target.value)}
+                  className="w-full border rounded-xl p-2.5 font-bold dark:bg-slate-800 dark:border-slate-700"
+                >
+                  {kelasList.map((k) => (
+                    <option key={k.id} value={k.nama_kelas}>{k.nama_kelas}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">Tersimpan atas nama Guru (Akun Login)</label>
+                <input
+                  type="text"
+                  value={saveNamaGuru}
+                  readOnly
+                  className="w-full border rounded-xl p-2.5 font-bold bg-slate-100 dark:bg-slate-800/60 dark:border-slate-700 cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t dark:border-slate-800">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmSaveBankSoal}
+                disabled={isSavingSoal}
+                className="px-5 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50"
+              >
+                {isSavingSoal ? 'Menyimpan...' : 'Simpan Sekarang'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-40 shadow-lg transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
       }`}>
         <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">

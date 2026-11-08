@@ -39,7 +39,7 @@ interface JurnalRecord {
   created_at?: string
   tanggal: string
   jam_ke: string
-  kelas_id?: number
+  kelas_id?: number | null
   mapel_id?: number
   kelas?: string
   mapel?: string
@@ -79,7 +79,7 @@ export default function AgendaMengajarPage() {
   const [hari, setHari] = useState('Senin')
   const [jamMulai, setJamMulai] = useState('1')
   const [jamSelesai, setJamSelesai] = useState('1')
-  const [selectedKelasId, setSelectedKelasId] = useState('')
+  const [selectedKelasId, setSelectedKelasId] = useState('') // BISA ID KELAS (STRING NUMBER) ATAU 'GABUNGAN'
   const [selectedMapelId, setSelectedMapelId] = useState('')
   const [materi, setMateri] = useState('')
   const [status, setStatus] = useState<'Terlaksana' | 'Tertunda'>('Terlaksana')
@@ -89,6 +89,7 @@ export default function AgendaMengajarPage() {
   const [jurnalList, setJurnalList] = useState<JurnalRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loadingAutoAbsen, setLoadingAutoAbsen] = useState(false)
 
   // State Rekapitulasi Agenda
   const [rekapList, setRekapList] = useState<JurnalRecord[]>([])
@@ -187,6 +188,92 @@ export default function AgendaMengajarPage() {
     }
   }
 
+  // LOGIKA AUTO-FILL ABSENSI SISWA DARI TABEL `absensi` SUPABASE
+  const fetchAbsensiOtomatis = async (targetDate: string, targetKelasId: string, targetMapelId: string) => {
+    if (!targetDate) return
+
+    const selectedMapelObj = mapelList.find((m) => m.id === Number(targetMapelId))
+    const namaMapelLower = selectedMapelObj?.nama?.toLowerCase() || ''
+    
+    // Cek apakah ekskul gabungan (Pramuka/Qiro'ah) atau guru memilih opsi 'GABUNGAN'
+    const isEkskulGabungan = targetKelasId === 'GABUNGAN' || namaMapelLower.includes('pramuka') || namaMapelLower.includes('qiro')
+
+    if (!isEkskulGabungan && !targetKelasId) return
+
+    setLoadingAutoAbsen(true)
+    try {
+      let query = supabase
+        .from('absensi')
+        .select('nama_siswa, status, kelas, nisn')
+        .eq('tanggal', targetDate)
+
+      if (isEkskulGabungan) {
+        if (targetMapelId) {
+          query = query.eq('mapel_id', Number(targetMapelId))
+        }
+      } else {
+        query = query.eq('kelas_id', Number(targetKelasId))
+        if (targetMapelId) {
+          query = query.eq('mapel_id', Number(targetMapelId))
+        }
+      }
+
+      const { data: absensiData, error } = await query
+
+      if (error) throw error
+
+      if (!absensiData || absensiData.length === 0) {
+        setAbsenSiswa('Nihil')
+      } else {
+        const tidakHadirList = absensiData.filter((a) => a.status && a.status.toUpperCase() !== 'HADIR')
+
+        if (tidakHadirList.length === 0) {
+          setAbsenSiswa('Nihil')
+        } else {
+          const dikelompokkan: Record<string, string[]> = {}
+
+          tidakHadirList.forEach((item) => {
+            const st = item.status.toUpperCase()
+            const namaFormatted = isEkskulGabungan && item.kelas 
+              ? `${item.nama_siswa || 'Siswa'} (${item.kelas})`
+              : item.nama_siswa || 'Siswa'
+
+            if (!dikelompokkan[st]) dikelompokkan[st] = []
+            dikelompokkan[st].push(namaFormatted)
+          })
+
+          const resultString = Object.entries(dikelompokkan)
+            .map(([stKey, names]) => `${stKey}: ${names.join(', ')}`)
+            .join(' | ')
+
+          setAbsenSiswa(resultString)
+        }
+      }
+    } catch (err) {
+      console.error('Gagal mengambil data absensi otomatis:', err)
+    } finally {
+      setLoadingAutoAbsen(false)
+    }
+  }
+
+  // Pemicu Auto-Fetch saat Tanggal, Kelas, atau Mapel berubah
+  useEffect(() => {
+    if (tanggal && (selectedKelasId || selectedMapelId)) {
+      fetchAbsensiOtomatis(tanggal, selectedKelasId, selectedMapelId)
+    }
+  }, [tanggal, selectedKelasId, selectedMapelId])
+
+  // Handler saat Pilihan Mapel Berubah
+  const handleMapelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    setSelectedMapelId(val)
+    const mapelObj = mapelList.find((m) => m.id === Number(val))
+    const namaLower = mapelObj?.nama?.toLowerCase() || ''
+    if (namaLower.includes('pramuka') || namaLower.includes('qiro')) {
+      setSelectedKelasId('GABUNGAN')
+    }
+  }
+
   // Load Jurnal Agenda milik Guru KHUSUS HARI INI
   async function fetchJurnal(emailParam?: string | null, dateParam?: string) {
     const activeEmail = emailParam || userEmail
@@ -235,7 +322,13 @@ export default function AgendaMengajarPage() {
         query = query.eq('guru_email', userEmail)
       }
 
-      if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
+      if (filterKelasId) {
+        if (filterKelasId === 'GABUNGAN') {
+          query = query.eq('kelas', 'Gabungan (Semua Kelas)')
+        } else {
+          query = query.eq('kelas_id', Number(filterKelasId))
+        }
+      }
       if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
       if (filterStatus) query = query.eq('status', filterStatus)
       if (filterTanggal) query = query.eq('tanggal', filterTanggal)
@@ -307,17 +400,21 @@ export default function AgendaMengajarPage() {
         }
       }
 
+      const namaKelasSimpan = selectedKelasId === 'GABUNGAN' 
+        ? 'Gabungan (Semua Kelas)' 
+        : selectedKelasObj?.nama || ''
+
       const { error } = await supabase.from('jurnal_agenda').insert([
         {
           tanggal,
           jam_ke: jamFormattedText,
-          kelas_id: Number(selectedKelasId),
+          kelas_id: selectedKelasId === 'GABUNGAN' ? null : Number(selectedKelasId),
           mapel_id: Number(selectedMapelId),
-          kelas: selectedKelasObj?.nama || '',
+          kelas: namaKelasSimpan,
           mapel: selectedMapelObj?.nama || '',
           materi: materi.trim(),
           status,
-          absen_siswa: absenSiswa.trim(),
+          absen_siswa: absenSiswa.trim() || 'Nihil',
           keterangan: keterangan.trim(),
           guru_email: userEmail
         },
@@ -624,6 +721,9 @@ export default function AgendaMengajarPage() {
                       required
                     >
                       <option value="">-- Pilih Kelas --</option>
+                      <option value="GABUNGAN" className="font-bold text-indigo-600 dark:text-indigo-400">
+                        ⭐ Gabungan / Semua Kelas (Ekskul)
+                      </option>
                       {kelasList.map((k) => (
                         <option key={k.id} value={k.id}>{k.nama}</option>
                       ))}
@@ -634,7 +734,7 @@ export default function AgendaMengajarPage() {
                     <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>MAPEL DIAJAR *</label>
                     <select
                       value={selectedMapelId}
-                      onChange={(e) => setSelectedMapelId(e.target.value)}
+                      onChange={handleMapelChange}
                       className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
@@ -677,15 +777,28 @@ export default function AgendaMengajarPage() {
                     </select>
                   </div>
 
+                  {/* ABSEN SISWA WITH REFRESH BUTTON & AUTO-FETCH */}
                   <div className="sm:col-span-6 md:col-span-2">
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>ABSEN SISWA</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className={`block text-[10px] font-extrabold uppercase ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                        ABSEN SISWA
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => fetchAbsensiOtomatis(tanggal, selectedKelasId, selectedMapelId)}
+                        className="text-[9px] font-bold text-indigo-500 hover:underline flex items-center gap-0.5 cursor-pointer"
+                        title="Tarik ulang data absensi dari Supabase"
+                      >
+                        {loadingAutoAbsen ? '🔄 Wait...' : '🔄 Refresh'}
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={absenSiswa}
                       onChange={(e) => setAbsenSiswa(e.target.value)}
                       placeholder="Nihil"
                       className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-emerald-700'
                       }`}
                     />
                   </div>
@@ -889,6 +1002,7 @@ export default function AgendaMengajarPage() {
                     }`}
                   >
                     <option value="">Semua Kelas</option>
+                    <option value="GABUNGAN">Gabungan (Ekskul)</option>
                     {kelasList.map((k) => (
                       <option key={k.id} value={k.id}>{k.nama}</option>
                     ))}
