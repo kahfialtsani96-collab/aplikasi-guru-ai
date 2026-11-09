@@ -21,9 +21,7 @@ interface Siswa {
   nisn: string
   nama_lengkap: string
   kelas_id?: number
-  kelas?: {
-    nama_kelas: string
-  }
+  kelas?: any
 }
 
 interface OptionItem {
@@ -227,7 +225,7 @@ export default function AbsensiPage() {
         const { data, error } = await query
 
         if (!error && data) {
-          setSiswaList(data)
+          setSiswaList(data as any)
 
           if (selectedMapelId && tanggal) {
             let absensiQuery = supabase
@@ -259,7 +257,7 @@ export default function AbsensiPage() {
         }
       } catch (err) {
         console.error('Error fetching siswa:', err)
-      } finally {
+      } font-medium {
         setLoadingSiswa(false)
       }
     }
@@ -403,10 +401,8 @@ export default function AbsensiPage() {
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
       
-      // ✅ Perbaikan filter nama mapel
       if (filterMapelId) query = query.eq('mapel', filterMapelId)
       
-      // Jika filter tanggal diisi, prioritaskan filter tanggal tersebut
       if (filterTanggal) {
         query = query.eq('tanggal', filterTanggal)
       }
@@ -497,7 +493,7 @@ export default function AbsensiPage() {
       }
 
       const rowsToInsert = processedSiswa.map((siswa) => {
-        let namaKelasVal = siswa.kelas?.nama_kelas || ''
+        let namaKelasVal = (siswa.kelas?.nama_kelas) || (Array.isArray(siswa.kelas) ? siswa.kelas[0]?.nama_kelas : '') || ''
         if (!namaKelasVal && selectedKelasId !== 'ALL') {
           const kObj = kelasList.find((k) => k.id === Number(selectedKelasId))
           namaKelasVal = kObj?.nama || ''
@@ -550,7 +546,6 @@ export default function AbsensiPage() {
         alert('Gagal menyimpan absensi: ' + error.message)
       } else {
         alert(`Berhasil menyimpan presensi ${processedSiswa.length} siswa!`)
-        // Otomatis arahkan filter rekap ke tanggal yang baru disimpan
         setFilterTanggal(tanggal)
         if (selectedKelasId !== 'ALL') {
           setFilterKelasId(selectedKelasId)
@@ -980,6 +975,7 @@ export default function AbsensiPage() {
                         ) : (
                           siswaBelumAbsen.map((siswa, index) => {
                             const sId = String(siswa.id)
+                            const namaKelasSiswa = (siswa.kelas?.nama_kelas) || (Array.isArray(siswa.kelas) ? siswa.kelas[0]?.nama_kelas : '-') || '-'
                             return (
                               <tr key={sId} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
                                 <td className={`py-2 px-2.5 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{index + 1}</td>
@@ -994,7 +990,7 @@ export default function AbsensiPage() {
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                       isDarkMode ? 'bg-slate-800 text-indigo-300 border border-slate-700' : 'bg-slate-100 text-indigo-900 border border-slate-300'
                                     }`}>
-                                      {siswa.kelas?.nama_kelas || '-'}
+                                      {namaKelasSiswa}
                                     </span>
                                   </td>
                                 )}
@@ -1075,6 +1071,7 @@ export default function AbsensiPage() {
                           siswaSudahAbsen.map((siswa, index) => {
                             const sId = String(siswa.id)
                             const st = absensiMap[sId]
+                            const namaKelasSiswa = (siswa.kelas?.nama_kelas) || (Array.isArray(siswa.kelas) ? siswa.kelas[0]?.nama_kelas : '-') || '-'
                             return (
                               <tr key={sId} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
                                 <td className={`py-2 px-2.5 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{index + 1}</td>
@@ -1086,7 +1083,7 @@ export default function AbsensiPage() {
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                       isDarkMode ? 'bg-slate-800 text-indigo-300 border border-slate-700' : 'bg-slate-100 text-indigo-900 border border-slate-300'
                                     }`}>
-                                      {siswa.kelas?.nama_kelas || '-'}
+                                      {namaKelasSiswa}
                                     </span>
                                   </td>
                                 )}
