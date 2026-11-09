@@ -21,6 +21,7 @@ interface SiswaItem {
   nama_lengkap: string
   nisn?: string
   kelas_id?: number
+  kelas?: any
 }
 
 interface BankSoalItem {
@@ -232,7 +233,7 @@ export default function LaporanPage() {
         .order('nama_lengkap', { ascending: true })
 
       if (dataKelas) setKelasList(dataKelas.map(k => ({ id: k.id, nama: k.nama_kelas })))
-      if (dataSiswa) setSiswaList(dataSiswa)
+      if (dataSiswa) setSiswaList(dataSiswa as any)
 
     } catch (err) {
       console.error('Error fetching master data:', err)
@@ -478,7 +479,7 @@ export default function LaporanPage() {
         return {
           nisn: siswa.nisn || '-',
           nama: siswa.nama_lengkap,
-          kelas: siswa.kelas?.nama_kelas || '-',
+          kelas: (siswa as any).kelas?.nama_kelas || (Array.isArray((siswa as any).kelas) ? (siswa as any).kelas[0]?.nama_kelas : '-'),
           hadir: statusList.filter(st => st === 'HADIR').length,
           sakit: statusList.filter(st => st === 'SAKIT').length,
           izin: statusList.filter(st => st === 'IZIN').length,
@@ -554,7 +555,7 @@ export default function LaporanPage() {
 
         return {
           nama: siswa.nama_lengkap,
-          kelas: siswa.kelas?.nama_kelas || '-',
+          kelas: (siswa as any).kelas?.nama_kelas || (Array.isArray((siswa as any).kelas) ? (siswa as any).kelas[0]?.nama_kelas : '-'),
           mapel: n.mata_pelajaran || selectedM?.nama || '-',
           tugas: n.nilai_tugas ?? '-',
           uts: n.nilai_uts ?? '-',
@@ -865,7 +866,9 @@ export default function LaporanPage() {
       const komps = [tugas, uts, uas].filter(v => v > 0)
       const avg = komps.length > 0 ? (komps.reduce((a, b) => a + b, 0) / komps.length).toFixed(1) : '0.0'
 
-      return [idx + 1, s.nama_lengkap, s.kelas?.nama_kelas || '-', n.mata_pelajaran || '-', n.nilai_tugas ?? 0, n.nilai_uts ?? 0, n.nilai_uas ?? 0, avg]
+      const namaKelas = (s as any).kelas?.nama_kelas || (Array.isArray((s as any).kelas) ? (s as any).kelas[0]?.nama_kelas : '-')
+
+      return [idx + 1, s.nama_lengkap, namaKelas, n.mata_pelajaran || '-', n.nilai_tugas ?? 0, n.nilai_uts ?? 0, n.nilai_uas ?? 0, avg]
     })
 
     downloadCSV(`Leger_Nilai_${selectedSemester}_${selectedTahunAjaran.replace('/', '-')}`, ['No', 'Nama Siswa', 'Kelas', 'Mapel', 'Tugas', 'UTS', 'UAS', 'Rata-Rata'], rows)
