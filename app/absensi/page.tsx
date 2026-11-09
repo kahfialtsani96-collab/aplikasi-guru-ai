@@ -257,7 +257,7 @@ export default function AbsensiPage() {
         }
       } catch (err) {
         console.error('Error fetching siswa:', err)
-      } font-medium {
+      } finally {
         setLoadingSiswa(false)
       }
     }
@@ -516,7 +516,7 @@ export default function AbsensiPage() {
         }
       })
 
-      // Hapus data presensi lama di tanggal & mapel tersebut untuk siswa yang diproses
+      // Hapus data presensi lama di tanggal & mapel tersebut untuk siswa yang dipproses
       if (selectedKelasId === 'ALL') {
         const studentIds = processedSiswa.map((s) => s.id)
         await supabase
