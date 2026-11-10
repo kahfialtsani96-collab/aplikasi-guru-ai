@@ -97,7 +97,7 @@ export default function BimbinganWaliPage() {
         setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
       }
 
-      // Load Seluruh Data Siswa (Semua Guru & Operator Bisa Akses)
+      // Load Seluruh Data Siswa
       fetchSiswaList()
     }
 
@@ -128,12 +128,11 @@ export default function BimbinganWaliPage() {
     }
   }
 
-  // Handle Perubahan Filter Kelas di Form Input
   useEffect(() => {
     fetchSiswaList(selectedKelasIdInput)
   }, [selectedKelasIdInput])
 
-  // Fetch Rekapitulasi Bimbingan (Bisa Filter Kelas, Jenis, dan Kata Kunci)
+  // Fetch Rekapitulasi Bimbingan
   async function fetchRekapBimbingan() {
     setLoadingRekap(true)
     try {
@@ -174,7 +173,7 @@ export default function BimbinganWaliPage() {
     }
   }, [activeTab, filterKelasIdRekap, filterJenis, searchKataKunci, kelasList])
 
-  // Simpan Bimbingan (Bisa Dikelola Seluruh Guru/Wali/Operator)
+  // Simpan Bimbingan
   const handleSimpanBimbingan = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedSiswaNama || !masalah.trim() || !tanggal) {
@@ -184,7 +183,6 @@ export default function BimbinganWaliPage() {
 
     setSaving(true)
     try {
-      // Cari nama kelas dari siswa yang dipilih
       const targetSiswa = allSiswaList.find((s) => s.nama_lengkap === selectedSiswaNama)
       let namaKelas = 'UMUM'
 
@@ -222,7 +220,7 @@ export default function BimbinganWaliPage() {
     }
   }
 
-  // KHUSUS OPERATOR: Konfirmasi & Catat Tindak Lanjut Hukuman
+  // Operator: Konfirmasi Tindak Lanjut
   const handleTindakLanjutiOperator = async (item: BimbinganRecord) => {
     if (!isOperator) return
 
@@ -232,7 +230,7 @@ export default function BimbinganWaliPage() {
       defaultKeterangan
     )
 
-    if (inputKeterangan === null) return // Batal
+    if (inputKeterangan === null) return
 
     try {
       const { error } = await supabase
@@ -254,7 +252,7 @@ export default function BimbinganWaliPage() {
     }
   }
 
-  // KHUSUS OPERATOR: Hapus Catatan Bimbingan
+  // Operator: Hapus Bimbingan
   const handleDeleteBimbingan = async (id?: string) => {
     if (!isOperator) return
     if (!id || !confirm('Apakah Anda yakin ingin menghapus catatan bimbingan ini?')) return
@@ -269,9 +267,9 @@ export default function BimbinganWaliPage() {
 
   if (loadingRole) {
     return (
-      <div className={`h-screen p-8 flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-700'}`}>
-        <div className={`backdrop-blur-md border p-6 rounded-2xl text-center space-y-2 shadow-md ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/90 border-slate-300'}`}>
-          <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Memuat Halaman Bimbingan...</p>
+      <div className={`h-screen w-screen flex items-center justify-center font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-200 text-slate-800'}`}>
+        <div className={`p-4 rounded-xl border text-center space-y-1 shadow-xs ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
+          <p className="font-bold text-xs">Memuat Halaman Bimbingan...</p>
         </div>
       </div>
     )
@@ -279,475 +277,402 @@ export default function BimbinganWaliPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -60 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white overflow-hidden relative transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className={`h-screen w-screen overflow-hidden font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-200 text-slate-800'
       }`}
     >
-      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
-        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+      {/* WATERMARK LOGO */}
+      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
+        isDarkMode ? 'opacity-[0.04]' : 'opacity-[0.12]'
       }`}>
-        <img src="/logo-smp.jpg" alt="Watermark SMP Muna Mustofa" className="w-[850px] h-[850px] object-contain max-w-none" />
+        <img src="/logo-smp.jpg" alt="Watermark" className="w-[600px] h-[600px] object-contain max-w-none" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
-        {/* HEADER TOPBAR */}
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs transition-colors duration-300 ${
-          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+        
+        {/* 1. SUPER-COMPACT HEADER TOPBAR */}
+        <header className={`border-b px-3 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-3">
-            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          <div className="flex items-center gap-2">
+            <Link href="/" className={`p-1 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
-                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
-              }`}>
-                <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
-              </div>
-              <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>
-                  Layanan Bimbingan & Konseling Siswa
-                </p>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <img src="/logo-smp.jpg" alt="Logo" className="w-5 h-5 rounded border p-0.5 object-contain" />
+              <h1 className={`font-black text-xs leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                Bimbingan Siswa
+              </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
-              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+              isDarkMode ? 'bg-slate-800 text-indigo-300 border-slate-700' : 'bg-white text-indigo-900 border-slate-300'
             }`}>
-              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
-                {userDisplayName.charAt(0)}
-              </span>
-              <span>{userDisplayName}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
-                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
-              }`}>
-                {isOperator ? 'Operator' : 'Guru'}
-              </span>
-            </div>
-
+              {userDisplayName}
+            </span>
             <button
               onClick={async () => {
                 await supabase.auth.signOut()
-                window.location.href = '/login'
+                router.replace('/login')
               }}
-              className={`border p-2 rounded-xl transition cursor-pointer ${
+              className={`p-1 rounded-md border transition cursor-pointer ${
                 isDarkMode 
-                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
-                  : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
+                  ? 'bg-rose-950/40 border-rose-800 text-rose-400' 
+                  : 'bg-rose-50 border-rose-300 text-rose-700'
               }`}
               title="Keluar"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
             </button>
           </div>
         </header>
 
-        <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 space-y-3">
-          <div className="flex items-center justify-between shrink-0">
-            <div className={`grid grid-cols-2 p-1 rounded-xl border w-full max-w-md text-xs font-bold shadow-xs ${
-              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white/80 border-slate-300'
+        {/* 2. SUB-NAVBAR AKADEMIK (PILLS HORIZONTAL SCROLL) */}
+        <div className={`border-b px-3 py-1 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+          isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
+        }`}>
+          <div className="max-w-6xl mx-auto flex items-center gap-1 min-w-max text-[10px] font-bold">
+            <Link href="/jadwal" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+              isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
             }`}>
-              <button
-                onClick={() => setActiveTab('input')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                  activeTab === 'input' 
-                    ? 'bg-indigo-600 text-white shadow-xs' 
-                    : isDarkMode 
-                      ? 'text-slate-400 hover:text-white' 
-                      : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>💖</span> Catat Kasus / Bimbingan
-              </button>
-              <button
-                onClick={() => setActiveTab('rekap')}
-                className={`py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                  activeTab === 'rekap' 
-                    ? 'bg-indigo-600 text-white shadow-xs' 
-                    : isDarkMode 
-                      ? 'text-slate-400 hover:text-white' 
-                      : 'text-slate-600 hover:text-slate-950'
-                }`}
-              >
-                <span>📜</span> Rekapitulasi Kasus
-              </button>
-            </div>
+              <span>🕒</span> Jadwal
+            </Link>
+            <Link href="/absensi" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+              isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
+            }`}>
+              <span>📋</span> Absensi
+            </Link>
+            <Link href="/nilai" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+              isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
+            }`}>
+              <span>⭐</span> Penilaian
+            </Link>
+            <Link href="/jurnal" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+              isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
+            }`}>
+              <span>📓</span> Jurnal
+            </Link>
+            <Link href="/bimbingan" className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1">
+              <span>💖</span> Bimbingan
+            </Link>
+          </div>
+        </div>
+
+        {/* MAIN CONTENT CONTAINER (NO SCROLL CONTAINER) */}
+        <main className="max-w-6xl w-full mx-auto p-2 flex-1 flex flex-col space-y-2 overflow-hidden mb-12">
+          
+          {/* TAB SWITCHER */}
+          <div className={`grid grid-cols-2 p-0.5 rounded-lg border w-full text-[11px] font-extrabold shrink-0 shadow-xs ${
+            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
+          }`}>
+            <button
+              onClick={() => setActiveTab('input')}
+              className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
+                activeTab === 'input' 
+                  ? 'bg-indigo-600 text-white shadow-xs' 
+                  : isDarkMode ? 'text-slate-400' : 'text-slate-700'
+              }`}
+            >
+              <span>💖</span> Catat Kasus
+            </button>
+            <button
+              onClick={() => setActiveTab('rekap')}
+              className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
+                activeTab === 'rekap' 
+                  ? 'bg-indigo-600 text-white shadow-xs' 
+                  : isDarkMode ? 'text-slate-400' : 'text-slate-700'
+              }`}
+            >
+              <span>📜</span> Rekap Kasus
+            </button>
           </div>
 
-          {/* TAB 1: FORM INPUT */}
           {activeTab === 'input' && (
-            <div className={`backdrop-blur-md border rounded-2xl p-4 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
-              isDarkMode 
-                ? 'bg-slate-900/90 border-slate-800' 
-                : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
-            }`}>
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
-                
-                {/* PANEL DAFTAR SISWA + FILTER KELAS */}
-                <div className={`lg:col-span-4 border p-3.5 rounded-xl space-y-2.5 h-fit shadow-xs ${
-                  isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-indigo-200/80'
-                }`}>
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h3 className={`text-[11px] font-extrabold uppercase tracking-wider ${
-                      isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
-                    }`}>
-                      👥 SISWA ({allSiswaList.length})
-                    </h3>
-                  </div>
-
-                  {/* Dropdown Filter Kelas untuk Memudahkan Pencarian Siswa */}
-                  <div>
+            <div className="flex flex-col h-full overflow-hidden space-y-2">
+              
+              {/* FORM INPUT COMPACT */}
+              <form onSubmit={handleSimpanBimbingan} className={`border rounded-xl p-2 shrink-0 shadow-xs space-y-1.5 ${
+                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+              }`}>
+                {/* ROW 1: SISWA & TANGGAL */}
+                <div className="grid grid-cols-12 gap-1.5">
+                  <div className="col-span-7">
                     <select
-                      value={selectedKelasIdInput}
-                      onChange={(e) => setSelectedKelasIdInput(e.target.value)}
-                      className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
-                        isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      value={selectedSiswaNama}
+                      onChange={(e) => setSelectedSiswaNama(e.target.value)}
+                      className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                       }`}
+                      required
                     >
-                      <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
+                      <option value="">-- Pilih Siswa --</option>
+                      {allSiswaList.map((siswa, i) => (
+                        <option key={siswa.id || i} value={siswa.nama_lengkap}>
+                          {siswa.nama_lengkap} ({siswa.nisn || 'No NISN'})
+                        </option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
-                    {allSiswaList.length === 0 ? (
-                      <p className={`text-xs text-center py-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Tidak ada siswa ditemukan.</p>
-                    ) : (
-                      allSiswaList.map((siswa, i) => (
-                        <div
-                          key={siswa.id || i}
-                          onClick={() => setSelectedSiswaNama(siswa.nama_lengkap)}
-                          className={`border p-2 rounded-xl flex items-center justify-between text-xs cursor-pointer transition ${
-                            selectedSiswaNama === siswa.nama_lengkap
-                              ? 'border-indigo-600 bg-indigo-600/20 text-indigo-300 font-black'
-                              : isDarkMode 
-                                ? 'bg-slate-900 border-slate-700 hover:border-indigo-500 text-slate-200' 
-                                : 'bg-white border-slate-200 hover:border-indigo-300 font-bold text-slate-800'
-                          }`}
-                        >
-                          <span className="truncate">{siswa.nama_lengkap}</span>
-                          <span className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{siswa.nisn || '-'}</span>
-                        </div>
-                      ))
-                    )}
+                  <div className="col-span-5">
+                    <input
+                      type="date"
+                      value={tanggal}
+                      onChange={(e) => setTanggal(e.target.value)}
+                      className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
+                      required
+                    />
                   </div>
                 </div>
 
-                {/* FORM INPUT BIMBINGAN */}
-                <div className={`lg:col-span-8 border p-3.5 rounded-xl space-y-3 h-fit shadow-xs ${
-                  isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-indigo-200/80'
-                }`}>
-                  <h3 className={`text-[11px] font-extrabold uppercase tracking-wider border-b pb-2 ${
-                    isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200/80'
-                  }`}>
-                    ✍️ INPUT MASALAH &amp; SOLUSI BIMBINGAN
-                  </h3>
-
-                  <form onSubmit={handleSimpanBimbingan} className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                          PILIH SISWA BERMASALAH *
-                        </label>
-                        <select
-                          value={selectedSiswaNama}
-                          onChange={(e) => setSelectedSiswaNama(e.target.value)}
-                          className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
-                            isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                          }`}
-                          required
-                        >
-                          <option value="">-- Pilih Siswa --</option>
-                          {allSiswaList.map((siswa, i) => (
-                            <option key={siswa.id || i} value={siswa.nama_lengkap}>
-                              {siswa.nama_lengkap} ({siswa.nisn || 'No NISN'})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                          TANGGAL KEJADIAN *
-                        </label>
-                        <input
-                          type="date"
-                          value={tanggal}
-                          onChange={(e) => setTanggal(e.target.value)}
-                          className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
-                            isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                          }`}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                        JENIS MASALAH / KATEGORI *
-                      </label>
-                      <select
-                        value={jenisMasalah}
-                        onChange={(e) => setJenisMasalah(e.target.value)}
-                        className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 cursor-pointer ${
-                          isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                        }`}
-                      >
-                        <option value="Akademik">Akademik (Nilai / Keterlambatan Tugas)</option>
-                        <option value="Karakter/Sikap">Karakter / Sikap / Etika</option>
-                        <option value="Kedisiplinan">Kedisiplinan (Absensi / Seragam)</option>
-                        <option value="Pribadi/Sosial">Pribadi / Sosial / Perundungan</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                        DESKRIPSI MASALAH / KASUS *
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={masalah}
-                        onChange={(e) => setMasalah(e.target.value)}
-                        placeholder="Jelaskan secara ringkas permasalahan siswa..."
-                        className={`w-full border rounded-xl p-2.5 text-xs font-medium focus:outline-none focus:border-indigo-600 resize-none ${
-                          isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                        }`}
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                        SOLUSI / TINDAK LANJUT GURU
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={solusi}
-                        onChange={(e) => setSolusi(e.target.value)}
-                        placeholder="Hasil pembinaan, konseling, atau panggilan orang tua..."
-                        className={`w-full border rounded-xl p-2.5 text-xs font-medium focus:outline-none focus:border-indigo-600 resize-none ${
-                          isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                        }`}
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs cursor-pointer"
-                    >
-                      {saving ? 'Menyimpan...' : '+ Simpan Catatan Bimbingan'}
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: REKAPITULASI BERSAMA FILTER KELAS */}
-          {activeTab === 'rekap' && (
-            <div className={`backdrop-blur-md border rounded-2xl p-4 flex-1 flex flex-col min-h-0 shadow-xs overflow-hidden ${
-              isDarkMode 
-                ? 'bg-slate-900/90 border-slate-800' 
-                : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
-            }`}>
-              
-              {/* FILTER REKAPITULASI */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 shrink-0">
+                {/* ROW 2: JENIS MASALAH */}
                 <div>
-                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER KELAS</label>
                   <select
-                    value={filterKelasIdRekap}
-                    onChange={(e) => setFilterKelasIdRekap(e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
-                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    value={jenisMasalah}
+                    onChange={(e) => setJenisMasalah(e.target.value)}
+                    className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                     }`}
                   >
-                    <option value="">Semua Kelas</option>
-                    {kelasList.map((k) => (
-                      <option key={k.id} value={k.id}>{k.nama}</option>
-                    ))}
+                    <option value="Akademik">Akademik (Nilai / Keterlambatan Tugas)</option>
+                    <option value="Karakter/Sikap">Karakter / Sikap / Etika</option>
+                    <option value="Kedisiplinan">Kedisiplinan (Absensi / Seragam)</option>
+                    <option value="Pribadi/Sosial">Pribadi / Sosial / Perundungan</option>
                   </select>
                 </div>
 
+                {/* ROW 3: DESKRIPSI MASALAH */}
                 <div>
-                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>FILTER JENIS MASALAH</label>
-                  <select
-                    value={filterJenis}
-                    onChange={(e) => setFilterJenis(e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
-                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  <textarea
+                    rows={2}
+                    value={masalah}
+                    onChange={(e) => setMasalah(e.target.value)}
+                    placeholder="📝 Deskripsi Permasalahan Siswa..."
+                    className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none resize-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                     }`}
-                  >
-                    <option value="">Semua Jenis Masalah</option>
-                    <option value="Akademik">Akademik</option>
-                    <option value="Karakter/Sikap">Karakter/Sikap</option>
-                    <option value="Kedisiplinan">Kedisiplinan</option>
-                    <option value="Pribadi/Sosial">Pribadi/Sosial</option>
-                  </select>
+                    required
+                  />
                 </div>
 
+                {/* ROW 4: SOLUSI GURU */}
                 <div>
-                  <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>CARI SISWA / KASUS</label>
-                  <input
-                    type="text"
-                    value={searchKataKunci}
-                    onChange={(e) => setSearchKataKunci(e.target.value)}
-                    placeholder="Kata kunci..."
-                    className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
-                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  <textarea
+                    rows={2}
+                    value={solusi}
+                    onChange={(e) => setSolusi(e.target.value)}
+                    placeholder="💡 Solusi / Tindak Lanjut Guru..."
+                    className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none resize-none ${
+                      isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                     }`}
                   />
                 </div>
+
+                {/* TOMBOL SIMPAN */}
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-1.5 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer mt-1"
+                >
+                  <span>💾</span>
+                  <span>{saving ? 'Menyimpan...' : 'SIMPAN CATATAN BIMBINGAN'}</span>
+                </button>
+              </form>
+
+            </div>
+          )}
+
+          {/* TAB 2: REKAPITULASI (INTERNAL SCROLL AREA) */}
+          {activeTab === 'rekap' && (
+            <div className="flex flex-col h-full overflow-hidden space-y-2">
+              
+              {/* FILTER BAR REKAP */}
+              <div className={`grid grid-cols-3 gap-1 border p-1 rounded-lg shrink-0 shadow-xs ${
+                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+              }`}>
+                <select
+                  value={filterKelasIdRekap}
+                  onChange={(e) => setFilterKelasIdRekap(e.target.value)}
+                  className={`border rounded px-1.5 py-0.5 text-xs font-bold focus:outline-none ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                >
+                  <option value="">Semua Kelas</option>
+                  {kelasList.map((k) => (
+                    <option key={k.id} value={k.id}>{k.nama}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filterJenis}
+                  onChange={(e) => setFilterJenis(e.target.value)}
+                  className={`border rounded px-1.5 py-0.5 text-xs font-bold focus:outline-none ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                >
+                  <option value="">Semua Jenis</option>
+                  <option value="Akademik">Akademik</option>
+                  <option value="Karakter/Sikap">Karakter</option>
+                  <option value="Kedisiplinan">Kedisiplinan</option>
+                  <option value="Pribadi/Sosial">Pribadi</option>
+                </select>
+
+                <input
+                  type="text"
+                  value={searchKataKunci}
+                  onChange={(e) => setSearchKataKunci(e.target.value)}
+                  placeholder="Cari..."
+                  className={`border rounded px-1.5 py-0.5 text-xs font-bold focus:outline-none ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                />
               </div>
 
-              {/* TABEL REKAPITULASI */}
-              <div className={`flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
-                    <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
-                      <th className="py-2.5 px-3">TANGGAL</th>
-                      <th className="py-2.5 px-3">KELAS</th>
-                      <th className="py-2.5 px-3">NAMA SISWA</th>
-                      <th className="py-2.5 px-3">JENIS MASALAH</th>
-                      <th className="py-2.5 px-3">DESKRIPSI KASUS</th>
-                      <th className="py-2.5 px-3">SOLUSI GURU</th>
-                      <th className="py-2.5 px-3">PENANGANAN HUKUMAN</th>
-                      {isOperator && <th className="py-2.5 px-3 text-center w-20">AKSI</th>}
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800 text-slate-200' : 'divide-slate-200 text-slate-800'}`}>
-                    {loadingRekap ? (
-                      <tr>
-                        <td colSpan={isOperator ? 8 : 7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Memuat data...</td>
-                      </tr>
-                    ) : rekapList.length === 0 ? (
-                      <tr>
-                        <td colSpan={isOperator ? 8 : 7} className={`py-10 text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Belum ada catatan kasus bimbingan.</td>
-                      </tr>
-                    ) : (
-                      rekapList.map((item, index) => (
-                        <tr key={item.id || index} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
-                          <td className={`py-2.5 px-3 font-mono font-bold whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{item.tanggal}</td>
-                          <td className="py-2.5 px-3 font-bold text-indigo-400 whitespace-nowrap">{item.kelas}</td>
-                          <td className={`py-2.5 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.nama_siswa}</td>
-                          <td className="py-2.5 px-3 font-bold text-indigo-500 whitespace-nowrap">{item.jenis_masalah}</td>
-                          <td className={`py-2.5 px-3 font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-800'}`}>{item.masalah}</td>
-                          <td className={`py-2.5 px-3 font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{item.solusi || '-'}</td>
-                          
-                          {/* KOLOM KETERANGAN HUKUMAN / PENANGANAN */}
-                          <td className="py-2.5 px-3 font-medium">
+              {/* LIST REKAP (INTERNAL SCROLL AREA) */}
+              <div className={`border rounded-xl p-2 flex-1 flex flex-col overflow-hidden shadow-xs ${
+                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+              }`}>
+                {loadingRekap ? (
+                  <div className={`py-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                    Memuat riwayat bimbingan...
+                  </div>
+                ) : rekapList.length === 0 ? (
+                  <div className={`py-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>
+                    Belum ada catatan kasus bimbingan.
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto pr-1 space-y-1.5">
+                    {rekapList.map((item, index) => (
+                      <div
+                        key={item.id || index}
+                        className={`p-2 rounded-lg border transition shadow-xs flex flex-col gap-1 ${
+                          isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[11px] font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                            {item.nama_siswa} ({item.kelas})
+                          </span>
+                          <span className="text-[10px] font-bold text-indigo-400">{item.jenis_masalah}</span>
+                        </div>
+
+                        <p className={`text-[11px] font-bold leading-tight ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                          🚨 {item.masalah}
+                        </p>
+
+                        {item.solusi && (
+                          <p className={`text-[10px] font-medium leading-tight ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                            💡 {item.solusi}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-700/20 text-[10px]">
+                          <span className={`font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                            📅 {item.tanggal}
+                          </span>
+
+                          <div className="flex items-center gap-1">
                             {item.is_penanganan_selesai ? (
-                              <div className="space-y-0.5">
-                                <span className={`border text-[10px] font-extrabold px-2 py-0.5 rounded-md inline-flex items-center gap-1 ${
-                                  isDarkMode ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                                }`}>
-                                  <span>✅</span> Selesai Ditindak
-                                </span>
-                                <p className={`text-[11px] italic font-semibold mt-0.5 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                                  "{item.keterangan_hukuman || 'Sudah dihukum sesuai tata tertib sekolah.'}"
-                                </p>
-                              </div>
-                            ) : (
-                              <span className={`border text-[10px] font-bold px-2 py-0.5 rounded-md inline-block ${
-                                isDarkMode ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-amber-100 text-amber-800 border-amber-300'
+                              <span className={`px-1.5 py-0.2 rounded font-black text-[9px] uppercase ${
+                                isDarkMode ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               }`}>
-                                ⏳ Menunggu Tindak Lanjut
+                                ✅ Selesai
+                              </span>
+                            ) : (
+                              <span className={`px-1.5 py-0.2 rounded font-black text-[9px] uppercase ${
+                                isDarkMode ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                              }`}>
+                                ⏳ Proses
                               </span>
                             )}
-                          </td>
 
-                          {/* KOLOM AKSI (CENTANG HIJAU & HAPUS HANYA UNTUK OPERATOR) */}
-                          {isOperator && (
-                            <td className="py-2.5 px-3 text-center whitespace-nowrap space-x-1">
+                            {isOperator && (
                               <button
                                 onClick={() => handleTindakLanjutiOperator(item)}
-                                className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 p-1.5 rounded-lg border border-emerald-300 transition cursor-pointer"
-                                title="Konfirmasi & Isikan Keterangan Hukuman"
+                                className="text-emerald-500 hover:text-emerald-700 font-bold p-0.5"
+                                title="Konfirmasi Tindak Lanjut"
                               >
                                 ✅
                               </button>
+                            )}
 
+                            {isOperator && (
                               <button
                                 onClick={() => handleDeleteBimbingan(item.id)}
-                                className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
-                                title="Hapus Laporan"
+                                className="text-rose-500 hover:text-rose-700 font-bold p-0.5"
+                                title="Hapus"
                               >
                                 🗑️
                               </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
             </div>
           )}
-        </main>
 
-        <div className="pb-16 pt-1 flex justify-center shrink-0">
-          <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
-            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
-          }`}>
-            <span>Aplikasi Guru AI</span>
-            <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
-          </div>
-        </div>
+        </main>
       </div>
 
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 transition-colors duration-300 ${
+      {/* 3. FIXED BOTTOM NAVIGATION BAR */}
+      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
       }`}>
-        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+        <div className="max-w-xl mx-auto px-4 py-1.5 flex items-center justify-between">
+          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🕒</span>
+            <span className="text-base leading-none">🕒</span>
             <span>Dashboard</span>
           </Link>
+
           {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👥</span>
+              <span className="text-base leading-none">👥</span>
               <span>Siswa</span>
             </Link>
           )}
+
           {isOperator && (
-            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👨‍🏫</span>
+              <span className="text-base leading-none">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
-          <Link href="/bimbingan" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-500 transition">
-            <span className="text-base">🎓</span>
+
+          <Link href="/bimbingan" className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition">
+            <span className="text-base leading-none">🎓</span>
             <span>Akademik</span>
           </Link>
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+
+          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🖨️</span>
+            <span className="text-base leading-none">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
+
     </motion.div>
   )
 }
