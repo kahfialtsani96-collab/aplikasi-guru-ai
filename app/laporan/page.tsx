@@ -14,6 +14,8 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 interface OptionItem {
   id: number
   nama: string
+  tingkat?: string
+  wali_kelas_id?: number | null
 }
 
 interface SiswaItem {
@@ -24,15 +26,10 @@ interface SiswaItem {
   kelas?: any
 }
 
-interface BankSoalItem {
-  id: number
-  mapel: string
-  fase_kelas: string
-  bentuk_soal: string
-  jumlah_soal: number
-  isi_soal: string
-  nama_guru?: string
-  created_at?: string
+interface GuruInfo {
+  nama: string
+  nuptk: string
+  jabatanLabel: string
 }
 
 export default function LaporanPage() {
@@ -40,7 +37,11 @@ export default function LaporanPage() {
   const { isOperator } = useAuthRole()
 
   const [activeTab, setActiveTab] = useState<'pusat' | 'pengaturan'>('pusat')
-  const [userDisplayName, setUserDisplayName] = useState('GURU')
+  const [userDisplayName, setUserDisplayName] = useState('MEMUAT...')
+  const [userNuptkDisplay, setUserNuptkDisplay] = useState('-')
+  const [isStrictOperatorRole, setIsStrictOperatorRole] = useState(false)
+  const [, setCurrentGuruId] = useState<number | null>(null)
+  const [waliKelasAssignedId, setWaliKelasAssignedId] = useState<number | null>(null)
   const [, setUserEmail] = useState<string | null>(null)
   const [currentDateStr, setCurrentDateStr] = useState('')
 
@@ -64,9 +65,10 @@ export default function LaporanPage() {
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
   const [tahunAjaranOptions, setTahunAjaranOptions] = useState<string[]>([])
 
-  // Identitas TTD & Otomatisasi Profil Guru
+  // Identitas TTD & Otomatisasi Profil Guru Login
   const [namaGuru, setNamaGuru] = useState('Guru Pengampu')
   const [nuptkGuru, setNuptkGuru] = useState('-')
+  const [jabatanGuru, setJabatanGuru] = useState('Guru')
   const [namaKepsek, setNamaKepsek] = useState('SULASTRI, S.Pd., Gr.')
   const [nipKepsek, setNipKepsek] = useState('NUPTK. 6337763664131233')
   const [kotaTtd, setKotaTtd] = useState('Gisting')
@@ -102,6 +104,49 @@ export default function LaporanPage() {
   const [kelasRiwayatAbsensi, setKelasRiwayatAbsensi] = useState('')
   const [kelasNilai, setKelasNilai] = useState('')
   const [mapelNilai, setMapelNilai] = useState('')
+
+  // Helper format NUPTK agar bersih (jika kosong/null/EMPTY menjadi '-')
+  const formatNuptk = (val: any): string => {
+    if (!val) return '-'
+    const str = String(val).trim()
+    if (str === '' || str.toUpperCase() === 'EMPTY' || str.toUpperCase() === 'NULL' || str === '-') {
+      return '-'
+    }
+    return str
+  }
+
+  // Helper format Title Case untuk Jabatan (misal "Wali kelas" -> "Wali Kelas")
+  const formatTitleCase = (str: string): string => {
+    if (!str) return 'Wali Kelas'
+    return str
+      .trim()
+      .split(/\s+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ')
+  }
+
+  // Helper Predikat & Capaian Kompetensi Rapor (KKM = 75)
+  const getPredikatRapor = (nilai: number, namaMapel: string) => {
+    if (nilai >= 86) {
+      return {
+        huruf: 'A',
+        keterangan: 'Sangat Baik',
+        deskripsi: `Menunjukkan penguasaan yang sangat baik dalam memahami seluruh materi dan kompetensi dasar pada mata pelajaran ${namaMapel}.`,
+      }
+    }
+    if (nilai >= 79) {
+      return {
+        huruf: 'B',
+        keterangan: 'Baik',
+        deskripsi: `Menunjukkan penguasaan yang baik dalam memahami sebagian besar materi dan kompetensi dasar pada mata pelajaran ${namaMapel}.`,
+      }
+    }
+    return {
+      huruf: 'C',
+      keterangan: 'Cukup Baik',
+      deskripsi: `Menunjukkan penguasaan yang cukup baik dalam memahami kompetensi dasar esensial pada mata pelajaran ${namaMapel}.`,
+    }
+  }
 
   // Generate 5 Tahun Ajaran ke Depan
   useEffect(() => {
@@ -148,28 +193,38 @@ export default function LaporanPage() {
 
       const { data: dataGuruLogin, error } = await supabase
         .from('guru')
-        .select('id, nama_lengkap, role, NUPTK, nuptk, nip')
+        .select('id, nama_lengkap, role, NUPTK, email, jabatan')
         .ilike('email', cleanEmail)
         .maybeSingle()
 
       if (error) {
-        console.error('Error fetching guru:', error)
+        console.error('Error fetching guru:', error.message)
       }
 
-      if (dataGuruLogin) {
-        setUserDisplayName(dataGuruLogin.nama_lengkap.toUpperCase())
+      if (dataGuruLogin && dataGuruLogin.nama_lengkap) {
+        const namaLengkapResmi = dataGuruLogin.nama_lengkap.trim()
+        const cleanNuptk = formatNuptk(dataGuruLogin.NUPTK)
+        const cleanJabatan = formatTitleCase(dataGuruLogin.jabatan || 'Guru')
         const isUserStrictOperator = (dataGuruLogin.role || '').toLowerCase() === 'operator'
-        
-        const rawNuptk = dataGuruLogin.NUPTK || dataGuruLogin.nuptk || dataGuruLogin.nip
-        const cleanNuptk = rawNuptk && rawNuptk !== 'EMPTY' && rawNuptk !== 'NULL' ? String(rawNuptk) : '-'
 
-        setNamaGuru(dataGuruLogin.nama_lengkap)
+        setCurrentGuruId(dataGuruLogin.id)
+        setIsStrictOperatorRole(isUserStrictOperator)
+        setUserDisplayName(namaLengkapResmi.toUpperCase())
+        setUserNuptkDisplay(cleanNuptk)
+        setNamaGuru(namaLengkapResmi)
         setNuptkGuru(cleanNuptk)
+        setJabatanGuru(cleanJabatan)
 
         fetchMasterData(dataGuruLogin.id, isUserStrictOperator)
       } else {
         const fallbackName = user.user_metadata?.full_name || cleanEmail.split('@')[0]
+        setCurrentGuruId(null)
+        setIsStrictOperatorRole(isOperator)
         setUserDisplayName(fallbackName.toUpperCase())
+        setUserNuptkDisplay('-')
+        setNamaGuru(fallbackName)
+        setNuptkGuru('-')
+        setJabatanGuru('Guru')
         fetchMasterData(null, isOperator)
       }
     }
@@ -177,7 +232,7 @@ export default function LaporanPage() {
     getUserData()
   }, [isOperator])
 
-  // AMBIL MASTER DATA MAPEL & KELAS
+  // AMBIL MASTER DATA MAPEL & KELAS (GURU HANYA MENDAPATKAN MAPEL YANG DIAMPU & KELAS WALI JIKA ADA)
   async function fetchMasterData(guruId: number | null, isStrictOperator: boolean) {
     try {
       if (!isStrictOperator && guruId) {
@@ -203,6 +258,8 @@ export default function LaporanPage() {
 
           if (formattedMapel.length > 0) {
             setFilterMapelBankSoal(formattedMapel[0].nama)
+            setFilterMapelLeger(String(formattedMapel[0].id))
+            setMapelNilai(String(formattedMapel[0].id))
           }
         } else {
           setMapelList([])
@@ -224,7 +281,7 @@ export default function LaporanPage() {
 
       const { data: dataKelas } = await supabase
         .from('kelas')
-        .select('id, nama_kelas')
+        .select('id, nama_kelas, tingkat, wali_kelas_id')
         .order('nama_kelas', { ascending: true })
 
       const { data: dataSiswa } = await supabase
@@ -232,11 +289,198 @@ export default function LaporanPage() {
         .select('id, nama_lengkap, nisn, kelas_id')
         .order('nama_lengkap', { ascending: true })
 
-      if (dataKelas) setKelasList(dataKelas.map(k => ({ id: k.id, nama: k.nama_kelas })))
+      if (dataKelas) {
+        const mappedKelas = dataKelas.map(k => ({
+          id: k.id,
+          nama: k.nama_kelas,
+          tingkat: k.tingkat,
+          wali_kelas_id: k.wali_kelas_id,
+        }))
+        setKelasList(mappedKelas)
+
+        if (!isStrictOperator && guruId) {
+          const kelasBinaan = mappedKelas.find(k => Number(k.wali_kelas_id) === Number(guruId))
+          if (kelasBinaan) {
+            setWaliKelasAssignedId(kelasBinaan.id)
+            setFilterKelasRapor(String(kelasBinaan.id))
+            setFilterKelasBimbingan(String(kelasBinaan.id))
+          } else {
+            setWaliKelasAssignedId(null)
+            setFilterKelasRapor('')
+          }
+        }
+      }
+
       if (dataSiswa) setSiswaList(dataSiswa as any)
 
     } catch (err) {
       console.error('Error fetching master data:', err)
+    }
+  }
+
+  // HELPER KHUSUS MENGAMBIL WALI KELAS BERDASARKAN `kelas.wali_kelas_id`
+  const resolveWaliKelasByKelasId = async (kelasId: number | string | null): Promise<GuruInfo> => {
+    if (kelasId) {
+      const kelasObj = kelasList.find(k => Number(k.id) === Number(kelasId))
+      let waliId = kelasObj?.wali_kelas_id
+
+      if (!waliId) {
+        const { data: kDb } = await supabase
+          .from('kelas')
+          .select('wali_kelas_id')
+          .eq('id', Number(kelasId))
+          .maybeSingle()
+        waliId = kDb?.wali_kelas_id
+      }
+
+      if (waliId) {
+        const { data: gData } = await supabase
+          .from('guru')
+          .select('nama_lengkap, NUPTK, jabatan')
+          .eq('id', Number(waliId))
+          .maybeSingle()
+
+        if (gData && gData.nama_lengkap) {
+          return {
+            nama: gData.nama_lengkap.trim(),
+            nuptk: formatNuptk(gData.NUPTK),
+            jabatanLabel: 'Wali Kelas',
+          }
+        }
+      }
+    }
+
+    return {
+      nama: namaGuru,
+      nuptk: nuptkGuru,
+      jabatanLabel: 'Wali Kelas',
+    }
+  }
+
+  // HELPER PENCARI IDENTITAS & JABATAN PENANDATANGAN PDF
+  const resolvePenandatanganPDF = async (options: {
+    mode: 'mapel' | 'wali' | 'umum'
+    mapelId?: number | string | null
+    mapelNama?: string | null
+    kelasId?: number | string | null
+    guruEmail?: string | null
+    namaGuruFallback?: string | null
+  }): Promise<GuruInfo> => {
+    if (options.mode === 'wali') {
+      return await resolveWaliKelasByKelasId(options.kelasId || waliKelasAssignedId || null)
+    }
+
+    let namaMapelTerpilih = ''
+    if (options.mapelId) {
+      const mObj = mapelList.find((m) => String(m.id) === String(options.mapelId))
+      if (mObj) namaMapelTerpilih = mObj.nama
+    } else if (options.mapelNama) {
+      namaMapelTerpilih = options.mapelNama.trim()
+    }
+
+    const buildJabatanLabel = (): string => {
+      if (options.mode === 'mapel') {
+        return namaMapelTerpilih
+          ? `Guru Mata Pelajaran ${namaMapelTerpilih}`
+          : 'Guru Mata Pelajaran'
+      }
+      if (namaMapelTerpilih) {
+        return `Guru Mata Pelajaran ${namaMapelTerpilih}`
+      }
+      return 'Guru Mata Pelajaran'
+    }
+
+    if (!isStrictOperatorRole && namaGuru && namaGuru !== 'Guru Pengampu') {
+      return {
+        nama: namaGuru,
+        nuptk: nuptkGuru,
+        jabatanLabel: buildJabatanLabel(),
+      }
+    }
+
+    if (options.guruEmail) {
+      const { data: gByEmail } = await supabase
+        .from('guru')
+        .select('nama_lengkap, NUPTK')
+        .ilike('email', options.guruEmail.trim())
+        .maybeSingle()
+
+      if (gByEmail && gByEmail.nama_lengkap) {
+        return {
+          nama: gByEmail.nama_lengkap.trim(),
+          nuptk: formatNuptk(gByEmail.NUPTK),
+          jabatanLabel: buildJabatanLabel(),
+        }
+      }
+    }
+
+    if (options.mapelId) {
+      const { data: gmData } = await supabase
+        .from('guru_mapel')
+        .select('guru:guru_id(nama_lengkap, NUPTK)')
+        .eq('mapel_id', Number(options.mapelId))
+        .limit(1)
+        .maybeSingle()
+
+      const guruObj: any = gmData?.guru
+      if (guruObj && guruObj.nama_lengkap) {
+        return {
+          nama: guruObj.nama_lengkap.trim(),
+          nuptk: formatNuptk(guruObj.NUPTK),
+          jabatanLabel: buildJabatanLabel(),
+        }
+      }
+    }
+
+    if (namaMapelTerpilih) {
+      const targetMapel = mapelList.find(
+        (m) => m.nama.toLowerCase() === namaMapelTerpilih.toLowerCase()
+      )
+      if (targetMapel) {
+        const { data: gmData } = await supabase
+          .from('guru_mapel')
+          .select('guru:guru_id(nama_lengkap, NUPTK)')
+          .eq('mapel_id', targetMapel.id)
+          .limit(1)
+          .maybeSingle()
+
+        const guruObj: any = gmData?.guru
+        if (guruObj && guruObj.nama_lengkap) {
+          return {
+            nama: guruObj.nama_lengkap.trim(),
+            nuptk: formatNuptk(guruObj.NUPTK),
+            jabatanLabel: buildJabatanLabel(),
+          }
+        }
+      }
+    }
+
+    if (options.namaGuruFallback) {
+      const { data: gByName } = await supabase
+        .from('guru')
+        .select('nama_lengkap, NUPTK')
+        .ilike('nama_lengkap', `%${options.namaGuruFallback.trim()}%`)
+        .limit(1)
+        .maybeSingle()
+
+      if (gByName && gByName.nama_lengkap) {
+        return {
+          nama: gByName.nama_lengkap.trim(),
+          nuptk: formatNuptk(gByName.NUPTK),
+          jabatanLabel: buildJabatanLabel(),
+        }
+      }
+      return {
+        nama: options.namaGuruFallback,
+        nuptk: '-',
+        jabatanLabel: buildJabatanLabel(),
+      }
+    }
+
+    return {
+      nama: namaGuru,
+      nuptk: nuptkGuru,
+      jabatanLabel: buildJabatanLabel(),
     }
   }
 
@@ -247,16 +491,16 @@ export default function LaporanPage() {
     </div>
   `
 
-  // FOOTER TTD GENERATOR
-  const getFooterTtdHTML = (namaGuruPengampu: string, nuptkGuruPengampu: string = '-') => `
+  // FOOTER TTD GENERATOR DINAMIS (2 PIHAK - LAPORAN UMUM)
+  const getFooterTtdHTML = (guruInfo: GuruInfo) => `
     <div style="margin-top: 25px; font-family: 'Times New Roman', serif; font-size: 9.5pt; page-break-inside: avoid; color: #000;">
       <table style="width: 100%; border: none;">
         <tr>
           <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
             ${kotaTtd}, ${currentDateStr}<br/>
-            <strong>Guru Pengampu Mata Pelajaran</strong><br/><br/><br/><br/>
-            <u><strong>${namaGuruPengampu}</strong></u><br/>
-            NUPTK: ${nuptkGuruPengampu}
+            <strong>${guruInfo.jabatanLabel}</strong><br/><br/><br/><br/>
+            <u><strong>${guruInfo.nama}</strong></u><br/>
+            NUPTK: ${guruInfo.nuptk}
           </td>
           <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
             Mengetahui,<br/>
@@ -291,160 +535,406 @@ export default function LaporanPage() {
     document.body.removeChild(link)
   }
 
-  // CETAK BANK SOAL POLOS (MENAMPILKAN 100% DATA ASLI SUPABASE TANPA PEMOTONGAN REGEX)
+  // PARSER & PEMBERSIH OTOMATIS NASKAH SOAL (MEMBUANG KUNCI JAWABAN, DUPLIKASI HEADER, & MERAPIKAN 2 KOLOM)
+  const formatNaskahSoalHematKertas = (rawText: string): string => {
+    if (!rawText) return '<p><i>Isi naskah soal kosong di database.</i></p>'
+
+    // 1. Potong semua teks mulai dari bagian KUNCI JAWABAN atau LEMBAR PENGESAHAN ke bawah
+    let cleanText = rawText
+      .split(/\n\s*#{0,4}\s*(?:KUNCI\s*JAWABAN|PEDOMAN\s*PENSKORAN|LEMBAR\s*PENGESAHAN)/i)[0]
+      .trim()
+
+    // 2. Ubah format bold **teks** menjadi <b>teks</b>
+    cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+
+    const lines = cleanText.split('\n')
+    const soalItems: { num: string; question: string; options: { letter: string; text: string }[] }[] = []
+    let currentSoal: { num: string; question: string; options: { letter: string; text: string }[] } | null = null
+    let startedSoal = false
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+
+      // Deteksi nomor soal (misal: "1. Ayat Alquran..." atau "1) ...")
+      const qMatch = line.match(/^(\d{1,2})[\.\)]\s+(.+)$/)
+      if (qMatch) {
+        startedSoal = true
+        if (currentSoal) {
+          soalItems.push(currentSoal)
+        }
+        currentSoal = {
+          num: qMatch[1],
+          question: qMatch[2].trim(),
+          options: [],
+        }
+        continue
+      }
+
+      // Abaikan semua header identitas/petunjuk sebelum soal nomor 1 dimulai
+      if (!startedSoal) continue
+
+      // Abaikan sub-judul topik (misal "### Topik 1: ..." atau "A. TOPIK: ...") agar hemat kertas
+      if (
+        /^#{1,4}\s*/.test(line) ||
+        /^[A-Z]\.\s*TOPIK\b/i.test(line) ||
+        /^TOPIK\s*\d+/i.test(line)
+      ) {
+        continue
+      }
+
+      // Deteksi pilihan jawaban a/b/c/d atau A/B/C/D
+      const optMatch = line.match(/^([a-dA-D])[\.\)]\s*(.+)$/)
+      if (optMatch && currentSoal) {
+        currentSoal.options.push({
+          letter: optMatch[1].toUpperCase(),
+          text: optMatch[2].trim(),
+        })
+        continue
+      }
+
+      // Jika baris lanjutan dari pertanyaan atau opsi terakhir
+      if (currentSoal) {
+        if (currentSoal.options.length > 0) {
+          const lastOpt = currentSoal.options[currentSoal.options.length - 1]
+          lastOpt.text += ' ' + line
+        } else {
+          currentSoal.question += ' ' + line
+        }
+      }
+    }
+
+    if (currentSoal) {
+      soalItems.push(currentSoal)
+    }
+
+    // Jika berhasil ter-parse sebagai daftar butir soal, render dengan struktur kompak anti-terpotong
+    if (soalItems.length > 0) {
+      return soalItems
+        .map((item) => {
+          // Cek apakah semua opsi pendek (<= 22 karakter) -> tampilkan 2 baris (A & C kiri, B & D kanan) agar makin hemat
+          const isShortOptions =
+            item.options.length === 4 && item.options.every((o) => o.text.length <= 22)
+
+          const optionsHtml = isShortOptions
+            ? `
+              <table class="opt-grid">
+                <tr>
+                  <td><b>${item.options[0].letter}.</b> ${item.options[0].text}</td>
+                  <td><b>${item.options[2].letter}.</b> ${item.options[2].text}</td>
+                </tr>
+                <tr>
+                  <td><b>${item.options[1].letter}.</b> ${item.options[1].text}</td>
+                  <td><b>${item.options[3].letter}.</b> ${item.options[3].text}</td>
+                </tr>
+              </table>
+            `
+            : `
+              <div class="opt-list">
+                ${item.options
+                  .map((o) => `<div class="opt-row"><b>${o.letter}.</b> ${o.text}</div>`)
+                  .join('')}
+              </div>
+            `
+
+          return `
+            <div class="soal-item">
+              <div class="soal-q">
+                <span class="soal-num">${item.num}.</span>
+                <span class="soal-text">${item.question}</span>
+              </div>
+              ${optionsHtml}
+            </div>
+          `
+        })
+        .join('')
+    }
+
+    // Fallback jika format soal berupa esai/uraian bebas
+    const cleanedLines = lines
+      .filter((l) => !/^#{1,4}\s*/.test(l.trim()))
+      .map((l) => l.trim())
+      .filter(Boolean)
+    return cleanedLines.map((l) => `<p style="margin: 0 0 4px 0;">${l}</p>`).join('')
+  }
+
+  // HELPER FILTER KELAS PRESISI UNTUK BANK SOAL (MENCEGAH VIII A DAN IX A TERCAMPUR)
+  const filterSoalByKelasExact = (soalList: any[], selectedKelasNama: string) => {
+    if (!selectedKelasNama) return soalList
+    const targetClean = selectedKelasNama.trim().toUpperCase()
+    const targetNoSpace = targetClean.replace(/\s+/g, '')
+
+    return soalList.filter((s) => {
+      const fk = String(s.fase_kelas || '').toUpperCase()
+      const fkNoSpace = fk.replace(/\s+/g, '')
+      const regexWord = new RegExp(`(^|[^A-Z0-9])${targetClean.replace(/\s+/g, '\\s*')}([^A-Z0-9]|$)`, 'i')
+      return regexWord.test(fk) || fkNoSpace.includes(targetNoSpace)
+    })
+  }
+
+  // HELPER UNDUH FILE MICROSOFT WORD (.DOC) UNTUK SOAL & KUNCI JAWABAN
+  const triggerDownloadWord = (filename: string, htmlBody: string) => {
+    const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const wordHtml = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <meta charset="utf-8" />
+          <title>${filename}</title>
+          <!--[if gte mso 9]>
+          <xml>
+            <w:WordDocument>
+              <w:View>Print</w:View>
+              <w:Zoom>100</w:Zoom>
+              <w:DoNotOptimizeForBrowser/>
+            </w:WordDocument>
+          </xml>
+          <![endif]-->
+          <style>
+            @page WordSectionHeader {
+              size: 21cm 29.7cm;
+              margin: 0.7cm 0.9cm 0.7cm 0.9cm;
+              mso-header-margin: 0.5cm;
+              mso-footer-margin: 0.5cm;
+            }
+            @page WordSectionSoal {
+              size: 21cm 29.7cm;
+              margin: 0.7cm 0.9cm 0.7cm 0.9cm;
+              mso-columns: 2 even 0.4cm;
+              mso-column-separator: single;
+            }
+            @page WordSectionSingle {
+              size: 21cm 29.7cm;
+              margin: 1.3cm 1.5cm 1.3cm 1.5cm;
+            }
+            div.WordSectionHeader { page: WordSectionHeader; }
+            div.WordSectionSoal {
+              page: WordSectionSoal;
+              column-count: 2;
+              column-gap: 14px;
+              column-rule: 0.5pt solid #888;
+            }
+            div.WordSectionSingle { page: WordSectionSingle; }
+            body {
+              font-family: 'Times New Roman', Times, serif;
+              color: #000;
+              line-height: 1.15;
+              font-size: 8.5pt;
+              margin: 0;
+              padding: 0;
+            }
+            .judul-ujian {
+              text-align: center;
+              text-transform: uppercase;
+              margin: 2px 0 4px 0;
+              font-size: 9.5pt;
+              font-weight: bold;
+            }
+            .header-identitas {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 4px;
+              font-size: 8pt;
+            }
+            .header-identitas td {
+              border: 1px solid #000;
+              padding: 2px 5px;
+            }
+            .petunjuk-singkat {
+              font-size: 7.8pt;
+              font-style: italic;
+              margin: 0 0 6px 0;
+              border-bottom: 1.5pt solid #000;
+              padding-bottom: 3px;
+            }
+            .soal-item {
+              break-inside: avoid;
+              page-break-inside: avoid;
+              margin-bottom: 4.5pt;
+            }
+            .soal-q {
+              margin-bottom: 1pt;
+              text-align: justify;
+            }
+            .soal-num {
+              font-weight: bold;
+            }
+            .opt-list {
+              padding-left: 14pt;
+            }
+            .opt-row {
+              margin-bottom: 0.5pt;
+            }
+            .opt-grid {
+              width: 94%;
+              margin-left: 14pt;
+              border-collapse: collapse;
+              font-size: 8.3pt;
+            }
+            .opt-grid td {
+              width: 50%;
+              padding: 0 4pt 0 0;
+              border: none;
+              vertical-align: top;
+            }
+          </style>
+        </head>
+        <body>
+          ${htmlBody.replace(/src="\//g, `src="${originUrl}/`)}
+        </body>
+      </html>
+    `
+
+    const blob = new Blob(['\ufeff', wordHtml], {
+      type: 'application/msword',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filename}.doc`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  // DOWNLOAD WORD (.DOC) NASKAH SOAL SISWA (2 KOLOM HEMAT KERTAS, TANPA KUNCI JAWABAN, SIAP EDIT)
   const handlePrintBankSoal = async () => {
     let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
     if (filterMapelBankSoal) {
       query = query.eq('mapel', filterMapelBankSoal)
     }
-    if (filterKelasBankSoal) {
-      query = query.ilike('fase_kelas', `%${filterKelasBankSoal}%`)
-    }
 
-    const { data: soalData, error } = await query
+    const { data: rawSoalData, error } = await query
+    const soalData = filterSoalByKelasExact(rawSoalData || [], filterKelasBankSoal)
 
     if (error || !soalData || soalData.length === 0) {
       alert(`Tidak ada naskah bank soal tersimpan ${filterMapelBankSoal ? `untuk mata pelajaran ${filterMapelBankSoal}` : ''} ${filterKelasBankSoal ? `kelas ${filterKelasBankSoal}` : ''}.`)
       return
     }
 
-    // Mengubah pindah baris (\n) menjadi <br/> tanpa memotong karakter apa pun
-    const renderTeksPolos = (text: string) => {
-      if (!text) return '<p><i>Isi naskah soal kosong di database.</i></p>'
-      return text.replace(/\n/g, '<br/>')
-    }
+    const htmlSections = soalData
+      .map((s, idx) => `
+        ${idx > 0 ? '<br clear="all" style="page-break-before:always; mso-break-type:section-break" />' : ''}
+        <div class="WordSectionHeader">
+          <div style="text-align: center; margin-bottom: 4px;">
+            <img src="/kop-surat.png" alt="Kop Surat" width="680" style="width: 100%; max-height: 82px; object-fit: contain;" />
+          </div>
+          <div class="judul-ujian">
+            NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}
+          </div>
+          <table class="header-identitas">
+            <tr>
+              <td style="width: 15%;"><b>Mata Pelajaran</b></td>
+              <td style="width: 35%;">: ${s.mapel}</td>
+              <td style="width: 15%;"><b>Nama Siswa</b></td>
+              <td style="width: 35%;">: ........................................................</td>
+            </tr>
+            <tr>
+              <td><b>Kelas / Fase</b></td>
+              <td>: ${s.fase_kelas}</td>
+              <td><b>No. Peserta / NIS</b></td>
+              <td>: ........................................................</td>
+            </tr>
+            <tr>
+              <td><b>Waktu / Soal</b></td>
+              <td>: 90 Menit (${s.jumlah_soal} Butir ${s.bentuk_soal})</td>
+              <td><b>Hari / Tanggal</b></td>
+              <td>: ........................................................</td>
+            </tr>
+          </table>
+          <p class="petunjuk-singkat">
+            <b>Petunjuk:</b> Berdoalah sebelum mengerjakan. Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (X) pada huruf A, B, C, atau D pada lembar jawaban!
+          </p>
+        </div>
 
-    const printWindow = window.open('', '_blank')
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>NASKAH SOAL ULANGAN - SMP MUNA MUSTOFA</title>
-            <style>
-              @page { margin: 1cm 1.5cm; size: A4; }
-              body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.4; font-size: 10pt; }
-              .header-identitas { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 9pt; }
-              .header-identitas td { border: 1px solid #000; padding: 4px 6px; }
-              .naskah-container { page-break-after: always; }
-              .naskah-container:last-child { page-break-after: avoid; }
-              .soal-body { text-align: justify; margin-top: 10px; }
-            </style>
-          </head>
-          <body>
-            ${
-              soalData.map((s) => `
-                <div class="naskah-container">
-                  ${headerKopHTML}
-                  <h3 style="text-align: center; text-transform: uppercase; margin: 0 0 8px 0; font-size: 11pt; letter-spacing: 0.5px;">
-                    NASKAH SOAL ULANGAN / ASESMEN SUMATIF
-                  </h3>
-                  <table class="header-identitas">
-                    <tr>
-                      <td style="width: 16%;"><b>Mata Pelajaran</b></td>
-                      <td style="width: 34%;">: ${s.mapel}</td>
-                      <td style="width: 16%;"><b>Nama Siswa</b></td>
-                      <td style="width: 34%;">: ...........................................................</td>
-                    </tr>
-                    <tr>
-                      <td><b>Kelas / Fase</b></td>
-                      <td>: ${s.fase_kelas}</td>
-                      <td><b>No. Absen / NIS</b></td>
-                      <td>: ...........................................................</td>
-                    </tr>
-                    <tr>
-                      <td><b>Bentuk Soal</b></td>
-                      <td>: ${s.bentuk_soal} (${s.jumlah_soal} Soal)</td>
-                      <td><b>Hari / Tanggal</b></td>
-                      <td>: ...........................................................</td>
-                    </tr>
-                    <tr>
-                      <td><b>Waktu Pengerjaan</b></td>
-                      <td>: 90 - 120 Menit</td>
-                      <td><b>Nilai / Paraf</b></td>
-                      <td>: </td>
-                    </tr>
-                  </table>
-                  <p style="font-size: 8.5pt; font-style: italic; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 4px;">
-                    <b>Petunjuk Pengerjaan:</b> Periksalah lembar naskah soal sebelum mengerjakan. Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (X) pada huruf A, B, C, atau D pada lembar jawaban!
-                  </p>
-                  
-                  <div class="soal-body">
-                    ${renderTeksPolos(s.isi_soal)}
-                  </div>
-                </div>
-              `).join('')
-            }
-          </body>
-        </html>
+        <br clear="all" style="mso-special-character:line-break; page-break-before:auto; mso-break-type:section-break" />
+
+        <div class="WordSectionSoal">
+          ${formatNaskahSoalHematKertas(s.isi_soal)}
+        </div>
       `)
-      printWindow.document.close()
-      setTimeout(() => { printWindow.print() }, 500)
-    }
+      .join('')
+
+    const safeMapel = (filterMapelBankSoal || 'Semua_Mapel').replace(/[^a-zA-Z0-9]/g, '_')
+    const safeKelas = (filterKelasBankSoal || 'Semua_Kelas').replace(/[^a-zA-Z0-9]/g, '_')
+    triggerDownloadWord(`Naskah_Soal_${safeMapel}_${safeKelas}`, htmlSections)
   }
 
-  // CETAK LEMBAR KUNCI JAWABAN & TTD PEMBUAT SOAL
+  // DOWNLOAD WORD (.DOC) KUNCI JAWABAN & PEDOMAN PENILAIAN (SIAP EDIT)
   const handlePrintKunciJawaban = async () => {
     let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
     if (filterMapelBankSoal) {
       query = query.eq('mapel', filterMapelBankSoal)
     }
-    if (filterKelasBankSoal) {
-      query = query.ilike('fase_kelas', `%${filterKelasBankSoal}%`)
-    }
 
-    const { data: soalData } = await query
+    const { data: rawSoalData } = await query
+    const soalData = filterSoalByKelasExact(rawSoalData || [], filterKelasBankSoal)
+
     if (!soalData || soalData.length === 0) {
       alert('Tidak ada data bank soal untuk melihat kunci jawaban.')
       return
     }
 
-    const renderTeksPolos = (text: string) => {
-      if (!text) return '<p><i>Isi naskah soal kosong.</i></p>'
-      return text.replace(/\n/g, '<br/>')
+    const extractKunciOnly = (rawText: string) => {
+      if (!rawText) return '<p><i>Data kosong.</i></p>'
+      const parts = rawText.split(/\n\s*#{0,4}\s*KUNCI\s*JAWABAN/i)
+      let targetPart = parts.length > 1 ? parts[1] : rawText
+      targetPart = targetPart.split(/\n\s*#{0,4}\s*LEMBAR\s*PENGESAHAN/i)[0]
+      return targetPart
+        .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+        .trim()
+        .replace(/\n/g, '<br/>')
     }
 
-    const namaGuruPembuat = soalData[0]?.nama_guru || namaGuru
+    const guruPengampu = await resolvePenandatanganPDF({
+      mode: 'mapel',
+      mapelNama: filterMapelBankSoal || soalData[0]?.mapel,
+      namaGuruFallback: soalData[0]?.nama_guru,
+    })
 
-    const printWindow = window.open('', '_blank')
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>KUNCI JAWABAN SOAL - ${filterMapelBankSoal || 'SEMUA MAPEL'}</title>
-            <style>
-              @page { margin: 1.5cm; size: A4; }
-              body { font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.4; color: #000; }
-              .card { border: 1px solid #000; padding: 12px; margin-bottom: 15px; page-break-inside: avoid; }
-              h3 { margin: 0 0 6px 0; text-transform: uppercase; text-align: center; }
-            </style>
-          </head>
-          <body>
-            ${headerKopHTML}
-            <h2 style="text-align: center; text-transform: uppercase; margin-bottom: 15px;">LEMBAR KUNCI JAWABAN & PEDOMAN PENILAIAN GURU</h2>
-            ${
-              soalData.map(s => `
-                <div class="card">
-                  <h3>MAPEL: ${s.mapel} (Fase / Kelas: ${s.fase_kelas})</h3>
-                  <p style="font-size: 9pt; margin-top: 0; text-align: center;">
-                    Guru Pengampu: <b>${s.nama_guru || namaGuruPembuat}</b> | Jumlah Soal: ${s.jumlah_soal} (${s.bentuk_soal})
-                  </p>
-                  <hr/>
-                  <div>${renderTeksPolos(s.isi_soal)}</div>
+    const htmlKunci = `
+      <div class="WordSectionSingle" style="font-size: 10pt; line-height: 1.4;">
+        <div style="text-align: center; margin-bottom: 10px;">
+          <img src="/kop-surat.png" alt="Kop Surat" width="650" style="width: 100%; max-height: 120px; object-fit: contain;" />
+        </div>
+        <h2 style="text-align: center; text-transform: uppercase; font-size: 12pt; margin-bottom: 12px;">
+          LEMBAR KUNCI JAWABAN &amp; PEDOMAN PENILAIAN GURU
+        </h2>
+        ${soalData
+          .map(
+            (s) => `
+              <div style="border: 1px solid #000; padding: 10px; margin-bottom: 14px;">
+                <h3 style="margin: 0 0 4px 0; text-transform: uppercase; text-align: center; font-size: 11pt;">
+                  MAPEL: ${s.mapel} (Fase / Kelas: ${s.fase_kelas})
+                </h3>
+                <p style="font-size: 9pt; margin: 0 0 8px 0; text-align: center;">
+                  Guru Pengampu: <b>${s.nama_guru || guruPengampu.nama}</b> | Jumlah Soal: ${s.jumlah_soal} (${s.bentuk_soal})
+                </p>
+                <hr/>
+                <div style="font-weight: bold; font-size: 10pt;">
+                  ${extractKunciOnly(s.isi_soal)}
                 </div>
-              `).join('')
-            }
-            ${getFooterTtdHTML(namaGuruPembuat)}
-          </body>
-        </html>
-      `)
-      printWindow.document.close()
-      setTimeout(() => { printWindow.print() }, 500)
-    }
+              </div>
+            `
+          )
+          .join('')}
+        ${getFooterTtdHTML(guruPengampu)}
+      </div>
+    `
+
+    const safeMapel = (filterMapelBankSoal || 'Semua_Mapel').replace(/[^a-zA-Z0-9]/g, '_')
+    const safeKelas = (filterKelasBankSoal || 'Semua_Kelas').replace(/[^a-zA-Z0-9]/g, '_')
+    triggerDownloadWord(`Kunci_Jawaban_${safeMapel}_${safeKelas}`, htmlKunci)
   }
 
   const handlePrintDocument = async (jenis: string) => {
     let judulDoc = 'LAPORAN AKADEMIK'
     let contentBody = ''
+    let guruCetak: GuruInfo = {
+      nama: namaGuru,
+      nuptk: nuptkGuru,
+      jabatanLabel: 'Guru Mata Pelajaran',
+    }
 
     if (jenis === 'absensi') {
       const selectedK = kelasList.find(k => k.id === Number(filterKelasAbsensi))
@@ -459,6 +949,10 @@ export default function LaporanPage() {
       if (filterBulanAbsensi) queryAbsensi = queryAbsensi.ilike('tanggal', `${filterBulanAbsensi}%`)
 
       const { data: absensiData } = await queryAbsensi
+
+      guruCetak = await resolvePenandatanganPDF({
+        mode: 'umum',
+      })
 
       const rekapSiswa = (siswaData || []).map(siswa => {
         const riwayatAll = (absensiData || []).filter(a => Number(a.siswa_id) === Number(siswa.id))
@@ -532,6 +1026,11 @@ export default function LaporanPage() {
       const selectedM = mapelList.find(m => m.id === Number(filterMapelLeger))
 
       judulDoc = `LEGER NILAI AKADEMIK SISWA ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} ${selectedM ? `- MAPEL: ${selectedM.nama.toUpperCase()}` : ''}`
+
+      guruCetak = await resolvePenandatanganPDF({
+        mode: 'mapel',
+        mapelId: filterMapelLeger || null,
+      })
 
       let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
       if (filterKelasLeger) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasLeger))
@@ -615,6 +1114,17 @@ export default function LaporanPage() {
 
       const { data: agendaData } = await queryAgenda
 
+      const uniqueMapels = Array.from(new Set((agendaData || []).map((a: any) => a.mapel).filter(Boolean)))
+      const singleMapelJurnal = uniqueMapels.length === 1 ? String(uniqueMapels[0]) : null
+      const firstAgenda = (agendaData || [])[0]
+
+      guruCetak = await resolvePenandatanganPDF({
+        mode: 'umum',
+        guruEmail: firstAgenda?.guru_email,
+        mapelId: firstAgenda?.mapel_id,
+        mapelNama: singleMapelJurnal,
+      })
+
       contentBody = `
         <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 5px;">${judulDoc}</h3>
         <p style="text-align: center; font-size: 10pt; margin-bottom: 15px;">
@@ -657,10 +1167,15 @@ export default function LaporanPage() {
       judulDoc = `LAPORAN CATATAN BIMBINGAN GURU WALI ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
 
       let queryBimbingan = supabase.from('bimbingan_wali').select('*')
-      if (filterKelasBimbingan) queryBimbingan = queryBimbingan.eq('kelas_id', Number(filterKelasBimbingan))
-      if (filterBulanBimbingan) queryBimbingan = queryBimbingan.ilike('created_at', `${filterBulanBimbingan}%`)
+      if (selectedK) queryBimbingan = queryBimbingan.eq('kelas', selectedK.nama)
+      if (filterBulanBimbingan) queryBimbingan = queryBimbingan.ilike('tanggal', `${filterBulanBimbingan}%`)
 
       const { data: bimbinganData } = await queryBimbingan
+
+      guruCetak = await resolvePenandatanganPDF({
+        mode: 'wali',
+        kelasId: filterKelasBimbingan || waliKelasAssignedId || null,
+      })
 
       contentBody = `
         <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 5px;">${judulDoc}</h3>
@@ -694,27 +1209,57 @@ export default function LaporanPage() {
       `
     }
 
-    executePrint(judulDoc, contentBody, namaGuru)
+    executePrint(judulDoc, contentBody, guruCetak)
   }
 
-  // CETAK LEMBAR RAPOR SISWA
-  const handlePrintRaporSiswa = async () => {
+  // GENERATOR DOKUMEN RAPOR PROFESIONAL 2 HALAMAN (UNTUK PDF & MICROSOFT WORD)
+  const buildRaporDocumentData = async () => {
     if (!selectedSiswaRapor) {
       alert('Pilih siswa terlebih dahulu untuk mencetak Lembar Rapor!')
-      return
+      return null
     }
 
     const targetSiswa = siswaList.find(s => s.id === Number(selectedSiswaRapor))
-    if (!targetSiswa) return
+    if (!targetSiswa) return null
 
-    let namaKelasStr = '-'
-    if (targetSiswa.kelas_id) {
-      const { data: kelasSiswa } = await supabase.from('kelas').select('nama_kelas').eq('id', targetSiswa.kelas_id).maybeSingle()
-      if (kelasSiswa) namaKelasStr = kelasSiswa.nama_kelas
+    const kelasObj = kelasList.find(k => Number(k.id) === Number(targetSiswa.kelas_id))
+    let namaKelasStr = kelasObj?.nama || '-'
+    let tingkatStr = kelasObj?.tingkat || ''
+
+    if (targetSiswa.kelas_id && !kelasObj) {
+      const { data: kelasSiswa } = await supabase
+        .from('kelas')
+        .select('nama_kelas, tingkat')
+        .eq('id', targetSiswa.kelas_id)
+        .maybeSingle()
+      if (kelasSiswa) {
+        namaKelasStr = kelasSiswa.nama_kelas
+        tingkatStr = kelasSiswa.tingkat || ''
+      }
     }
 
-    const { data: nilaiSiswa } = await supabase.from('nilai').select('*').eq('siswa_id', targetSiswa.id).eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
-    const { data: absensiSiswa } = await supabase.from('absensi').select('tanggal, status, jam_ke').eq('siswa_id', targetSiswa.id).eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
+    const { data: allMapelDb } = await supabase
+      .from('mapel')
+      .select('id, nama_mapel')
+      .order('nama_mapel', { ascending: true })
+
+    const semuaMapel = (allMapelDb || []).map(m => ({ id: m.id, nama: m.nama_mapel }))
+
+    const { data: nilaiSiswa } = await supabase
+      .from('nilai')
+      .select('*')
+      .eq('siswa_id', targetSiswa.id)
+      .eq('semester', selectedSemester)
+      .eq('tahun_ajaran', selectedTahunAjaran)
+
+    const { data: absensiSiswa } = await supabase
+      .from('absensi')
+      .select('tanggal, status, jam_ke')
+      .eq('siswa_id', targetSiswa.id)
+      .eq('semester', selectedSemester)
+      .eq('tahun_ajaran', selectedTahunAjaran)
+
+    const waliKelasInfo = await resolveWaliKelasByKelasId(targetSiswa.kelas_id || filterKelasRapor)
 
     const presensiHarianMap = new Map<string, string>()
     ;(absensiSiswa || []).forEach(a => {
@@ -728,123 +1273,373 @@ export default function LaporanPage() {
     })
 
     const statusList = Array.from(presensiHarianMap.values())
-
-    const hadir = statusList.filter(st => st === 'HADIR').length
     const sakit = statusList.filter(st => st === 'SAKIT').length
     const izin = statusList.filter(st => st === 'IZIN').length
     const alpa = statusList.filter(st => st === 'ALPA').length
 
-    const mapelUtama = mapelList.filter(m => !/qiro|pramuka|ekstra/i.test(m.nama))
-    const mapelEkskul = mapelList.filter(m => /qiro|pramuka|ekstra/i.test(m.nama))
+    const mapelUtama = semuaMapel.filter(m => !/qiro|pramuka|ekstra/i.test(m.nama))
+    const mapelEkskul = semuaMapel.filter(m => /qiro|pramuka|ekstra/i.test(m.nama))
 
-    const judulDoc = `LAPORAN HASIL BELAJAR (RAPOR) SISWA - ${targetSiswa.nama_lengkap.toUpperCase()}`
+    const rowQiroah = (nilaiSiswa || []).find(n => /qiro/i.test(n.mata_pelajaran || ''))
+    const nilaiQiroahNum = rowQiroah
+      ? Math.round(
+          [rowQiroah.nilai_tugas, rowQiroah.nilai_uts, rowQiroah.nilai_uas]
+            .filter((v): v is number => typeof v === 'number' && v > 0)
+            .reduce((a, b, _, arr) => a + b / arr.length, 0)
+        ) || 85
+      : 85
+    const predikatQiroah = getPredikatRapor(nilaiQiroahNum, "Qiro'ah & Tahfidz")
 
-    const contentBody = `
-      <h2 style="text-align: center; text-transform: uppercase; margin-bottom: 20px; font-size: 14pt;">LAPORAN HASIL BELAJAR SISWA (RAPOR)</h2>
-      
-      <table style="width: 100%; border: none; font-size: 10.5pt; margin-bottom: 20px;">
-        <tr>
-          <td style="width: 15%; border: none;"><b>Nama Siswa</b></td>
-          <td style="width: 35%; border: none;">: ${targetSiswa.nama_lengkap}</td>
-          <td style="width: 15%; border: none;"><b>Kelas</b></td>
-          <td style="width: 35%; border: none;">: ${namaKelasStr}</td>
-        </tr>
-        <tr>
-          <td style="border: none;"><b>NISN</b></td>
-          <td style="border: none;">: ${targetSiswa.nisn || '-'}</td>
-          <td style="border: none;"><b>Semester</b></td>
-          <td style="border: none;">: ${selectedSemester} / ${selectedTahunAjaran}</td>
-        </tr>
-      </table>
+    let teksKeputusan = ''
+    if (selectedSemester === 'Genap') {
+      const upperKelas = namaKelasStr.toUpperCase()
+      if (tingkatStr === '7' || upperKelas.startsWith('VII ')) {
+        teksKeputusan = 'NAIK KE KELAS VIII (DELAPAN)'
+      } else if (tingkatStr === '8' || upperKelas.startsWith('VIII ')) {
+        teksKeputusan = 'NAIK KE KELAS IX (SEMBILAN)'
+      } else {
+        teksKeputusan = 'LULUS DARI SATUAN PENDIDIKAN'
+      }
+    }
 
-      <h4 style="margin-bottom: 8px;">A. CAPAIAN AKADEMIK MATA PELAJARAN UTAMA</h4>
-      <table style="width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px;">
-        <thead>
-          <tr style="background-color: #f2f2f2;">
-            <th style="border: 1px solid #000; padding: 6px;">No</th>
-            <th style="border: 1px solid #000; padding: 6px;">Mata Pelajaran</th>
-            <th style="border: 1px solid #000; padding: 6px;">Tugas</th>
-            <th style="border: 1px solid #000; padding: 6px;">UTS</th>
-            <th style="border: 1px solid #000; padding: 6px;">UAS</th>
-            <th style="border: 1px solid #000; padding: 6px;">Nilai Akhir</th>
-            <th style="border: 1px solid #000; padding: 6px;">Predikat</th>
+    const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
+
+    const htmlRaporLengkap = `
+      <!-- WATERMARK LOGO HALUS -->
+      <div class="watermark">
+        <img src="${originUrl}/logo-smp.jpg" alt="Watermark SMP" />
+      </div>
+
+      <!-- ==================== HALAMAN 1: IDENTITAS & CAPAIAN AKADEMIK ==================== -->
+      <div class="page-section">
+        <div style="text-align: center; margin-bottom: 10px;">
+          <img src="${originUrl}/kop-surat.png" alt="Kop Surat" style="width: 100%; max-height: 130px; object-fit: contain;" />
+        </div>
+
+        <div style="text-align: center; margin-bottom: 14px;">
+          <h2 style="margin: 0; font-size: 13pt; letter-spacing: 0.8px; text-transform: uppercase;">LAPORAN HASIL BELAJAR PESERTA DIDIK</h2>
+          <p style="margin: 2px 0 0 0; font-size: 10pt; font-weight: bold;">(RAPOR AKADEMIK SEMESTER ${selectedSemester.toUpperCase()})</p>
+        </div>
+
+        <table class="table-identitas">
+          <tr>
+            <td style="width: 18%;">Nama Peserta Didik</td>
+            <td style="width: 36%;">: <b>${targetSiswa.nama_lengkap.toUpperCase()}</b></td>
+            <td style="width: 18%;">Kelas</td>
+            <td style="width: 28%;">: <b>${namaKelasStr}</b></td>
           </tr>
-        </thead>
-        <tbody>
-          ${
-            mapelUtama.map((mapel, idx) => {
-              const rowN = (nilaiSiswa || []).find(n => n.mata_pelajaran === mapel.nama) || {}
-              const t = rowN.nilai_tugas ?? 0
-              const u = rowN.nilai_uts ?? 0
-              const a = rowN.nilai_uas ?? 0
-              const komps = [t, u, a].filter(v => v > 0)
-              const avg = komps.length > 0 ? (komps.reduce((x, y) => x + y, 0) / komps.length).toFixed(1) : '-'
-              const predikat = avg !== '-' ? (Number(avg) >= 85 ? 'Sangat Baik (A)' : Number(avg) >= 75 ? 'Baik (B)' : 'Cukup (C)') : '-'
-
-              return `
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${mapel.nama}</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${rowN.nilai_tugas ?? '-'}</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${rowN.nilai_uts ?? '-'}</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${rowN.nilai_uas ?? '-'}</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">${avg}</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${predikat}</td>
-                </tr>
-              `
-            }).join('')
-          }
-        </tbody>
-      </table>
-
-      <h4 style="margin-bottom: 8px;">B. KEGIATAN EKSTRAKURIKULER (QIRO'AH & PRAMUKA)</h4>
-      <table style="width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px;">
-        <thead>
-          <tr style="background-color: #f2f2f2;">
-            <th style="border: 1px solid #000; padding: 6px; width: 8%;">No</th>
-            <th style="border: 1px solid #000; padding: 6px;">Kegiatan Ekstrakulikuler</th>
-            <th style="border: 1px solid #000; padding: 6px; text-align: center;">Nilai Capaian</th>
-            <th style="border: 1px solid #000; padding: 6px;">Keterangan / Predikat</th>
+          <tr>
+            <td>NISN</td>
+            <td>: ${targetSiswa.nisn || '-'}</td>
+            <td>Semester</td>
+            <td>: ${selectedSemester}</td>
           </tr>
-        </thead>
-        <tbody>
-          ${
-            mapelEkskul.length > 0
-              ? mapelEkskul.map((m, idx) => {
-                  const rowN = (nilaiSiswa || []).find(n => n.mata_pelajaran === m.nama) || {}
-                  const avg = rowN.nilai_uas ?? rowN.nilai_tugas ?? 80
-                  const predikat = avg >= 85 ? 'Sangat Baik (A)' : avg >= 75 ? 'Baik (B)' : 'Cukup (C)'
-                  return `
-                    <tr>
-                      <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
-                      <td style="border: 1px solid #000; padding: 5px;"><b>${m.nama}</b></td>
-                      <td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">${avg}</td>
-                      <td style="border: 1px solid #000; padding: 5px;">${predikat}</td>
-                    </tr>
-                  `
-                }).join('')
-              : `
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">1</td>
-                  <td style="border: 1px solid #000; padding: 5px;">Pramuka / Qiro'ah</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Baik (B)</td>
-                  <td style="border: 1px solid #000; padding: 5px;">Aktif mengikuti kegiatan ekstrakulikuler sekolah</td>
-                </tr>
-              `
-          }
-        </tbody>
-      </table>
+          <tr>
+            <td>Nama Sekolah</td>
+            <td>: SMP Muna Mustofa</td>
+            <td>Tahun Pelajaran</td>
+            <td>: ${selectedTahunAjaran}</td>
+          </tr>
+        </table>
 
-      <h4 style="margin-bottom: 8px;">C. REKAPITULASI KEHADIRAN SISWA (HARIAN)</h4>
-      <table style="width: 50%; border-collapse: collapse; font-size: 10pt;">
-        <tr><td style="border: 1px solid #000; padding: 5px;">Hadir (H)</td><td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">${hadir} Hari</td></tr>
-        <tr><td style="border: 1px solid #000; padding: 5px;">Sakit (S)</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">${sakit} Hari</td></tr>
-        <tr><td style="border: 1px solid #000; padding: 5px;">Izin (I)</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">${izin} Hari</td></tr>
-        <tr><td style="border: 1px solid #000; padding: 5px;">Alpa (A)</td><td style="border: 1px solid #000; padding: 5px; text-align: center;">${alpa} Hari</td></tr>
-      </table>
+        <h4 class="section-title">A. CAPAIAN KOMPETENSI AKADEMIK</h4>
+        <table class="table-data">
+          <thead>
+            <tr>
+              <th style="width: 5%; text-align: center;">No</th>
+              <th style="width: 25%; text-align: left;">Mata Pelajaran</th>
+              <th style="width: 7%; text-align: center;">KKM</th>
+              <th style="width: 10%; text-align: center;">Nilai Akhir</th>
+              <th style="width: 13%; text-align: center;">Predikat</th>
+              <th style="width: 40%; text-align: left;">Capaian Kompetensi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              mapelUtama.map((mapel, idx) => {
+                const rowN = (nilaiSiswa || []).find(n => n.mata_pelajaran === mapel.nama) || {}
+                const t = rowN.nilai_tugas ?? 0
+                const u = rowN.nilai_uts ?? 0
+                const a = rowN.nilai_uas ?? 0
+                const komps = [t, u, a].filter(v => v > 0)
+                const hasNilai = komps.length > 0
+                const avgNum = hasNilai ? Math.round(komps.reduce((x, y) => x + y, 0) / komps.length) : 0
+                const predObj = hasNilai ? getPredikatRapor(avgNum, mapel.nama) : null
+
+                return `
+                  <tr>
+                    <td style="text-align: center;">${idx + 1}</td>
+                    <td><b>${mapel.nama}</b></td>
+                    <td style="text-align: center;">75</td>
+                    <td style="text-align: center; font-weight: bold; font-size: 10.5pt;">${hasNilai ? avgNum : '-'}</td>
+                    <td style="text-align: center; font-weight: bold;">
+                      ${predObj ? `${predObj.huruf} (${predObj.keterangan})` : '-'}
+                    </td>
+                    <td style="font-size: 8.8pt; text-align: justify;">
+                      ${predObj ? predObj.deskripsi : `Capaian kompetensi mata pelajaran ${mapel.nama} sedang dalam proses penilaian semester.`}
+                    </td>
+                  </tr>
+                `
+              }).join('')
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ==================== HALAMAN 2: KEAGAMAAN, EKSKUL, KEHADIRAN & PENGESAHAN ==================== -->
+      <div class="page-break"></div>
+
+      <div class="page-section">
+        <div style="border-bottom: 1.5px solid #000; padding-bottom: 4px; margin-bottom: 12px; display: flex; justify-content: space-between; font-size: 9pt;">
+          <span>Nama Peserta Didik: <b>${targetSiswa.nama_lengkap.toUpperCase()}</b> (${targetSiswa.nisn || '-'})</span>
+          <span>Kelas: <b>${namaKelasStr}</b> | Semester ${selectedSemester} TA ${selectedTahunAjaran}</span>
+        </div>
+
+        <h4 class="section-title">B. PEMBIASAAN KEAGAMAAN &amp; QIRO&apos;AH (CIRI KHAS SEKOLAH)</h4>
+        <table class="table-data" style="margin-bottom: 14px;">
+          <thead>
+            <tr>
+              <th style="width: 5%; text-align: center;">No</th>
+              <th style="width: 28%; text-align: left;">Aspek Pembiasaan</th>
+              <th style="width: 15%; text-align: center;">Predikat</th>
+              <th style="width: 52%; text-align: left;">Keterangan Capaian</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: center;">1</td>
+              <td><b>Qiro&apos;ah &amp; Tahsin Al-Qur&apos;an</b></td>
+              <td style="text-align: center; font-weight: bold;">${predikatQiroah.huruf} (${predikatQiroah.keterangan})</td>
+              <td style="font-size: 9pt;">Mampu membaca Al-Qur&apos;an sesuai kaidah tajwid dan makharijul huruf dengan ${predikatQiroah.keterangan.toLowerCase()}.</td>
+            </tr>
+            <tr>
+              <td style="text-align: center;">2</td>
+              <td><b>Shalat Berjamaah &amp; Adab Islami</b></td>
+              <td style="text-align: center; font-weight: bold;">A (Sangat Baik)</td>
+              <td style="font-size: 9pt;">Membiasakan shalat berjamaah di sekolah, berakhlak santun kepada guru, serta menghormati sesama teman.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4 class="section-title">C. KEGIATAN EKSTRAKURIKULER</h4>
+        <table class="table-data" style="margin-bottom: 14px;">
+          <thead>
+            <tr>
+              <th style="width: 5%; text-align: center;">No</th>
+              <th style="width: 28%; text-align: left;">Kegiatan Ekstrakurikuler</th>
+              <th style="width: 15%; text-align: center;">Predikat</th>
+              <th style="width: 52%; text-align: left;">Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              mapelEkskul.length > 0
+                ? mapelEkskul.map((m, idx) => {
+                    const rowN = (nilaiSiswa || []).find(n => n.mata_pelajaran === m.nama) || {}
+                    const avg = rowN.nilai_uas ?? rowN.nilai_tugas ?? 85
+                    const predObj = getPredikatRapor(avg, m.nama)
+                    return `
+                      <tr>
+                        <td style="text-align: center;">${idx + 1}</td>
+                        <td><b>${m.nama}</b></td>
+                        <td style="text-align: center; font-weight: bold;">${predObj.huruf} (${predObj.keterangan})</td>
+                        <td style="font-size: 9pt;">Aktif dan disiplin mengikuti kegiatan ${m.nama} dengan capaian ${predObj.keterangan.toLowerCase()}.</td>
+                      </tr>
+                    `
+                  }).join('')
+                : `
+                  <tr>
+                    <td style="text-align: center;">1</td>
+                    <td><b>Pramuka</b></td>
+                    <td style="text-align: center; font-weight: bold;">B (Baik)</td>
+                    <td style="font-size: 9pt;">Aktif mengikuti kegiatan kepramukaan, kerja sama tim, dan kedisiplinan di sekolah.</td>
+                  </tr>
+                `
+            }
+          </tbody>
+        </table>
+
+        <!-- D. KETIDAKHADIRAN & E. CATATAN WALI KELAS (2 KOLOM BERDAMPINGAN) -->
+        <table style="width: 100%; border: none; border-collapse: collapse; margin-bottom: 14px;">
+          <tr>
+            <td style="width: 38%; vertical-align: top; padding-right: 12px; border: none;">
+              <h4 class="section-title">D. KETIDAKHADIRAN</h4>
+              <table class="table-data">
+                <tr>
+                  <td style="width: 65%;">1. Sakit</td>
+                  <td style="width: 35%; text-align: center;"><b>${sakit}</b> hari</td>
+                </tr>
+                <tr>
+                  <td>2. Izin</td>
+                  <td style="text-align: center;"><b>${izin}</b> hari</td>
+                </tr>
+                <tr>
+                  <td>3. Tanpa Keterangan</td>
+                  <td style="text-align: center;"><b>${alpa}</b> hari</td>
+                </tr>
+              </table>
+            </td>
+            <td style="width: 62%; vertical-align: top; border: none;">
+              <h4 class="section-title">E. CATATAN WALI KELAS</h4>
+              <div style="border: 1px solid #000; padding: 10px; min-height: 76px; font-size: 9.5pt; font-style: italic; background-color: #fafafa;">
+                &ldquo;Pertahankan semangat belajar, kedisiplinan, dan akhlak mulia baik di lingkungan sekolah maupun di rumah. Terus tingkatkan prestasi pada semester berikutnya.&rdquo;
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        ${
+          selectedSemester === 'Genap'
+            ? `
+              <div style="border: 1.5px solid #000; padding: 10px 14px; margin-bottom: 16px; background-color: #f8fafc;">
+                <p style="margin: 0; font-size: 10pt;">
+                  <b>KEPUTUSAN:</b> Berdasarkan pencapaian seluruh kompetensi pada Semester Ganjil dan Genap Tahun Pelajaran ${selectedTahunAjaran}, peserta didik dinyatakan:
+                </p>
+                <p style="margin: 6px 0 0 0; font-size: 11pt; font-weight: bold; text-align: center; letter-spacing: 0.5px;">
+                  ${teksKeputusan}
+                </p>
+              </div>
+            `
+            : ''
+        }
+
+        <!-- TANDA TANGAN 3 PIHAK (ORANG TUA, WALI KELAS, KEPALA SEKOLAH) -->
+        <div style="margin-top: 18px; page-break-inside: avoid;">
+          <table style="width: 100%; border: none; font-size: 9.5pt;">
+            <tr>
+              <td style="width: 45%; border: none; text-align: center; vertical-align: top;">
+                Mengetahui,<br/>
+                <strong>Orang Tua / Wali Peserta Didik</strong><br/><br/><br/><br/>
+                ( .................................................... )
+              </td>
+              <td style="width: 10%; border: none;"></td>
+              <td style="width: 45%; border: none; text-align: center; vertical-align: top;">
+                ${kotaTtd}, ${currentDateStr}<br/>
+                <strong>${waliKelasInfo.jabatanLabel}</strong><br/><br/><br/><br/>
+                <u><strong>${waliKelasInfo.nama}</strong></u><br/>
+                NUPTK: ${waliKelasInfo.nuptk}
+              </td>
+            </tr>
+            <tr>
+              <td colspan="3" style="border: none; text-align: center; padding-top: 14px; vertical-align: top;">
+                Mengetahui,<br/>
+                <strong>Kepala Sekolah</strong><br/>
+                <div style="position: relative; height: 68px; display: flex; align-items: center; justify-content: center;">
+                  ${
+                    pakaiTtdCapKepsek
+                      ? `
+                        <img src="${originUrl}/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 41%; top: 0px; height: 72px; opacity: 0.9; z-index: 1;" />
+                        <img src="${originUrl}/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 46%; top: 4px; height: 58px; z-index: 2;" />
+                      `
+                      : '<br/><br/>'
+                  }
+                </div>
+                <u><strong>${namaKepsek}</strong></u><br/>
+                ${nipKepsek}
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
     `
 
-    executePrint(judulDoc, contentBody, namaGuru)
+    return {
+      targetSiswa,
+      namaKelasStr,
+      htmlRaporLengkap,
+    }
+  }
+
+  // CETAK PDF RAPOR SISWA (2 HALAMAN STANDAR PROFESIONAL)
+  const handlePrintRaporSiswa = async () => {
+    const docData = await buildRaporDocumentData()
+    if (!docData) return
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>RAPOR SISWA - ${docData.targetSiswa.nama_lengkap.toUpperCase()} (${docData.namaKelasStr})</title>
+            <style>
+              @page { margin: 1.3cm 1.5cm; size: A4; }
+              body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.35; font-size: 10pt; margin: 0; padding: 0; }
+              .watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                opacity: 0.06;
+                z-index: -1;
+                pointer-events: none;
+              }
+              .watermark img { width: 420px; height: 420px; object-fit: contain; }
+              .table-identitas { width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px; font-size: 10pt; }
+              .table-identitas td { border: none; padding: 2px 4px; vertical-align: top; }
+              .section-title { margin: 0 0 6px 0; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.3px; }
+              .table-data { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+              .table-data th { background-color: #f1f5f9; border: 1px solid #000; padding: 6px; font-weight: bold; }
+              .table-data td { border: 1px solid #000; padding: 5px 6px; vertical-align: middle; }
+              .page-break { page-break-before: always; }
+            </style>
+          </head>
+          <body>
+            ${docData.htmlRaporLengkap}
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+      setTimeout(() => { printWindow.print() }, 500)
+    }
+  }
+
+  // DOWNLOAD WORD (.DOC) RAPOR SISWA AGAR BISA DIEDIT MANUAL
+  const handleDownloadRaporWord = async () => {
+    const docData = await buildRaporDocumentData()
+    if (!docData) return
+
+    const wordHtml = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <meta charset="utf-8" />
+          <title>Rapor_${docData.targetSiswa.nama_lengkap}</title>
+          <style>
+            @page WordSection1 {
+              size: 21cm 29.7cm;
+              margin: 1.3cm 1.5cm 1.3cm 1.5cm;
+            }
+            div.WordSection1 { page: WordSection1; }
+            body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-height: 1.35; color: #000; }
+            .watermark { display: none; }
+            .table-identitas { width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px; font-size: 10pt; }
+            .table-identitas td { border: none; padding: 2px 4px; vertical-align: top; }
+            .section-title { margin: 0 0 6px 0; font-size: 10pt; text-transform: uppercase; }
+            .table-data { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+            .table-data th { background-color: #f1f5f9; border: 1px solid #000; padding: 6px; font-weight: bold; }
+            .table-data td { border: 1px solid #000; padding: 5px 6px; vertical-align: middle; }
+            .page-break { page-break-before: always; mso-break-type: section-break; }
+          </style>
+        </head>
+        <body>
+          <div class="WordSection1">
+            ${docData.htmlRaporLengkap}
+          </div>
+        </body>
+      </html>
+    `
+
+    const blob = new Blob(['\ufeff', wordHtml], {
+      type: 'application/msword',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const safeName = docData.targetSiswa.nama_lengkap.replace(/[^a-zA-Z0-9]/g, '_')
+    link.href = url
+    link.download = `Rapor_${safeName}_${docData.namaKelasStr.replace(/\s+/g, '')}_${selectedSemester}.doc`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   const handleExportLegerExcel = async () => {
@@ -885,6 +1680,10 @@ export default function LaporanPage() {
     const { data: absensiData } = await query
     const selectedK = kelasList.find(k => k.id === Number(kelasRiwayatAbsensi))
     const judulDoc = `LAPORAN DETAIL PRESENSI SISWA BK (JAM KE-1 S/D JAM KE-8) ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
+
+    const guruCetak = await resolvePenandatanganPDF({
+      mode: 'umum',
+    })
 
     const matrixMap = new Map<string, { nama: string; kelas: string; tanggal: string; jam: { [key: number]: string } }>()
 
@@ -967,7 +1766,7 @@ export default function LaporanPage() {
       </table>
     `
 
-    executePrint(judulDoc, contentBody, namaGuru)
+    executePrint(judulDoc, contentBody, guruCetak)
   }
 
   const handlePrintRiwayatNilai = async () => {
@@ -978,6 +1777,11 @@ export default function LaporanPage() {
     const { data: nilaiData } = await query
     const selectedK = kelasList.find(k => k.id === Number(kelasNilai))
     const selectedM = mapelList.find(m => m.id === Number(mapelNilai))
+
+    const guruCetak = await resolvePenandatanganPDF({
+      mode: 'mapel',
+      mapelId: mapelNilai || null,
+    })
 
     const judulDoc = `LAPORAN RIWAYAT INPUT NILAI AKADEMIK ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} ${selectedM ? `- ${selectedM.nama.toUpperCase()}` : ''}`
 
@@ -1015,10 +1819,18 @@ export default function LaporanPage() {
       </table>
     `
 
-    executePrint(judulDoc, contentBody, namaGuru)
+    executePrint(judulDoc, contentBody, guruCetak)
   }
 
-  const executePrint = (judulDoc: string, contentBody: string, namaGuruCetak: string = namaGuru) => {
+  const executePrint = (
+    judulDoc: string,
+    contentBody: string,
+    guruInfo: GuruInfo = {
+      nama: namaGuru,
+      nuptk: nuptkGuru,
+      jabatanLabel: 'Guru Mata Pelajaran',
+    }
+  ) => {
     const printWindow = window.open('', '_blank')
     if (printWindow) {
       printWindow.document.write(`
@@ -1034,7 +1846,7 @@ export default function LaporanPage() {
           <body>
             ${headerKopHTML}
             ${contentBody}
-            ${getFooterTtdHTML(namaGuruCetak, nuptkGuru)}
+            ${getFooterTtdHTML(guruInfo)}
           </body>
         </html>
       `)
@@ -1053,6 +1865,13 @@ export default function LaporanPage() {
     localStorage.setItem('pengaturan_laporan', JSON.stringify(dataToSave))
     alert('✅ Pengaturan profil kepsek & stempel cetakan berhasil disimpan secara permanen!')
   }
+
+  // Kelas yang tersedia di dropdown Rapor: Operator melihat semua kelas, Wali Kelas hanya kelas binaan
+  const kelasRaporOptions = isStrictOperatorRole
+    ? kelasList
+    : waliKelasAssignedId
+      ? kelasList.filter(k => Number(k.id) === Number(waliKelasAssignedId))
+      : []
 
   return (
     <motion.div
@@ -1087,7 +1906,7 @@ export default function LaporanPage() {
               </div>
               <div>
                 <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Pusat Laporan &amp; Cetak PDF Dokumentasi</p>
+                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Pusat Laporan &amp; Cetak Dokumen</p>
               </div>
             </div>
           </div>
@@ -1112,17 +1931,23 @@ export default function LaporanPage() {
               </select>
             </div>
 
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 shadow-xs ${
+            {/* BADGE PROFIL POJOK KANAN ATAS: NAMA LENGKAP GURU + NUPTK */}
+            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2.5 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
-              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+              <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
                 {userDisplayName.charAt(0)}
               </span>
-              <span>{userDisplayName}</span>
+              <div className="flex flex-col leading-tight">
+                <span className="font-extrabold">{userDisplayName}</span>
+                <span className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  NUPTK: {userNuptkDisplay}
+                </span>
+              </div>
               <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
                 isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
               }`}>
-                {isOperator ? 'Operator' : 'Guru'}
+                {isStrictOperatorRole ? 'Operator' : waliKelasAssignedId ? 'Wali Kelas' : 'Guru'}
               </span>
             </div>
 
@@ -1182,7 +2007,7 @@ export default function LaporanPage() {
                 onChange={(e) => setPakaiTtdCapKepsek(e.target.checked)}
                 className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
-              <span>🔏 Sertakan TTD &amp; Stempel Resmi Kepsek pada Cetakan PDF</span>
+              <span>🔏 Sertakan TTD &amp; Stempel Resmi Kepsek pada Cetakan</span>
             </label>
           </div>
         </div>
@@ -1191,13 +2016,20 @@ export default function LaporanPage() {
           {activeTab === 'pusat' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
               
-              {/* CETAK BANK SOAL BERDASARKAN MAPEL & KELAS */}
+              {/* DOWNLOAD WORD NASKAH SOAL & KUNCI JAWABAN (FORMAT 2 KOLOM HEMAT KERTAS, SIAP EDIT) */}
               <div className="md:col-span-2 bg-gradient-to-r from-amber-700 via-orange-800 to-amber-950 text-white rounded-2xl p-4 shadow-md space-y-3">
-                <div className="flex items-center gap-2 font-extrabold text-sm">
-                  <span>❓</span>
-                  <h3>Cetak Naskah Soal Ulangan (Murni Soal &amp; Hemat Kertas)</h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-extrabold text-sm">
+                    <span>📝</span>
+                    <h3>Download Naskah Soal Ulangan (.DOC Word — 2 Kolom Hemat Kertas)</h3>
+                  </div>
+                  <span className="text-[10px] bg-amber-950/80 border border-amber-400/40 px-2.5 py-0.5 rounded-full font-bold text-amber-200">
+                    Format Word (.doc) Siap Edit • Tanpa Kunci Jawaban
+                  </span>
                 </div>
-                <p className="text-xs text-amber-100 font-medium">Cetak naskah soal ulangan yang 100% utuh dari database Supabase.</p>
+                <p className="text-xs text-amber-100 font-medium">
+                  Naskah otomatis diunduh dalam format Microsoft Word (.doc) 2 kolom koran (maksimal 2 lembar A4) tanpa kunci jawaban sehingga guru bebas mengedit teks sebelum dicetak.
+                </p>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
@@ -1240,7 +2072,7 @@ export default function LaporanPage() {
                       onClick={handlePrintBankSoal}
                       className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black py-1.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <span>🖨️</span> Cetak Naskah Soal Siswa
+                      <span>📝</span> Word Naskah Soal
                     </button>
                   </div>
 
@@ -1249,40 +2081,54 @@ export default function LaporanPage() {
                       onClick={handlePrintKunciJawaban}
                       className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-1.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <span>🔑</span> Cetak Kunci Jawaban
+                      <span>🔑</span> Word Kunci Jawaban
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* CETAK RAPOR INDIVIDU SISWA */}
+              {/* CETAK RAPOR INDIVIDU SISWA (STANDAR 2 HALAMAN PDF & WORD) */}
               <div className="md:col-span-2 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 text-white rounded-2xl p-4 shadow-md space-y-3">
-                <div className="flex items-center gap-2 font-extrabold text-sm">
-                  <span>🎓</span>
-                  <h3>Cetak Lembar Rapor Hasil Belajar (Per Siswa)</h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-extrabold text-sm">
+                    <span>🎓</span>
+                    <h3>Cetak Lembar Rapor Hasil Belajar Peserta Didik (Standar 2 Halaman)</h3>
+                  </div>
+                  <span className="text-[10px] bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold text-emerald-200">
+                    KKM: 75 (C: 75–78 | B: 79–85 | A: ≥86)
+                  </span>
                 </div>
-                <p className="text-xs text-emerald-100 font-medium">Cetak lembar Rapor resmi individu siswa lengkap dengan pemisahan Ekstrakulikuler (Qiro'ah &amp; Pramuka).</p>
+                <p className="text-xs text-emerald-100 font-medium">
+                  Format rapor resmi lengkap dengan Capaian Kompetensi, Pembiasaan Qiro&apos;ah, Ekstrakurikuler, Catatan Wali Kelas, &amp; TTD 3 Pihak (PDF / Word).
+                </p>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">1. PILIH KELAS</label>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">
+                      1. KELAS PERWALIAN {(!isStrictOperatorRole && waliKelasAssignedId) ? '(TERKUNCI SESUAI TUGAS)' : ''}
+                    </label>
                     <select
                       value={filterKelasRapor}
                       onChange={(e) => {
                         setFilterKelasRapor(e.target.value)
                         setSelectedSiswaRapor('')
                       }}
-                      className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none"
+                      disabled={!isStrictOperatorRole}
+                      className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none disabled:bg-emerald-100 disabled:text-emerald-950 disabled:cursor-not-allowed"
                     >
-                      <option value="">Pilih Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
-                      ))}
+                      {isStrictOperatorRole && <option value="">Pilih Kelas</option>}
+                      {kelasRaporOptions.length === 0 ? (
+                        <option value="">(Khusus Wali Kelas / Operator)</option>
+                      ) : (
+                        kelasRaporOptions.map((k) => (
+                          <option key={k.id} value={k.id}>{k.nama}</option>
+                        ))
+                      )}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">2. PILIH SISWA</label>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">2. PILIH PESERTA DIDIK</label>
                     <select
                       value={selectedSiswaRapor}
                       onChange={(e) => setSelectedSiswaRapor(e.target.value)}
@@ -1299,13 +2145,23 @@ export default function LaporanPage() {
                   </div>
                 </div>
 
-                <button
-                  onClick={handlePrintRaporSiswa}
-                  disabled={!selectedSiswaRapor}
-                  className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-slate-400 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>🖨️</span> Cetak Lembar Rapor Siswa
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <button
+                    onClick={handlePrintRaporSiswa}
+                    disabled={!selectedSiswaRapor}
+                    className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-slate-400 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    <span>🖨️</span> Cetak PDF Rapor Resmi
+                  </button>
+
+                  <button
+                    onClick={handleDownloadRaporWord}
+                    disabled={!selectedSiswaRapor}
+                    className="w-full bg-sky-500 hover:bg-sky-600 disabled:bg-slate-400 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    <span>📝</span> Download Word (.doc) untuk Edit Manual
+                  </button>
+                </div>
               </div>
 
               {/* ABSENSI */}
@@ -1399,10 +2255,14 @@ export default function LaporanPage() {
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
-                      <option value="">Semua Mapel</option>
-                      {mapelList.map((m) => (
-                        <option key={m.id} value={m.id}>{m.nama}</option>
-                      ))}
+                      {isStrictOperatorRole && <option value="">Semua Mapel</option>}
+                      {mapelList.length === 0 ? (
+                        <option value="">(Belum Ada Mapel)</option>
+                      ) : (
+                        mapelList.map((m) => (
+                          <option key={m.id} value={m.id}>{m.nama}</option>
+                        ))
+                      )}
                     </select>
                   </div>
                 </div>
@@ -1646,10 +2506,14 @@ export default function LaporanPage() {
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
-                      <option value="">Semua Mapel</option>
-                      {mapelList.map((m) => (
-                        <option key={m.id} value={m.id}>{m.nama}</option>
-                      ))}
+                      {isStrictOperatorRole && <option value="">Semua Mapel</option>}
+                      {mapelList.length === 0 ? (
+                        <option value="">(Belum Ada Mapel)</option>
+                      ) : (
+                        mapelList.map((m) => (
+                          <option key={m.id} value={m.id}>{m.nama}</option>
+                        ))
+                      )}
                     </select>
                   </div>
                 </div>
@@ -1672,11 +2536,11 @@ export default function LaporanPage() {
                   isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
                 }`}>
                   <h3 className={`font-extrabold text-xs uppercase border-b pb-2 ${isDarkMode ? 'text-indigo-400 border-slate-800' : 'text-indigo-950 border-slate-200'}`}>
-                    IDENTITAS GURU PENGAMPU (OTOMATIS BERDASARKAN HASIL QUERY PEMBUAT MAPEL)
+                    IDENTITAS GURU PENGAMPU (OTOMATIS DARI TABEL GURU)
                   </h3>
                   <div className="space-y-2">
                     <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NAMA LENGKAP & GELAR (LOGIN AKUN)</label>
+                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NAMA LENGKAP &amp; GELAR (LOGIN AKUN)</label>
                       <input
                         type="text"
                         value={namaGuru}
@@ -1686,16 +2550,29 @@ export default function LaporanPage() {
                         }`}
                       />
                     </div>
-                    <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK</label>
-                      <input
-                        type="text"
-                        value={nuptkGuru}
-                        readOnly
-                        className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-not-allowed ${
-                          isDarkMode ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-200/70 border-slate-300 text-slate-700'
-                        }`}
-                      />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK</label>
+                        <input
+                          type="text"
+                          value={nuptkGuru}
+                          readOnly
+                          className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-not-allowed ${
+                            isDarkMode ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-200/70 border-slate-300 text-slate-700'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>JABATAN</label>
+                        <input
+                          type="text"
+                          value={jabatanGuru}
+                          readOnly
+                          className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-not-allowed ${
+                            isDarkMode ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-200/70 border-slate-300 text-slate-700'
+                          }`}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
