@@ -54,9 +54,28 @@ export default function AgendaMengajarPage() {
   const router = useRouter()
   const { isOperator, canAccessBimbingan } = useAuthRole()
 
-  const [userDisplayName, setUserDisplayName] = useState('GURU')
+  const [userDisplayName, setUserDisplayName] = useState('MEMUAT...')
+  const [userNuptkDisplay, setUserNuptkDisplay] = useState('-')
+  const [isStrictOperatorRole, setIsStrictOperatorRole] = useState(false)
+  const [waliKelasAssignedId, setWaliKelasAssignedId] = useState<number | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  // Helper format NUPTK agar bersih (jika kosong/null/EMPTY menjadi '-')
+  const formatNuptk = (val: unknown): string => {
+    if (!val) return '-'
+    const str = String(val).trim()
+    if (
+      str === '' ||
+      str.toUpperCase() === 'EMPTY' ||
+      str.toUpperCase() === 'NULL' ||
+      str === '-'
+    ) {
+      return '-'
+    }
+    return str
+  }
 
   // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
@@ -101,6 +120,8 @@ export default function AgendaMengajarPage() {
   const [loadingRekap, setLoadingRekap] = useState(false)
 
   useEffect(() => {
+    let isMounted = true
+
     const now = new Date()
     const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -118,20 +139,65 @@ export default function AgendaMengajarPage() {
 
     async function initUser() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const email = user.email || ''
-        setUserEmail(email)
-        const nameFromMeta = user.user_metadata?.full_name || email.split('@')[0] || 'GURU'
-        setUserDisplayName(nameFromMeta.toUpperCase())
-        
-        fetchJadwalGuru(email)
-        fetchMasterJam()
-        fetchJurnal(email, currentDateStr)
+      if (!user) {
+        if (isMounted) router.replace('/login')
+        return
       }
+
+      const rawEmail = user.email || ''
+      const cleanEmail = rawEmail.trim().toLowerCase()
+      if (isMounted) setUserEmail(rawEmail)
+
+      // Ambil identitas lengkap dari tabel master `guru`
+      const { data: dataGuruLogin } = await supabase
+        .from('guru')
+        .select('id, nama_lengkap, role, NUPTK, email, jabatan')
+        .ilike('email', cleanEmail)
+        .maybeSingle()
+
+      if (isMounted) {
+        if (dataGuruLogin && dataGuruLogin.nama_lengkap) {
+          const namaLengkapResmi = dataGuruLogin.nama_lengkap.trim()
+          const cleanNuptk = formatNuptk(dataGuruLogin.NUPTK)
+          const isUserStrictOperator =
+            (dataGuruLogin.role || '').toLowerCase() === 'operator'
+
+          setUserDisplayName(namaLengkapResmi.toUpperCase())
+          setUserNuptkDisplay(cleanNuptk)
+          setIsStrictOperatorRole(isUserStrictOperator)
+
+          if (!isUserStrictOperator && dataGuruLogin.id) {
+            const { data: kelasBinaan } = await supabase
+              .from('kelas')
+              .select('id')
+              .eq('wali_kelas_id', dataGuruLogin.id)
+              .limit(1)
+              .maybeSingle()
+
+            if (isMounted) {
+              setWaliKelasAssignedId(kelasBinaan?.id || null)
+            }
+          }
+        } else {
+          const fallbackName =
+            user.user_metadata?.full_name || cleanEmail.split('@')[0] || 'GURU'
+          setUserDisplayName(fallbackName.toUpperCase())
+          setUserNuptkDisplay('-')
+          setIsStrictOperatorRole(isOperator)
+        }
+      }
+
+      fetchJadwalGuru(rawEmail)
+      fetchMasterJam()
+      fetchJurnal(rawEmail, currentDateStr)
     }
 
     initUser()
-  }, [])
+
+    return () => {
+      isMounted = false
+    }
+  }, [router, isOperator])
 
   async function fetchMasterJam() {
     const { data } = await supabase.from('master_jam').select('*').order('jam_ke', { ascending: true })
@@ -418,6 +484,22 @@ export default function AgendaMengajarPage() {
     }
   }
 
+  const handleLogout = async () => {
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('just_logged_in')
+      }
+      await supabase.auth.signOut({ scope: 'local' })
+      router.replace('/login')
+    } catch (err) {
+      console.error('Logout error:', err)
+      router.replace('/login')
+    }
+  }
+
   const totalJurnal = rekapList.length
   const totalTerlaksana = rekapList.filter((item) => item.status === 'Terlaksana').length
   const totalTertunda = rekapList.filter((item) => item.status === 'Tertunda').length
@@ -443,7 +525,7 @@ export default function AgendaMengajarPage() {
         <header className={`border-b px-3 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
           isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
         }`}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Link href="/" className={`p-1 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -458,17 +540,48 @@ export default function AgendaMengajarPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-              isDarkMode ? 'bg-slate-800 text-indigo-300 border-slate-700' : 'bg-white text-indigo-900 border-slate-300'
-            }`}>
-              {userDisplayName}
-            </span>
+            {/* BADGE PROFIL POJOK KANAN ATAS: NAMA LENGKAP GURU + NUPTK + PERAN DINAMIS */}
+            <div
+              className={`border text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1.5 shadow-xs ${
+                isDarkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-100'
+                  : 'bg-white border-slate-300 text-slate-800'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                {userDisplayName.charAt(0)}
+              </span>
+              <div className="flex flex-col leading-none">
+                <span className="font-extrabold max-w-[115px] sm:max-w-none truncate">
+                  {userDisplayName}
+                </span>
+                <span
+                  className={`hidden sm:inline text-[9px] font-mono mt-0.5 ${
+                    isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                  }`}
+                >
+                  NUPTK: {userNuptkDisplay}
+                </span>
+              </div>
+              <span
+                className={`hidden sm:inline-block text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5 border ${
+                  isDarkMode
+                    ? 'bg-indigo-950 text-indigo-300 border-indigo-800'
+                    : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                }`}
+              >
+                {isStrictOperatorRole
+                  ? 'Operator'
+                  : waliKelasAssignedId
+                  ? 'Wali Kelas'
+                  : 'Guru'}
+              </span>
+            </div>
+
             <button
-              onClick={async () => {
-                await supabase.auth.signOut()
-                router.replace('/login')
-              }}
-              className={`p-1 rounded-md border transition cursor-pointer ${
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className={`p-1 rounded-md border transition cursor-pointer disabled:opacity-50 ${
                 isDarkMode 
                   ? 'bg-rose-950/40 border-rose-800 text-rose-400' 
                   : 'bg-rose-50 border-rose-300 text-rose-700'
