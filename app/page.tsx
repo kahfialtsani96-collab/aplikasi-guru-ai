@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -117,7 +118,7 @@ export default function DashboardPage() {
       if (user && user.email) {
         const cleanEmail = user.email.trim().toLowerCase()
 
-        // Ambil identitas lengkap dari tabel master `guru` (sama seperti halaman Laporan)
+        // Ambil identitas lengkap dari tabel master `guru`
         const { data: dataGuruLogin } = await supabase
           .from('guru')
           .select('id, nama_lengkap, role, NUPTK, email, jabatan')
@@ -302,7 +303,7 @@ export default function DashboardPage() {
               <span>Supabase Live</span>
             </div>
 
-            {/* BADGE PROFIL POJOK KANAN ATAS: NAMA LENGKAP GURU + NUPTK + PERAN DINAMIS */}
+            {/* BADGE PROFIL POJOK KANAN ATAS */}
             <div
               className={`border text-xs font-bold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl flex items-center gap-2 sm:gap-2.5 shadow-xs ${
                 isDarkMode
@@ -1212,6 +1213,11 @@ export default function DashboardPage() {
           </div>
         </main>
       </div>
+
+      {/* KELELAWAR PIKSEL SEUKURAN KOIN (POJOK KIRI BAWAH - KHUSUS OPERATOR) */}
+      {(isOperator || isStrictOperatorRole) && (
+        <PixelBatSwitcher isDarkMode={isDarkMode} variant="floating" />
+      )}
 
       {/* BOTTOM NAVIGATION DOCK */}
       <div
