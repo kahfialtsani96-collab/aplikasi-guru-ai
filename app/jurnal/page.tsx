@@ -32,6 +32,7 @@ interface MasterJamItem {
   waktu_mulai: string
   waktu_selesai: string
   keterangan: string
+  jenjang?: string | null
 }
 
 interface JurnalRecord {
@@ -48,6 +49,7 @@ interface JurnalRecord {
   absen_siswa: string
   keterangan?: string
   guru_email?: string
+  jenjang?: string | null
 }
 
 export default function AgendaMengajarPage() {
@@ -87,7 +89,7 @@ export default function AgendaMengajarPage() {
     }
   }, [])
 
-  // Master Data Options
+  // Master Data Options (Khusus SMP)
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
   const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
@@ -127,7 +129,7 @@ export default function AgendaMengajarPage() {
     const month = String(now.getMonth() + 1).padStart(2, '0')
     const day = String(now.getDate()).padStart(2, '0')
     const currentDateStr = `${year}-${month}-${day}`
-    
+
     setTodayStr(currentDateStr)
     setTanggal(currentDateStr)
     setFilterTanggal(currentDateStr)
@@ -171,6 +173,7 @@ export default function AgendaMengajarPage() {
               .from('kelas')
               .select('id')
               .eq('wali_kelas_id', dataGuruLogin.id)
+              .or('jenjang.eq.SMP,jenjang.is.null')
               .limit(1)
               .maybeSingle()
 
@@ -200,15 +203,27 @@ export default function AgendaMengajarPage() {
   }, [router, isOperator])
 
   async function fetchMasterJam() {
-    const { data } = await supabase.from('master_jam').select('*').order('jam_ke', { ascending: true })
+    const { data } = await supabase
+      .from('master_jam')
+      .select('*')
+      .or('jenjang.eq.SMP,jenjang.is.null')
+      .order('jam_ke', { ascending: true })
     if (data) setMasterJamList(data)
   }
 
   async function fetchJadwalGuru(email: string) {
     try {
       if (isOperator) {
-        const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
-        const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
+        const { data: dataKelas } = await supabase
+          .from('kelas')
+          .select('id, nama_kelas')
+          .or('jenjang.eq.SMP,jenjang.is.null')
+          .order('nama_kelas', { ascending: true })
+        const { data: dataMapel } = await supabase
+          .from('mapel')
+          .select('id, nama_mapel')
+          .or('jenjang.eq.SMP,jenjang.is.null')
+          .order('nama_mapel', { ascending: true })
 
         if (dataKelas) setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
         if (dataMapel) setMapelList(dataMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
@@ -223,18 +238,21 @@ export default function AgendaMengajarPage() {
           kelas:kelas_id(id, nama_kelas),
           mapel:mapel_id(id, nama_mapel)
         `)
-        .eq('guru_email', email)
+        .or('jenjang.eq.SMP,jenjang.is.null')
+        .ilike('guru_email', email.trim())
 
       if (!error && data) {
         const uniqueKelasMap = new Map<number, string>()
         const uniqueMapelMap = new Map<number, string>()
 
         data.forEach((item: any) => {
-          if (item.kelas && item.kelas.id) {
-            uniqueKelasMap.set(item.kelas.id, item.kelas.nama_kelas)
+          const kObj = Array.isArray(item.kelas) ? item.kelas[0] : item.kelas
+          const mObj = Array.isArray(item.mapel) ? item.mapel[0] : item.mapel
+          if (kObj && kObj.id) {
+            uniqueKelasMap.set(kObj.id, kObj.nama_kelas)
           }
-          if (item.mapel && item.mapel.id) {
-            uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
+          if (mObj && mObj.id) {
+            uniqueMapelMap.set(mObj.id, mObj.nama_mapel)
           }
         })
 
@@ -242,11 +260,11 @@ export default function AgendaMengajarPage() {
         setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
       }
     } catch (err) {
-      console.error('Error fetching jadwal guru:', err)
+      console.error('Error fetching jadwal guru SMP:', err)
     }
   }
 
-  // AUTO-FETCH ABSENSI SISWA
+  // AUTO-FETCH ABSENSI SISWA (KHUSUS SMP)
   const fetchAbsensiOtomatis = async (targetDate: string, targetKelasId: string, targetMapelId: string) => {
     if (!targetDate) return
 
@@ -261,6 +279,7 @@ export default function AgendaMengajarPage() {
       let query = supabase
         .from('absensi')
         .select('nama_siswa, status, kelas, nisn')
+        .or('jenjang.eq.SMP,jenjang.is.null')
         .eq('tanggal', targetDate)
 
       if (isEkskulGabungan) {
@@ -300,7 +319,7 @@ export default function AgendaMengajarPage() {
         }
       }
     } catch (err) {
-      console.error('Gagal mengambil data absensi otomatis:', err)
+      console.error('Gagal mengambil data absensi otomatis SMP:', err)
     } finally {
       setLoadingAutoAbsen(false)
     }
@@ -323,7 +342,7 @@ export default function AgendaMengajarPage() {
   }
 
   async function fetchJurnal(emailParam?: string | null, dateParam?: string) {
-    const activeEmail = emailParam || userEmail
+    const activeEmail = (emailParam || userEmail || '').trim()
     const targetDate = dateParam || todayStr
     if (!activeEmail) return
 
@@ -332,7 +351,8 @@ export default function AgendaMengajarPage() {
       let query = supabase
         .from('jurnal_agenda')
         .select('*')
-        .eq('guru_email', activeEmail)
+        .or('jenjang.eq.SMP,jenjang.is.null')
+        .ilike('guru_email', activeEmail)
         .order('created_at', { ascending: false })
 
       if (targetDate) query = query.eq('tanggal', targetDate)
@@ -344,7 +364,7 @@ export default function AgendaMengajarPage() {
         setJurnalList([])
       }
     } catch (err) {
-      console.error('Error fetching jurnal:', err)
+      console.error('Error fetching jurnal SMP:', err)
     } finally {
       setLoading(false)
     }
@@ -357,9 +377,10 @@ export default function AgendaMengajarPage() {
       let query = supabase
         .from('jurnal_agenda')
         .select('*')
+        .or('jenjang.eq.SMP,jenjang.is.null')
         .order('created_at', { ascending: false })
 
-      if (!isOperator) query = query.eq('guru_email', userEmail)
+      if (!isOperator) query = query.ilike('guru_email', userEmail.trim())
 
       if (filterKelasId) {
         if (filterKelasId === 'GABUNGAN') {
@@ -380,7 +401,7 @@ export default function AgendaMengajarPage() {
         setRekapList([])
       }
     } catch (err) {
-      console.error('Error fetching rekap jurnal:', err)
+      console.error('Error fetching rekap jurnal SMP:', err)
     } finally {
       setLoadingRekap(false)
     }
@@ -393,7 +414,7 @@ export default function AgendaMengajarPage() {
   useEffect(() => {
     if (userEmail) fetchJadwalGuru(userEmail)
   }, [isOperator, userEmail])
-  
+
   const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
 
   const handleSimpanJurnal = async (e: React.FormEvent) => {
@@ -425,7 +446,7 @@ export default function AgendaMengajarPage() {
       if (startJamObj && endJamObj) {
         const wMulai = startJamObj.waktu_mulai.slice(0, 5)
         const wSelesai = endJamObj.waktu_selesai.slice(0, 5)
-        
+
         if (Number(jamMulai) === Number(jamSelesai)) {
           jamFormattedText = `Jam Ke-${jamMulai} (${wMulai} - ${wSelesai})`
         } else {
@@ -449,7 +470,8 @@ export default function AgendaMengajarPage() {
           status,
           absen_siswa: absenSiswa.trim() || 'Nihil',
           keterangan: keterangan.trim(),
-          guru_email: userEmail
+          guru_email: userEmail.trim().toLowerCase(),
+          jenjang: 'SMP',
         },
       ])
 
@@ -675,7 +697,8 @@ export default function AgendaMengajarPage() {
                         const val = e.target.value
                         setTanggal(val)
                         if (val) {
-                          const d = new Date(val)
+                          const p = val.split('-').map(Number)
+                          const d = new Date(p[0], p[1] - 1, p[2])
                           const nHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
                           if (nHari !== 'Jumat') setHari(nHari)
                         }

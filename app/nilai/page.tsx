@@ -25,6 +25,7 @@ interface Siswa {
   nisn: string
   nama_lengkap: string
   kelas_id?: number
+  jenjang?: string | null
 }
 
 interface OptionItem {
@@ -44,6 +45,7 @@ interface NilaiRecord {
   semester?: string
   tahun_ajaran?: string
   guru_email?: string
+  jenjang?: string | null
   siswa?: {
     nama_lengkap?: string
     kelas?: {
@@ -97,7 +99,7 @@ export default function PenilaianPage() {
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
 
-  // Dynamic Options
+  // Dynamic Options (Khusus SMP)
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
 
@@ -154,6 +156,7 @@ export default function PenilaianPage() {
               .from('kelas')
               .select('id')
               .eq('wali_kelas_id', dataGuruLogin.id)
+              .or('jenjang.eq.SMP,jenjang.is.null')
               .limit(1)
               .maybeSingle()
 
@@ -183,8 +186,16 @@ export default function PenilaianPage() {
   async function fetchOptions(email: string) {
     try {
       if (isOperator) {
-        const { data: dataKelas } = await supabase.from('kelas').select('id, nama_kelas').order('nama_kelas', { ascending: true })
-        const { data: dataMapel } = await supabase.from('mapel').select('id, nama_mapel').order('nama_mapel', { ascending: true })
+        const { data: dataKelas } = await supabase
+          .from('kelas')
+          .select('id, nama_kelas')
+          .or('jenjang.eq.SMP,jenjang.is.null')
+          .order('nama_kelas', { ascending: true })
+        const { data: dataMapel } = await supabase
+          .from('mapel')
+          .select('id, nama_mapel')
+          .or('jenjang.eq.SMP,jenjang.is.null')
+          .order('nama_mapel', { ascending: true })
 
         if (dataKelas) setKelasList(dataKelas.map((k: Record<string, any>) => ({ id: Number(k.id), nama: String(k.nama_kelas) })))
         if (dataMapel) setMapelList(dataMapel.map((m: Record<string, any>) => ({ id: Number(m.id), nama: String(m.nama_mapel) })))
@@ -197,18 +208,21 @@ export default function PenilaianPage() {
             kelas:kelas_id(id, nama_kelas),
             mapel:mapel_id(id, nama_mapel)
           `)
-          .eq('guru_email', email)
+          .or('jenjang.eq.SMP,jenjang.is.null')
+          .ilike('guru_email', email.trim())
 
         if (!error && data) {
           const uniqueKelasMap = new Map<number, string>()
           const uniqueMapelMap = new Map<number, string>()
 
           data.forEach((item: Record<string, any>) => {
-            if (item.kelas && item.kelas.id) {
-              uniqueKelasMap.set(Number(item.kelas.id), String(item.kelas.nama_kelas))
+            const kObj = Array.isArray(item.kelas) ? item.kelas[0] : item.kelas
+            const mObj = Array.isArray(item.mapel) ? item.mapel[0] : item.mapel
+            if (kObj && kObj.id) {
+              uniqueKelasMap.set(Number(kObj.id), String(kObj.nama_kelas))
             }
-            if (item.mapel && item.mapel.id) {
-              uniqueMapelMap.set(Number(item.mapel.id), String(item.mapel.nama_mapel))
+            if (mObj && mObj.id) {
+              uniqueMapelMap.set(Number(mObj.id), String(mObj.nama_mapel))
             }
           })
 
@@ -217,11 +231,11 @@ export default function PenilaianPage() {
         }
       }
     } catch (err) {
-      console.error('Error fetching options:', err)
+      console.error('Error fetching options SMP:', err)
     }
   }
 
-  // Fetch Siswa Berdasarkan Kelas ID
+  // Fetch Siswa Berdasarkan Kelas ID (Khusus SMP)
   useEffect(() => {
     async function fetchSiswa() {
       if (!selectedKelasId) {
@@ -234,8 +248,9 @@ export default function PenilaianPage() {
       try {
         const { data, error } = await supabase
           .from('siswa')
-          .select('id, nisn, nama_lengkap, kelas_id')
+          .select('id, nisn, nama_lengkap, kelas_id, jenjang')
           .eq('kelas_id', Number(selectedKelasId))
+          .or('jenjang.eq.SMP,jenjang.is.null')
           .order('nama_lengkap', { ascending: true })
 
         if (!error && data) {
@@ -249,6 +264,7 @@ export default function PenilaianPage() {
               .eq('mapel_id', Number(selectedMapelId))
               .eq('semester', selectedSemester)
               .eq('tahun_ajaran', selectedTahunAjaran)
+              .or('jenjang.eq.SMP,jenjang.is.null')
 
             const initialMap: NilaiMap = {}
             data.forEach((s) => {
@@ -266,7 +282,7 @@ export default function PenilaianPage() {
           setSiswaList([])
         }
       } catch (err) {
-        console.error('Error fetching siswa:', err)
+        console.error('Error fetching siswa SMP:', err)
       } finally {
         setLoadingSiswa(false)
       }
@@ -277,34 +293,42 @@ export default function PenilaianPage() {
     }
   }, [selectedKelasId, selectedMapelId, jenisPenilaian, selectedSemester, selectedTahunAjaran, activeTab])
 
-  // Fetch Rekapitulasi Nilai
+  // Fetch Rekapitulasi Nilai (Khusus SMP)
   const fetchRekap = async () => {
     setLoadingRekap(true)
     try {
       let query = supabase
         .from('nilai')
         .select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))')
+        .or('jenjang.eq.SMP,jenjang.is.null')
         .eq('semester', selectedSemester)
         .eq('tahun_ajaran', selectedTahunAjaran)
         .order('created_at', { ascending: false })
 
       if (!isOperator && userEmail) {
-        query = query.eq('guru_email', userEmail)
+        query = query.ilike('guru_email', userEmail.trim())
       }
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
       if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
-      if (searchNama.trim()) query = query.ilike('siswa.nama_lengkap', `%${searchNama.trim()}%`)
 
       const { data, error } = await query
 
       if (!error && data) {
-        setRekapList(data as unknown as NilaiRecord[])
+        let rows = data as unknown as NilaiRecord[]
+        if (searchNama.trim()) {
+          const q = searchNama.trim().toLowerCase()
+          rows = rows.filter((r) => {
+            const sObj = Array.isArray(r.siswa) ? r.siswa[0] : r.siswa
+            return (sObj?.nama_lengkap || '').toLowerCase().includes(q)
+          })
+        }
+        setRekapList(rows)
       } else {
         setRekapList([])
       }
     } catch (err) {
-      console.error('Error fetching rekap nilai:', err)
+      console.error('Error fetching rekap nilai SMP:', err)
     } finally {
       setLoadingRekap(false)
     }
@@ -343,6 +367,7 @@ export default function PenilaianPage() {
     setSaving(true)
     try {
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+      const cleanEmail = userEmail.trim().toLowerCase()
 
       const rowsToUpsert = siswaList
         .filter((siswa) => siswa.id && nilaiInputMap[String(siswa.id)] !== '')
@@ -354,7 +379,8 @@ export default function PenilaianPage() {
           [jenisPenilaian]: Number(nilaiInputMap[String(siswa.id)]),
           semester: selectedSemester,
           tahun_ajaran: selectedTahunAjaran,
-          guru_email: userEmail
+          guru_email: cleanEmail,
+          jenjang: 'SMP',
         }))
 
       if (rowsToUpsert.length === 0) {
@@ -771,63 +797,67 @@ export default function PenilaianPage() {
                   </div>
                 ) : (
                   <div className="flex-1 overflow-y-auto pr-1 space-y-1.5">
-                    {rekapList.map((item, index) => (
-                      <div
-                        key={item.id || index}
-                        className={`p-2 rounded-lg border transition shadow-xs flex flex-col gap-1 ${
-                          isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[11px] font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                            {item.siswa?.nama_lengkap || '-'}
-                          </span>
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-black border ${
-                            isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
-                          }`}>
-                            {item.siswa?.kelas?.nama_kelas || '-'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className={`font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
-                            📖 {item.mata_pelajaran}
-                          </span>
-                          <span className={`font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                            📅 {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-1 text-center py-1 bg-slate-950/20 rounded-md text-[10px]">
-                          <div>
-                            <span className="block text-[8px] font-bold text-amber-500">TUGAS</span>
-                            <span className="font-black text-amber-500">{item.nilai_tugas ?? '-'}</span>
+                    {rekapList.map((item, index) => {
+                      const sObj = Array.isArray(item.siswa) ? item.siswa[0] : item.siswa
+                      const kObj = sObj?.kelas ? (Array.isArray(sObj.kelas) ? sObj.kelas[0] : sObj.kelas) : null
+                      return (
+                        <div
+                          key={item.id || index}
+                          className={`p-2 rounded-lg border transition shadow-xs flex flex-col gap-1 ${
+                            isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[11px] font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              {sObj?.nama_lengkap || '-'}
+                            </span>
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-black border ${
+                              isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                            }`}>
+                              {kObj?.nama_kelas || '-'}
+                            </span>
                           </div>
-                          <div>
-                            <span className="block text-[8px] font-bold text-indigo-400">UTS</span>
-                            <span className="font-black text-indigo-400">{item.nilai_uts ?? '-'}</span>
-                          </div>
-                          <div>
-                            <span className="block text-[8px] font-bold text-emerald-400">UAS</span>
-                            <span className="font-black text-emerald-400">{item.nilai_uas ?? '-'}</span>
-                          </div>
-                        </div>
 
-                        <div className="flex justify-end pt-0.5 border-t border-slate-700/20">
-                          <button
-                            onClick={async () => {
-                              if (item.id && confirm('Hapus entri nilai ini?')) {
-                                await supabase.from('nilai').delete().eq('id', item.id)
-                                setRekapList((prev) => prev.filter((r) => r.id !== item.id))
-                              }
-                            }}
-                            className="text-rose-500 hover:text-rose-700 font-bold text-[10px]"
-                          >
-                            🗑️ Hapus Nilai
-                          </button>
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className={`font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
+                              📖 {item.mata_pelajaran}
+                            </span>
+                            <span className={`font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                              📅 {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1 text-center py-1 bg-slate-950/20 rounded-md text-[10px]">
+                            <div>
+                              <span className="block text-[8px] font-bold text-amber-500">TUGAS</span>
+                              <span className="font-black text-amber-500">{item.nilai_tugas ?? '-'}</span>
+                            </div>
+                            <div>
+                              <span className="block text-[8px] font-bold text-indigo-400">UTS</span>
+                              <span className="font-black text-indigo-400">{item.nilai_uts ?? '-'}</span>
+                            </div>
+                            <div>
+                              <span className="block text-[8px] font-bold text-emerald-400">UAS</span>
+                              <span className="font-black text-emerald-400">{item.nilai_uas ?? '-'}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end pt-0.5 border-t border-slate-700/20">
+                            <button
+                              onClick={async () => {
+                                if (item.id && confirm('Hapus entri nilai ini?')) {
+                                  await supabase.from('nilai').delete().eq('id', item.id)
+                                  setRekapList((prev) => prev.filter((r) => r.id !== item.id))
+                                }
+                              }}
+                              className="text-rose-500 hover:text-rose-700 font-bold text-[10px]"
+                            >
+                              🗑️ Hapus Nilai
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

@@ -1,0 +1,1289 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@supabase/supabase-js'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useAuthRole } from '@/hooks/useAuthRole'
+import {
+  ArrowLeft,
+  Save,
+  Trash2,
+  RefreshCw,
+  Sparkles,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react'
+
+const getSupabaseUrl = () => {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  return url.replace(/['"]/g, '').trim()
+}
+
+const getSupabaseAnonKey = () => {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+  return key.replace(/['"]/g, '').trim()
+}
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
+
+interface OptionItem {
+  id: number
+  nama: string
+}
+
+interface MasterJamItem {
+  id: number
+  hari: string
+  jam_ke: number
+  waktu_mulai: string
+  waktu_selesai: string
+  keterangan: string
+  jenjang?: string | null
+}
+
+interface JadwalSlotSmk {
+  id: number
+  hari: string
+  jam_ke: number
+  kelas_id: number | null
+  mapel_id: number | null
+  guru_email: string
+  nama_kelas: string
+  nama_mapel: string
+}
+
+interface JurnalRecord {
+  id?: number | string
+  created_at?: string
+  tanggal: string
+  jam_ke: string
+  kelas_id?: number | null
+  mapel_id?: number
+  kelas?: string
+  mapel?: string
+  materi: string
+  status: 'Terlaksana' | 'Tertunda'
+  absen_siswa: string
+  keterangan?: string
+  guru_email?: string
+  jenjang?: string | null
+  semester?: string
+  tahun_ajaran?: string
+}
+
+// 2 Mode persis seperti di video saat lampu menyala:
+// 'warm' = Warm Gold (Input Agenda)
+// 'coral' = Coral Rose (Riwayat Jurnal)
+type StudioMode = 'warm' | 'coral'
+
+export default function SmkJurnalPage() {
+  const router = useRouter()
+  const { isOperator } = useAuthRole()
+
+  const [userDisplayName, setUserDisplayName] = useState('MEMUAT...')
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  // Default langsung menyala Warm Gold (Input Agenda)
+  const [studioMode, setStudioMode] = useState<StudioMode>('warm')
+  const [isPulling, setIsPulling] = useState(false)
+
+  // Master Data SMK
+  const [kelasList, setKelasList] = useState<OptionItem[]>([])
+  const [mapelList, setMapelList] = useState<OptionItem[]>([])
+  const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
+  const [jadwalSmkList, setJadwalSmkList] = useState<JadwalSlotSmk[]>([])
+
+  // Form Input Agenda SMK
+  const [tanggal, setTanggal] = useState('')
+  const [todayStr, setTodayStr] = useState('')
+  const [hari, setHari] = useState('Senin')
+  const [jamMulai, setJamMulai] = useState('1')
+  const [jamSelesai, setJamSelesai] = useState('1')
+  const [selectedKelasId, setSelectedKelasId] = useState('')
+  const [selectedMapelId, setSelectedMapelId] = useState('')
+  const [materi, setMateri] = useState('')
+  const [status, setStatus] = useState<'Terlaksana' | 'Tertunda'>('Terlaksana')
+  const [absenSiswa, setAbsenSiswa] = useState('Nihil')
+  const [keterangan, setKeterangan] = useState('')
+
+  const [saving, setSaving] = useState(false)
+  const [loadingAutoAbsen, setLoadingAutoAbsen] = useState(false)
+
+  // State Riwayat Jurnal SMK
+  const [rekapList, setRekapList] = useState<JurnalRecord[]>([])
+  const [filterKelasId, setFilterKelasId] = useState('')
+  const [filterTanggal, setFilterTanggal] = useState('')
+  const [searchMateri, setSearchMateri] = useState('')
+  const [loadingRekap, setLoadingRekap] = useState(false)
+
+  const fetchMasterJamSmk = useCallback(async () => {
+    const { data } = await supabase
+      .from('master_jam')
+      .select('*')
+      .eq('jenjang', 'SMK')
+      .order('jam_ke', { ascending: true })
+
+    if (data && data.length > 0) {
+      setMasterJamList(data)
+    } else {
+      const { data: fallbackData } = await supabase
+        .from('master_jam')
+        .select('*')
+        .order('jam_ke', { ascending: true })
+      if (fallbackData) setMasterJamList(fallbackData)
+    }
+  }, [])
+
+  const fetchJadwalGuruSmk = useCallback(
+    async (email: string) => {
+      try {
+        const [resKelas, resMapel, resJadwal] = await Promise.all([
+          supabase
+            .from('kelas')
+            .select('id, nama_kelas, jenjang')
+            .eq('jenjang', 'SMK')
+            .order('nama_kelas', { ascending: true }),
+          supabase
+            .from('mapel')
+            .select('id, nama_mapel, jenjang')
+            .eq('jenjang', 'SMK')
+            .order('nama_mapel', { ascending: true }),
+          supabase
+            .from('jadwal')
+            .select(
+              `
+              id,
+              hari,
+              jam_ke,
+              kelas_id,
+              mapel_id,
+              guru_email,
+              jenjang,
+              kelas:kelas_id(id, nama_kelas),
+              mapel:mapel_id(id, nama_mapel)
+            `
+            )
+            .eq('jenjang', 'SMK')
+            .order('jam_ke', { ascending: true }),
+        ])
+
+        const allSmkKelas: OptionItem[] = (resKelas.data || []).map((k: any) => ({
+          id: k.id,
+          nama: k.nama_kelas,
+        }))
+        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: any) => ({
+          id: m.id,
+          nama: m.nama_mapel,
+        }))
+
+        const rawJadwal = resJadwal.data || []
+        const formattedJadwal: JadwalSlotSmk[] = rawJadwal.map((j: any) => {
+          const kObj = Array.isArray(j.kelas) ? j.kelas[0] : j.kelas
+          const mObj = Array.isArray(j.mapel) ? j.mapel[0] : j.mapel
+          return {
+            id: j.id,
+            hari: j.hari,
+            jam_ke: Number(j.jam_ke),
+            kelas_id: j.kelas_id,
+            mapel_id: j.mapel_id,
+            guru_email: (j.guru_email || '').trim().toLowerCase(),
+            nama_kelas: kObj?.nama_kelas || 'Semua Kelas DKV',
+            nama_mapel: mObj?.nama_mapel || '-',
+          }
+        })
+
+        const cleanEmail = email.trim().toLowerCase()
+        const myJadwal = isOperator
+          ? formattedJadwal
+          : formattedJadwal.filter((j) => j.guru_email === cleanEmail)
+
+        setJadwalSmkList(myJadwal)
+
+        if (isOperator) {
+          setKelasList(allSmkKelas)
+          setMapelList(allSmkMapel)
+        } else {
+          const uniqueKelasMap = new Map<number, string>()
+          const uniqueMapelMap = new Map<number, string>()
+          let hasGabunganSemuaKelas = false
+
+          myJadwal.forEach((slot) => {
+            if (slot.kelas_id) {
+              uniqueKelasMap.set(slot.kelas_id, slot.nama_kelas)
+            } else {
+              hasGabunganSemuaKelas = true
+            }
+            if (slot.mapel_id) {
+              uniqueMapelMap.set(slot.mapel_id, slot.nama_mapel)
+            }
+          })
+
+          if (hasGabunganSemuaKelas) {
+            setKelasList(allSmkKelas)
+          } else {
+            setKelasList(
+              Array.from(uniqueKelasMap.entries())
+                .map(([id, nama]) => ({ id, nama }))
+                .sort((a, b) => a.nama.localeCompare(b.nama))
+            )
+          }
+
+          setMapelList(
+            Array.from(uniqueMapelMap.entries())
+              .map(([id, nama]) => ({ id, nama }))
+              .sort((a, b) => a.nama.localeCompare(b.nama))
+          )
+        }
+      } catch (err) {
+        console.error('Error fetching jadwal guru SMK:', err)
+      }
+    },
+    [isOperator]
+  )
+
+  const fetchRekapSmk = useCallback(
+    async (emailParam?: string | null) => {
+      const activeEmail = (emailParam || userEmail || '').trim().toLowerCase()
+      if (!activeEmail) return
+      setLoadingRekap(true)
+      try {
+        let query = supabase
+          .from('jurnal_agenda')
+          .select('*')
+          .eq('jenjang', 'SMK')
+          .order('tanggal', { ascending: false })
+          .order('created_at', { ascending: false })
+
+        if (!isOperator) query = query.ilike('guru_email', activeEmail)
+        if (filterKelasId) {
+          if (filterKelasId === 'GABUNGAN') {
+            query = query.eq('kelas', 'Gabungan (Semua Kelas DKV)')
+          } else {
+            query = query.eq('kelas_id', Number(filterKelasId))
+          }
+        }
+        if (filterTanggal) query = query.eq('tanggal', filterTanggal)
+        if (searchMateri.trim()) query = query.ilike('materi', `%${searchMateri.trim()}%`)
+
+        const { data, error } = await query
+        if (!error && data) {
+          setRekapList(data as JurnalRecord[])
+        } else {
+          setRekapList([])
+        }
+      } catch (err) {
+        console.error('Error fetching rekap jurnal SMK:', err)
+      } finally {
+        setLoadingRekap(false)
+      }
+    },
+    [userEmail, isOperator, filterKelasId, filterTanggal, searchMateri]
+  )
+
+  useEffect(() => {
+    let isMounted = true
+
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const currentDateStr = `${year}-${month}-${day}`
+
+    setTodayStr(currentDateStr)
+    setTanggal(currentDateStr)
+    setFilterTanggal('')
+
+    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][
+      now.getDay()
+    ]
+    if (namaHari !== 'Jumat') {
+      setHari(namaHari)
+    } else {
+      setHari('Sabtu')
+    }
+
+    async function initUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        if (isMounted) router.replace('/login')
+        return
+      }
+
+      const rawEmail = user.email || ''
+      const cleanEmail = rawEmail.trim().toLowerCase()
+      if (isMounted) setUserEmail(rawEmail)
+
+      const { data: dataGuruLogin } = await supabase
+        .from('guru')
+        .select('nama_lengkap')
+        .ilike('email', cleanEmail)
+        .maybeSingle()
+
+      if (isMounted) {
+        if (dataGuruLogin?.nama_lengkap) {
+          setUserDisplayName(dataGuruLogin.nama_lengkap.trim())
+        } else {
+          setUserDisplayName(
+            user.user_metadata?.full_name || cleanEmail.split('@')[0] || 'Guru SMK'
+          )
+        }
+      }
+
+      await fetchJadwalGuruSmk(rawEmail)
+      await fetchMasterJamSmk()
+      await fetchRekapSmk(rawEmail)
+    }
+
+    initUser()
+
+    return () => {
+      isMounted = false
+    }
+  }, [router, fetchJadwalGuruSmk, fetchMasterJamSmk, fetchRekapSmk])
+
+  // Auto-fetch Absensi Siswa SMK
+  const fetchAbsensiOtomatisSmk = useCallback(
+    async (targetDate: string, targetKelasId: string, targetMapelId: string) => {
+      if (!targetDate || !targetKelasId) return
+
+      const isGabungan = targetKelasId === 'GABUNGAN'
+      setLoadingAutoAbsen(true)
+      try {
+        let query = supabase
+          .from('absensi')
+          .select('nama_siswa, status, kelas')
+          .eq('jenjang', 'SMK')
+          .eq('tanggal', targetDate)
+
+        if (isGabungan) {
+          if (targetMapelId) query = query.eq('mapel_id', Number(targetMapelId))
+        } else {
+          query = query.eq('kelas_id', Number(targetKelasId))
+          if (targetMapelId) query = query.eq('mapel_id', Number(targetMapelId))
+        }
+
+        const { data: absensiData, error } = await query
+        if (error) throw error
+
+        if (!absensiData || absensiData.length === 0) {
+          setAbsenSiswa('Nihil')
+        } else {
+          const tidakHadirList = absensiData.filter(
+            (a) => a.status && a.status.toUpperCase() !== 'HADIR'
+          )
+
+          if (tidakHadirList.length === 0) {
+            setAbsenSiswa(`Nihil (${absensiData.length} hadir)`)
+          } else {
+            const dikelompokkan: Record<string, string[]> = {}
+            tidakHadirList.forEach((item) => {
+              const st = item.status.toUpperCase()
+              const namaFormatted =
+                isGabungan && item.kelas
+                  ? `${item.nama_siswa || 'Siswa'} (${item.kelas})`
+                  : item.nama_siswa || 'Siswa'
+
+              if (!dikelompokkan[st]) dikelompokkan[st] = []
+              dikelompokkan[st].push(namaFormatted)
+            })
+
+            setAbsenSiswa(
+              Object.entries(dikelompokkan)
+                .map(([stKey, names]) => `${stKey}: ${names.join(', ')}`)
+                .join(' | ')
+            )
+          }
+        }
+      } catch (err) {
+        console.error('Gagal mengambil absensi otomatis SMK:', err)
+      } finally {
+        setLoadingAutoAbsen(false)
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (tanggal && selectedKelasId) {
+      fetchAbsensiOtomatisSmk(tanggal, selectedKelasId, selectedMapelId)
+    }
+  }, [tanggal, selectedKelasId, selectedMapelId, fetchAbsensiOtomatisSmk])
+
+  useEffect(() => {
+    if (userEmail) {
+      fetchRekapSmk(userEmail)
+    }
+  }, [filterKelasId, filterTanggal, searchMateri, userEmail, fetchRekapSmk])
+
+  const handleSelectJadwalPreset = (slots: JadwalSlotSmk[]) => {
+    if (!slots || slots.length === 0) return
+    const sorted = [...slots].sort((a, b) => a.jam_ke - b.jam_ke)
+    const first = sorted[0]
+    const last = sorted[sorted.length - 1]
+
+    setJamMulai(String(first.jam_ke))
+    setJamSelesai(String(last.jam_ke))
+    setSelectedKelasId(first.kelas_id ? String(first.kelas_id) : 'GABUNGAN')
+    if (first.mapel_id) {
+      setSelectedMapelId(String(first.mapel_id))
+    }
+  }
+
+  const handleSimpanJurnalSmk = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedKelasId || !selectedMapelId || !materi.trim() || !tanggal) {
+      alert('Lengkapi Tanggal, Kelas, Mata Pelajaran, dan Materi terlebih dahulu.')
+      return
+    }
+
+    if (!isOperator && tanggal < todayStr) {
+      alert('Anda tidak dapat mengisi jurnal untuk tanggal yang sudah terlewat.')
+      return
+    }
+
+    if (!userEmail) return
+
+    setSaving(true)
+    try {
+      const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
+      const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+
+      const startJamObj = masterJamList.find(
+        (j) => j.hari === hari && j.jam_ke === Number(jamMulai)
+      )
+      const endJamObj = masterJamList.find(
+        (j) => j.hari === hari && j.jam_ke === Number(jamSelesai)
+      )
+
+      let jamFormattedText =
+        Number(jamMulai) === Number(jamSelesai)
+          ? `Jam Ke-${jamMulai}`
+          : `Jam Ke-${jamMulai} s/d ${jamSelesai}`
+
+      if (startJamObj && endJamObj) {
+        const wMulai = startJamObj.waktu_mulai.slice(0, 5)
+        const wSelesai = endJamObj.waktu_selesai.slice(0, 5)
+        jamFormattedText =
+          Number(jamMulai) === Number(jamSelesai)
+            ? `Jam Ke-${jamMulai} (${wMulai} - ${wSelesai})`
+            : `Jam Ke-${jamMulai} s/d ${jamSelesai} (${wMulai} - ${wSelesai})`
+      }
+
+      const namaKelasSimpan =
+        selectedKelasId === 'GABUNGAN'
+          ? 'Gabungan (Semua Kelas DKV)'
+          : selectedKelasObj?.nama || ''
+
+      const cleanEmail = userEmail.trim().toLowerCase()
+
+      const { error } = await supabase.from('jurnal_agenda').insert([
+        {
+          tanggal,
+          jam_ke: jamFormattedText,
+          kelas_id: selectedKelasId === 'GABUNGAN' ? null : Number(selectedKelasId),
+          mapel_id: Number(selectedMapelId),
+          kelas: namaKelasSimpan,
+          mapel: selectedMapelObj?.nama || '',
+          materi: materi.trim(),
+          status,
+          absen_siswa: absenSiswa.trim() || 'Nihil',
+          keterangan: keterangan.trim(),
+          guru_email: cleanEmail,
+          jenjang: 'SMK',
+        },
+      ])
+
+      if (error) {
+        alert('Gagal menyimpan jurnal SMK: ' + error.message)
+      } else {
+        setMateri('')
+        setKeterangan('')
+        setSelectedKelasId('')
+        setSelectedMapelId('')
+        setAbsenSiswa('Nihil')
+        await fetchRekapSmk(cleanEmail)
+        // Otomatis tarik tali lampu lembut ke mode Coral (Riwayat) setelah tersimpan
+        setStudioMode('coral')
+      }
+    } catch (err: any) {
+      alert('Terjadi kesalahan: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteJurnal = async (id?: number | string) => {
+    if (!id || !confirm('Hapus catatan jurnal SMK ini?')) return
+    try {
+      const { error } = await supabase.from('jurnal_agenda').delete().eq('id', id)
+      if (!error) {
+        setRekapList((prev) => prev.filter((item) => item.id !== id))
+      }
+    } catch (err) {
+      console.error('Error deleting jurnal SMK:', err)
+    }
+  }
+
+  // Tarik tali lampu dengan spring physics
+  const handlePullCord = () => {
+    if (isPulling) return
+    setIsPulling(true)
+    setStudioMode((prev) => (prev === 'warm' ? 'coral' : 'warm'))
+    setTimeout(() => setIsPulling(false), 450)
+  }
+
+  const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
+
+  const jadwalHariIniGrouped = (() => {
+    const slotsHariIni = jadwalSmkList.filter((j) => j.hari === hari)
+    const mapGroup = new Map<string, JadwalSlotSmk[]>()
+    slotsHariIni.forEach((slot) => {
+      const key = `${slot.kelas_id ?? 'GABUNGAN'}-${slot.mapel_id ?? '0'}`
+      const arr = mapGroup.get(key) || []
+      arr.push(slot)
+      mapGroup.set(key, arr)
+    })
+    return Array.from(mapGroup.values())
+  })()
+
+  const isWarm = studioMode === 'warm'
+
+  return (
+    <div className="h-screen w-screen overflow-hidden bg-[#0b0908] text-stone-100 font-sans relative flex items-center justify-center select-none">
+      {/* TOMBOL KEMBALI MINIMALIS MENGAMBANG (TANPA HEADER / NAVBAR / BOTTOM BAR) */}
+      <Link
+        href="/smk"
+        className="fixed top-5 left-5 z-40 p-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-stone-400 hover:text-white transition-all duration-300 backdrop-blur-md"
+        title="Kembali ke Dashboard SMK"
+      >
+        <ArrowLeft className="w-4 h-4" />
+      </Link>
+
+      {/* AMBIENT STUDIO GLOW & FLOOR GRADIENT (BERUBAH HALUS SAAT TALI DITARIK) */}
+      <motion.div
+        animate={{
+          background: isWarm
+            ? 'radial-gradient(circle at 32% 38%, rgba(235, 178, 112, 0.24) 0%, rgba(168, 114, 58, 0.08) 42%, rgba(11, 9, 8, 1) 78%)'
+            : 'radial-gradient(circle at 32% 38%, rgba(226, 112, 126, 0.25) 0%, rgba(158, 62, 78, 0.09) 42%, rgba(11, 9, 8, 1) 78%)',
+        }}
+        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        className="fixed inset-0 pointer-events-none z-0"
+      />
+
+      {/* LANTAI STUDIO HALUS */}
+      <motion.div
+        animate={{
+          background: isWarm
+            ? 'linear-gradient(180deg, rgba(11,9,8,0) 0%, rgba(196, 146, 92, 0.07) 40%, rgba(18, 14, 11, 0.95) 100%)'
+            : 'linear-gradient(180deg, rgba(11,9,8,0) 0%, rgba(196, 92, 108, 0.07) 40%, rgba(18, 12, 14, 0.95) 100%)',
+        }}
+        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        className="fixed bottom-0 left-0 right-0 h-[34vh] pointer-events-none z-0 border-t border-white/[0.03]"
+      />
+
+      {/* MAIN STUDIO STAGE: LAMPU KIRI + KARTU KACA KANAN (PERSIS VIDEO LAMP V5) */}
+      <div className="relative z-10 w-full max-w-[960px] px-4 sm:px-8 flex flex-col md:flex-row items-center justify-center gap-6 md:gap-14">
+        {/* ============================================================
+            SISI KIRI: STANDING TRIPOD FLOOR LAMP V5 (SUDAH MENYALA)
+           ============================================================ */}
+        <div className="hidden md:flex flex-col items-center justify-center relative shrink-0">
+          {/* Cahaya Halo Lembut di Belakang Kap Lampu */}
+          <motion.div
+            animate={{
+              backgroundColor: isWarm
+                ? 'rgba(246, 196, 134, 0.34)'
+                : 'rgba(235, 118, 132, 0.34)',
+              scale: isPulling ? 0.96 : 1,
+            }}
+            transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute top-6 w-60 h-60 rounded-full blur-[68px] pointer-events-none"
+          />
+
+          <svg
+            viewBox="0 0 280 500"
+            className="w-[245px] h-[440px] overflow-visible relative z-10"
+          >
+            <defs>
+              {/* Kerucut Sorotan Cahaya ke Lantai */}
+              <linearGradient id="lampV5Cone" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="0%"
+                  stopColor={isWarm ? '#f5c78e' : '#e57b88'}
+                  stopOpacity="0.34"
+                />
+                <stop
+                  offset="55%"
+                  stopColor={isWarm ? '#d49b5c' : '#c45a68'}
+                  stopOpacity="0.11"
+                />
+                <stop
+                  offset="100%"
+                  stopColor={isWarm ? '#d49b5c' : '#c45a68'}
+                  stopOpacity="0"
+                />
+              </linearGradient>
+
+              {/* Gradien Kap Lampu Lipit (Pleated Lampshade) */}
+              <linearGradient id="lampV5Shade" x1="0" y1="0" x2="1" y2="0">
+                <stop
+                  offset="0%"
+                  stopColor={isWarm ? '#d8b48a' : '#b85a66'}
+                />
+                <stop
+                  offset="38%"
+                  stopColor={isWarm ? '#f5dec0' : '#df8490'}
+                />
+                <stop
+                  offset="72%"
+                  stopColor={isWarm ? '#e8caa3' : '#cf6f7b'}
+                />
+                <stop
+                  offset="100%"
+                  stopColor={isWarm ? '#b99368' : '#96434e'}
+                />
+              </linearGradient>
+
+              {/* Gradien Kaki Tripod Kayu Hangat */}
+              <linearGradient id="lampV5WoodLeg" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={isWarm ? '#8c6d4e' : '#7a5256'} />
+                <stop offset="50%" stopColor={isWarm ? '#cfa97e' : '#b88488'} />
+                <stop offset="100%" stopColor={isWarm ? '#5c442e' : '#4f3336'} />
+              </linearGradient>
+            </defs>
+
+            {/* SOROTAN CAHAYA KERUCUT LEBAR */}
+            <polygon points="75,148 205,148 280,475 0,475" fill="url(#lampV5Cone)" />
+
+            {/* PENDAR CAHAYA ELIPS DI LANTAI */}
+            <ellipse
+              cx="140"
+              cy="474"
+              rx="92"
+              ry="13"
+              fill={
+                isWarm ? 'rgba(245, 199, 142, 0.16)' : 'rgba(229, 123, 136, 0.16)'
+              }
+            />
+
+            {/* 3 KAKI TRIPOD TINGGI MENYILANG */}
+            {/* Kaki Belakang Tengah */}
+            <line
+              x1="140"
+              y1="148"
+              x2="140"
+              y2="470"
+              stroke={isWarm ? '#5a432d' : '#4a3033'}
+              strokeWidth="4.5"
+              strokeLinecap="round"
+            />
+            {/* Kaki Kiri */}
+            <line
+              x1="131"
+              y1="148"
+              x2="72"
+              y2="474"
+              stroke="url(#lampV5WoodLeg)"
+              strokeWidth="5.5"
+              strokeLinecap="round"
+            />
+            {/* Kaki Kanan */}
+            <line
+              x1="149"
+              y1="148"
+              x2="208"
+              y2="474"
+              stroke="url(#lampV5WoodLeg)"
+              strokeWidth="5.5"
+              strokeLinecap="round"
+            />
+
+            {/* Cincin Penyambung Leher Tripod */}
+            <rect
+              x="122"
+              y="168"
+              width="36"
+              height="6"
+              rx="3"
+              fill={isWarm ? '#b99368' : '#9c666c'}
+            />
+
+            {/* Kabel Listrik Melengkung Halus ke Lantai */}
+            <path
+              d="M140 150 Q147 265 137 365 T141 471"
+              fill="none"
+              stroke="#1b1615"
+              strokeWidth="2.3"
+            />
+
+            {/* Cahaya Bohlam di Bawah Kap Lampu */}
+            <ellipse
+              cx="140"
+              cy="148"
+              rx="62"
+              ry="10"
+              fill={isWarm ? '#fff3d6' : '#ffd1d7'}
+              style={{
+                filter: isWarm
+                  ? 'drop-shadow(0 4px 16px rgba(245,199,142,0.85))'
+                  : 'drop-shadow(0 4px 16px rgba(229,123,136,0.85))',
+              }}
+            />
+
+            {/* KAP LAMPU LIPIT (PLEATED SHADE) */}
+            <path
+              d="M96 42 L184 42 L208 148 L72 148 Z"
+              fill="url(#lampV5Shade)"
+              stroke={isWarm ? '#fae6c8' : '#f4a4ae'}
+              strokeWidth="0.9"
+              strokeOpacity="0.45"
+            />
+
+            {/* Garis Lipatan Vertikal Halus pada Kap Lampu */}
+            {[86, 100, 114, 128, 142, 156, 170, 184, 196].map((bottomX, i) => {
+              const topX = 103 + i * 9.2
+              return (
+                <line
+                  key={i}
+                  x1={topX}
+                  y1="43"
+                  x2={bottomX}
+                  y2="147"
+                  stroke="rgba(28, 18, 12, 0.22)"
+                  strokeWidth="1.2"
+                />
+              )
+            })}
+
+            {/* TALI TARIK SAKELAR ELASTIS DENGAN SPRING ANIMATION */}
+            <motion.g
+              onClick={handlePullCord}
+              animate={{
+                y: isPulling ? 16 : 0,
+              }}
+              transition={{
+                type: 'spring',
+                stiffness: 280,
+                damping: 14,
+                mass: 0.7,
+              }}
+              whileHover={{ y: 4 }}
+              whileTap={{ y: 18 }}
+              className="cursor-pointer group"
+            >
+              {/* Hitbox transparan lebih lebar agar nyaman diklik */}
+              <rect x="162" y="146" width="95" height="115" fill="transparent" />
+
+              {/* Tali vertikal */}
+              <line
+                x1="178"
+                y1="148"
+                x2="178"
+                y2="235"
+                stroke={isWarm ? '#e7d2b5' : '#eab6bd'}
+                strokeWidth="1.7"
+              />
+
+              {/* Bandul Ujung Tali */}
+              <circle
+                cx="178"
+                cy="240"
+                r="5.5"
+                fill={isWarm ? '#f5c78e' : '#e57b88'}
+                stroke="#fff7ed"
+                strokeWidth="1.3"
+              />
+
+              {/* Label Kecil Persis Seperti di Video */}
+              <text
+                x="190"
+                y="222"
+                fill={isWarm ? '#cbb79c' : '#cfa0a6'}
+                fontSize="8.5"
+                fontFamily="monospace"
+                letterSpacing="1.2"
+                className="opacity-80 group-hover:opacity-100 transition-opacity"
+              >
+                PULL CORD TO SWITCH
+              </text>
+            </motion.g>
+          </svg>
+        </div>
+
+        {/* ============================================================
+            SISI KANAN: KARTU KACA MINIMALIS (BERUBAH HALUS ZOOM & SLIDE)
+           ============================================================ */}
+        <div className="w-full max-w-[430px] relative">
+          {/* Tombol Switch Kecil Khusus Mobile (jika layar HP menyembunyikan lampu) */}
+          <div className="flex md:hidden justify-end mb-2">
+            <button
+              type="button"
+              onClick={handlePullCord}
+              className="px-3 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-semibold text-amber-200"
+            >
+              {isWarm ? 'Lihat Riwayat →' : '← Input Agenda'}
+            </button>
+          </div>
+
+          <motion.div
+            animate={{
+              borderColor: isWarm
+                ? 'rgba(245, 199, 142, 0.22)'
+                : 'rgba(229, 123, 136, 0.25)',
+              boxShadow: isWarm
+                ? '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(245, 199, 142, 0.16)'
+                : '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(229, 123, 136, 0.18)',
+            }}
+            transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full rounded-[26px] border bg-white/[0.045] backdrop-blur-2xl p-6 sm:p-7 overflow-hidden relative"
+          >
+            {/* Pendaran cahaya dalam kartu di pojok kiri atas */}
+            <motion.div
+              animate={{
+                backgroundColor: isWarm
+                  ? 'rgba(245, 199, 142, 0.12)'
+                  : 'rgba(229, 123, 136, 0.13)',
+              }}
+              transition={{ duration: 0.85 }}
+              className="absolute -top-20 -left-20 w-56 h-56 rounded-full blur-3xl pointer-events-none"
+            />
+
+            <AnimatePresence mode="wait" initial={false}>
+              {isWarm ? (
+                /* ====================================================
+                   MODE 1 (WARM GOLD): FORM INPUT AGENDA JURNAL SMK
+                   ==================================================== */
+                <motion.div
+                  key="mode-input-agenda"
+                  initial={{ opacity: 0, scale: 0.94, y: 14 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.94, y: -14 }}
+                  transition={{
+                    duration: 0.48,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="relative z-10"
+                >
+                  {/* Header Minimalis Seperti di Video */}
+                  <div className="mb-4">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-[#e7be8a] mb-1">
+                      <span>✦</span>
+                      <span>JURNAL SMK DKV</span>
+                    </div>
+                    <h1 className="text-xl font-bold text-white tracking-tight">
+                      Agenda Mengajar.
+                    </h1>
+                    <p className="text-xs text-stone-400 mt-0.5 truncate">
+                      {userDisplayName} • Tarik tali lampu untuk riwayat
+                    </p>
+                  </div>
+
+                  {/* Preset Jadwal Cepat Hari Ini (jika ada) */}
+                  {jadwalHariIniGrouped.length > 0 && (
+                    <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                      {jadwalHariIniGrouped.map((group, idx) => {
+                        const sorted = [...group].sort((a, b) => a.jam_ke - b.jam_ke)
+                        const first = sorted[0]
+                        const last = sorted[sorted.length - 1]
+                        const jpLabel =
+                          first.jam_ke === last.jam_ke
+                            ? `JP ${first.jam_ke}`
+                            : `JP ${first.jam_ke}-${last.jam_ke}`
+                        const isSelected =
+                          String(first.mapel_id || '') === selectedMapelId &&
+                          (first.kelas_id ? String(first.kelas_id) : 'GABUNGAN') ===
+                            selectedKelasId
+
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSelectJadwalPreset(group)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all duration-300 shrink-0 cursor-pointer flex items-center gap-1 ${
+                              isSelected
+                                ? 'bg-[#e8be88] text-stone-950 border-[#f5d5a8]'
+                                : 'bg-white/[0.04] hover:bg-white/[0.09] text-stone-300 border-white/10'
+                            }`}
+                          >
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>
+                              {first.nama_kelas} ({jpLabel})
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Form Input Jurnal Ringkas */}
+                  <form onSubmit={handleSimpanJurnalSmk} className="space-y-3">
+                    {/* Baris 1: Tanggal & Jam JP */}
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-6">
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Tanggal ({hari})
+                        </label>
+                        <input
+                          type="date"
+                          value={tanggal}
+                          max={!isOperator ? todayStr : undefined}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setTanggal(val)
+                            if (val) {
+                              const p = val.split('-').map(Number)
+                              const d = new Date(p[0], p[1] - 1, p[2])
+                              const nHari = [
+                                'Minggu',
+                                'Senin',
+                                'Selasa',
+                                'Rabu',
+                                'Kamis',
+                                'Jumat',
+                                'Sabtu',
+                              ][d.getDay()]
+                              if (nHari !== 'Jumat') setHari(nHari)
+                            }
+                          }}
+                          className="w-full rounded-xl bg-black/35 border border-white/10 px-2.5 py-2 text-xs text-stone-100 focus:outline-none focus:border-[#e7be8a] transition"
+                          required
+                        />
+                      </div>
+
+                      <div className="col-span-3">
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Mulai
+                        </label>
+                        <select
+                          value={jamMulai}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setJamMulai(val)
+                            if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
+                          }}
+                          className="w-full rounded-xl bg-black/35 border border-white/10 px-2 py-2 text-xs text-stone-100 focus:outline-none focus:border-[#e7be8a] transition"
+                        >
+                          {jamOptionsForHari.length > 0
+                            ? jamOptionsForHari.map((j) => (
+                                <option
+                                  key={j.id}
+                                  value={j.jam_ke}
+                                  className="bg-stone-900 text-white"
+                                >
+                                  JP {j.jam_ke}
+                                </option>
+                              ))
+                            : [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                                <option
+                                  key={num}
+                                  value={num}
+                                  className="bg-stone-900 text-white"
+                                >
+                                  JP {num}
+                                </option>
+                              ))}
+                        </select>
+                      </div>
+
+                      <div className="col-span-3">
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Selesai
+                        </label>
+                        <select
+                          value={jamSelesai}
+                          onChange={(e) => setJamSelesai(e.target.value)}
+                          className="w-full rounded-xl bg-black/35 border border-white/10 px-2 py-2 text-xs text-stone-100 focus:outline-none focus:border-[#e7be8a] transition"
+                        >
+                          {jamOptionsForHari.length > 0
+                            ? jamOptionsForHari
+                                .filter((j) => j.jam_ke >= Number(jamMulai))
+                                .map((j) => (
+                                  <option
+                                    key={j.id}
+                                    value={j.jam_ke}
+                                    className="bg-stone-900 text-white"
+                                  >
+                                    JP {j.jam_ke}
+                                  </option>
+                                ))
+                            : [1, 2, 3, 4, 5, 6, 7, 8]
+                                .filter((num) => num >= Number(jamMulai))
+                                .map((num) => (
+                                  <option
+                                    key={num}
+                                    value={num}
+                                    className="bg-stone-900 text-white"
+                                  >
+                                    JP {num}
+                                  </option>
+                                ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Baris 2: Kelas & Mata Pelajaran */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Kelas SMK
+                        </label>
+                        <select
+                          value={selectedKelasId}
+                          onChange={(e) => setSelectedKelasId(e.target.value)}
+                          className="w-full rounded-xl bg-black/35 border border-white/10 px-2.5 py-2 text-xs text-stone-100 focus:outline-none focus:border-[#e7be8a] transition"
+                          required
+                        >
+                          <option value="" className="bg-stone-900">
+                            Pilih Kelas
+                          </option>
+                          <option value="GABUNGAN" className="bg-stone-900">
+                            Gabungan DKV
+                          </option>
+                          {kelasList.map((k) => (
+                            <option
+                              key={k.id}
+                              value={k.id}
+                              className="bg-stone-900 text-white"
+                            >
+                              {k.nama}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Mata Pelajaran
+                        </label>
+                        <select
+                          value={selectedMapelId}
+                          onChange={(e) => setSelectedMapelId(e.target.value)}
+                          className="w-full rounded-xl bg-black/35 border border-white/10 px-2.5 py-2 text-xs text-stone-100 focus:outline-none focus:border-[#e7be8a] transition"
+                          required
+                        >
+                          <option value="" className="bg-stone-900">
+                            Pilih Mapel
+                          </option>
+                          {mapelList.map((m) => (
+                            <option
+                              key={m.id}
+                              value={m.id}
+                              className="bg-stone-900 text-white"
+                            >
+                              {m.nama}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Baris 3: Materi Pembelajaran */}
+                    <div>
+                      <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                        Materi Pembelajaran
+                      </label>
+                      <input
+                        type="text"
+                        value={materi}
+                        onChange={(e) => setMateri(e.target.value)}
+                        placeholder="Contoh: Desain Tipografi & Layout Poster..."
+                        className="w-full rounded-xl bg-black/35 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-stone-500 focus:outline-none focus:border-[#e7be8a] transition"
+                        required
+                      />
+                    </div>
+
+                    {/* Baris 4: Status & Rekap Absensi Otomatis */}
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-5">
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Status KBM
+                        </label>
+                        <select
+                          value={status}
+                          onChange={(e) =>
+                            setStatus(e.target.value as 'Terlaksana' | 'Tertunda')
+                          }
+                          className="w-full rounded-xl bg-black/35 border border-white/10 px-2.5 py-2 text-xs text-stone-100 focus:outline-none focus:border-[#e7be8a] transition"
+                        >
+                          <option value="Terlaksana" className="bg-stone-900">
+                            Terlaksana
+                          </option>
+                          <option value="Tertunda" className="bg-stone-900">
+                            Tertunda
+                          </option>
+                        </select>
+                      </div>
+
+                      <div className="col-span-7">
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Ketidakhadiran Siswa
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={absenSiswa}
+                            onChange={(e) => setAbsenSiswa(e.target.value)}
+                            className="w-full rounded-xl bg-black/35 border border-white/10 px-2.5 py-2 text-xs text-[#e7be8a] focus:outline-none focus:border-[#e7be8a] transition"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              fetchAbsensiOtomatisSmk(
+                                tanggal,
+                                selectedKelasId,
+                                selectedMapelId
+                              )
+                            }
+                            className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-stone-300 transition shrink-0 cursor-pointer"
+                            title="Sinkronkan ulang dari Absensi SMK"
+                          >
+                            <RefreshCw
+                              className={`w-3.5 h-3.5 ${
+                                loadingAutoAbsen ? 'animate-spin' : ''
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tombol Submit Pill Hangat Persis Video */}
+                    <motion.button
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="submit"
+                      disabled={saving}
+                      className="w-full mt-2 py-2.5 rounded-full bg-gradient-to-r from-[#dfb17b] to-[#f1cfa4] hover:from-[#e6bc8a] hover:to-[#f6d9b4] disabled:opacity-50 text-stone-950 font-bold text-xs tracking-wide shadow-lg shadow-[#dfb17b]/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{saving ? 'Menyimpan...' : 'Simpan Agenda →'}</span>
+                    </motion.button>
+                  </form>
+                </motion.div>
+              ) : (
+                /* ====================================================
+                   MODE 2 (CORAL ROSE): RIWAYAT & REKAP JURNAL SMK
+                   ==================================================== */
+                <motion.div
+                  key="mode-riwayat-agenda"
+                  initial={{ opacity: 0, scale: 0.94, y: 14 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.94, y: -14 }}
+                  transition={{
+                    duration: 0.48,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="relative z-10 flex flex-col h-[410px]"
+                >
+                  {/* Header Mode Coral */}
+                  <div className="mb-3 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-[#e68490] mb-1">
+                        <span>✦</span>
+                        <span>RIWAYAT STUDIO</span>
+                      </div>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#e68490]/15 text-[#f2a2ac] border border-[#e68490]/30">
+                        {rekapList.length} Catatan
+                      </span>
+                    </div>
+                    <h2 className="text-xl font-bold text-white tracking-tight">
+                      Riwayat Jurnal.
+                    </h2>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      Tarik tali lampu lagi untuk kembali menulis agenda
+                    </p>
+                  </div>
+
+                  {/* Filter Mini */}
+                  <div className="grid grid-cols-2 gap-2 mb-3 shrink-0">
+                    <select
+                      value={filterKelasId}
+                      onChange={(e) => setFilterKelasId(e.target.value)}
+                      className="rounded-xl bg-black/35 border border-white/10 px-2.5 py-1.5 text-[11px] text-stone-200 focus:outline-none focus:border-[#e68490]"
+                    >
+                      <option value="" className="bg-stone-900">
+                        Semua Kelas
+                      </option>
+                      {kelasList.map((k) => (
+                        <option key={k.id} value={k.id} className="bg-stone-900">
+                          {k.nama}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="text"
+                      value={searchMateri}
+                      onChange={(e) => setSearchMateri(e.target.value)}
+                      placeholder="Cari materi..."
+                      className="rounded-xl bg-black/35 border border-white/10 px-2.5 py-1.5 text-[11px] text-stone-200 placeholder:text-stone-500 focus:outline-none focus:border-[#e68490]"
+                    />
+                  </div>
+
+                  {/* Daftar Riwayat Jurnal dengan Scroll Lembut */}
+                  <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+                    {loadingRekap ? (
+                      <div className="h-full flex items-center justify-center text-xs text-stone-400">
+                        Memuat riwayat jurnal...
+                      </div>
+                    ) : rekapList.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-xs text-stone-400 text-center px-4">
+                        Belum ada catatan jurnal SMK tersimpan.
+                      </div>
+                    ) : (
+                      rekapList.map((item, idx) => (
+                        <div
+                          key={item.id || idx}
+                          className="p-3 rounded-2xl bg-black/35 border border-white/[0.08] hover:border-[#e68490]/40 transition-all duration-300"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[11px] font-bold text-white truncate">
+                              {item.kelas} •{' '}
+                              <span className="text-[#f09aa5]">{item.mapel}</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteJurnal(item.id)}
+                              className="text-stone-500 hover:text-rose-400 transition cursor-pointer shrink-0"
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <p className="text-[11px] text-stone-300 leading-snug line-clamp-2 mb-1.5">
+                            {item.materi}
+                          </p>
+
+                          <div className="flex items-center justify-between text-[10px] text-stone-400 pt-1.5 border-t border-white/[0.06]">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-2.5 h-2.5 text-[#e68490]" />
+                              {item.tanggal} • {item.jam_ke}
+                            </span>
+                            <span className="flex items-center gap-1 font-medium text-stone-300">
+                              {item.status === 'Terlaksana' ? (
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                              ) : (
+                                <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+                              )}
+                              {item.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}

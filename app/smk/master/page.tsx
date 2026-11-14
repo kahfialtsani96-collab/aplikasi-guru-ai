@@ -13,6 +13,8 @@ import {
   UserCheck,
   Plus,
   Trash2,
+  Pencil,
+  Save,
   Search,
   ShieldAlert,
   CheckCircle2,
@@ -33,7 +35,6 @@ interface KelasSmk {
 
 interface SiswaSmk {
   id: number
-  nis: string | null
   nisn: string | null
   nama_lengkap: string
   jenis_kelamin: string | null
@@ -90,15 +91,12 @@ function parseSupabaseError(err: unknown, fallback: string): string {
 export default function SmkMasterOperatorPage() {
   const router = useRouter()
 
-  // Proteksi Akses Khusus Operator
   const [authChecking, setAuthChecking] = useState(true)
   const [isOperatorVerified, setIsOperatorVerified] = useState(false)
 
-  // Tab Aktif & Posisi Lentera Meluncur
   const [activeTab, setActiveTab] = useState<TabKey>('kelas')
   const activeTabIndex = TABS.findIndex((t) => t.key === activeTab)
 
-  // Data Master
   const [loadingData, setLoadingData] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toastMsg, setToastMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -110,23 +108,24 @@ export default function SmkMasterOperatorPage() {
   const [listGuru, setListGuru] = useState<GuruMaster[]>([])
   const [listGuruMapel, setListGuruMapel] = useState<GuruMapelRow[]>([])
 
-  // Pilihan dropdown mapel sementara per guru_id
   const [selectedMapelPerGuru, setSelectedMapelPerGuru] = useState<Record<number, string>>({})
   const [assigningGuruId, setAssigningGuruId] = useState<number | null>(null)
 
-  // Form Input Kelas SMK
+  // =========================================================================
+  // STATE TAMBAH DATA BARU
+  // =========================================================================
+  // Kelas
   const [namaKelas, setNamaKelas] = useState('')
   const [tingkatKelas, setTingkatKelas] = useState('X')
   const [waliKelasId, setWaliKelasId] = useState('')
 
-  // Form Input Siswa SMK
-  const [nisSiswa, setNisSiswa] = useState('')
+  // Siswa
   const [nisnSiswa, setNisnSiswa] = useState('')
   const [namaSiswa, setNamaSiswa] = useState('')
   const [jkSiswa, setJkSiswa] = useState('L')
   const [kelasSiswaId, setKelasSiswaId] = useState('')
 
-  // Form Input Mapel SMK (Default: Semua Tingkat agar 1 mapel berlaku gabungan X, XI, XII)
+  // Mapel
   const [kodeMapel, setKodeMapel] = useState('')
   const [namaMapel, setNamaMapel] = useState('')
   const [kelompokMapel, setKelompokMapel] = useState('Kejuruan DKV')
@@ -136,16 +135,51 @@ export default function SmkMasterOperatorPage() {
   const [tahunAjaranMapel, setTahunAjaranMapel] = useState('2026/2027')
   const [urutanMapel, setUrutanMapel] = useState('1')
 
-  // Form Input Guru Baru SMK
+  // Guru
   const [namaGuruBaru, setNamaGuruBaru] = useState('')
   const [emailGuruBaru, setEmailGuruBaru] = useState('')
   const [nuptkGuruBaru, setNuptkGuruBaru] = useState('')
   const [jabatanGuruBaru, setJabatanGuruBaru] = useState('Guru Produktif DKV')
 
-  const showToast = (type: 'ok' | 'err', text: string) => {
+  // =========================================================================
+  // STATE EDIT DATA (INLINE / MODAL FORM)
+  // =========================================================================
+  // Edit Kelas
+  const [editingKelasId, setEditingKelasId] = useState<number | null>(null)
+  const [editNamaKelas, setEditNamaKelas] = useState('')
+  const [editTingkatKelas, setEditTingkatKelas] = useState('X')
+  const [editWaliKelasId, setEditWaliKelasId] = useState('')
+
+  // Edit Siswa
+  const [editingSiswaId, setEditingSiswaId] = useState<number | null>(null)
+  const [editNisnSiswa, setEditNisnSiswa] = useState('')
+  const [editNamaSiswa, setEditNamaSiswa] = useState('')
+  const [editJkSiswa, setEditJkSiswa] = useState('L')
+  const [editKelasSiswaId, setEditKelasSiswaId] = useState('')
+
+  // Edit Mapel
+  const [editingMapelId, setEditingMapelId] = useState<number | null>(null)
+  const [editKodeMapel, setEditKodeMapel] = useState('')
+  const [editNamaMapel, setEditNamaMapel] = useState('')
+  const [editKelompokMapel, setEditKelompokMapel] = useState('Kejuruan DKV')
+  const [editTingkatMapel, setEditTingkatMapel] = useState('Semua Tingkat')
+  const [editJumlahJp, setEditJumlahJp] = useState('4')
+  const [editSemesterMapel, setEditSemesterMapel] = useState('Ganjil & Genap')
+  const [editTahunAjaranMapel, setEditTahunAjaranMapel] = useState('2026/2027')
+  const [editUrutanMapel, setEditUrutanMapel] = useState('1')
+
+  // Edit Guru
+  const [editingGuruId, setEditingGuruId] = useState<number | null>(null)
+  const [editNamaGuru, setEditNamaGuru] = useState('')
+  const [editEmailGuru, setEditEmailGuru] = useState('')
+  const [editNuptkGuru, setEditNuptkGuru] = useState('')
+  const [editJabatanGuru, setEditJabatanGuru] = useState('')
+  const [editRoleGuru, setEditRoleGuru] = useState('guru')
+
+  const showToast = useCallback((type: 'ok' | 'err', text: string) => {
     setToastMsg({ type, text })
     setTimeout(() => setToastMsg(null), 4500)
-  }
+  }, [])
 
   // 1. Cek Sesi & Verifikasi Peran Operator
   useEffect(() => {
@@ -201,7 +235,7 @@ export default function SmkMasterOperatorPage() {
           .order('nama_kelas', { ascending: true }),
         supabase
           .from('siswa')
-          .select('id, nis, nisn, nama_lengkap, jenis_kelamin, kelas_id')
+          .select('id, nisn, nama_lengkap, jenis_kelamin, kelas_id')
           .eq('jenjang', 'SMK')
           .order('nama_lengkap', { ascending: true }),
         supabase
@@ -218,25 +252,37 @@ export default function SmkMasterOperatorPage() {
         supabase.from('guru_mapel').select('id, guru_id, mapel_id'),
       ])
 
-      if (resKelas.data) {
-        setListKelas(resKelas.data)
-        if (resKelas.data.length > 0 && !kelasSiswaId) {
-          setKelasSiswaId(String(resKelas.data[0].id))
-        }
+      if (resKelas.error) throw resKelas.error
+      if (resSiswa.error) throw resSiswa.error
+      if (resMapel.error) throw resMapel.error
+      if (resGuru.error) throw resGuru.error
+      if (resGuruMapel.error) throw resGuruMapel.error
+
+      const kelasData = resKelas.data || []
+      setListKelas(kelasData)
+      if (kelasData.length > 0) {
+        setKelasSiswaId((prev) =>
+          prev && kelasData.some((k) => String(k.id) === prev) ? prev : String(kelasData[0].id)
+        )
+      } else {
+        setKelasSiswaId('')
       }
-      if (resSiswa.data) setListSiswa(resSiswa.data)
-      if (resMapel.data) {
-        setListMapel(resMapel.data)
-        setUrutanMapel(String(resMapel.data.length + 1))
-      }
-      if (resGuru.data) setListGuru(resGuru.data)
-      if (resGuruMapel.data) setListGuruMapel(resGuruMapel.data)
+
+      setListSiswa(resSiswa.data || [])
+
+      const mapelData = resMapel.data || []
+      setListMapel(mapelData)
+      setUrutanMapel(String(mapelData.length + 1))
+
+      setListGuru(resGuru.data || [])
+      setListGuruMapel(resGuruMapel.data || [])
     } catch (err) {
       console.error('Gagal memuat data master SMK:', err)
+      showToast('err', parseSupabaseError(err, 'Gagal memuat data master SMK'))
     } finally {
       setLoadingData(false)
     }
-  }, [kelasSiswaId])
+  }, [showToast])
 
   useEffect(() => {
     if (isOperatorVerified) {
@@ -245,15 +291,23 @@ export default function SmkMasterOperatorPage() {
   }, [isOperatorVerified, fetchAllSmkMaster])
 
   // =========================================================================
-  // HANDLER SIMPAN & HAPUS DATA
+  // HANDLER TAB 1: KELAS SMK (TAMBAH, EDIT, HAPUS)
   // =========================================================================
   const handleAddKelas = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!namaKelas.trim()) return
+
+    const cleanNama = namaKelas.trim().toUpperCase()
+    const isDuplicate = listKelas.some((k) => k.nama_kelas.toUpperCase() === cleanNama)
+    if (isDuplicate) {
+      showToast('err', `Kelas ${cleanNama} sudah terdaftar di SMK`)
+      return
+    }
+
     setSaving(true)
     try {
       const { error } = await supabase.from('kelas').insert({
-        nama_kelas: namaKelas.trim().toUpperCase(),
+        nama_kelas: cleanNama,
         tingkat: tingkatKelas,
         jurusan: 'DKV',
         jenjang: 'SMK',
@@ -271,17 +325,72 @@ export default function SmkMasterOperatorPage() {
     }
   }
 
+  const startEditKelas = (k: KelasSmk) => {
+    setEditingKelasId(k.id)
+    setEditNamaKelas(k.nama_kelas)
+    setEditTingkatKelas(k.tingkat || 'X')
+    setEditWaliKelasId(k.wali_kelas_id ? String(k.wali_kelas_id) : '')
+  }
+
+  const handleUpdateKelas = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingKelasId || !editNamaKelas.trim()) return
+
+    const cleanNama = editNamaKelas.trim().toUpperCase()
+    const isDuplicate = listKelas.some(
+      (k) => k.id !== editingKelasId && k.nama_kelas.toUpperCase() === cleanNama
+    )
+    if (isDuplicate) {
+      showToast('err', `Nama kelas ${cleanNama} sudah digunakan kelas lain`)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('kelas')
+        .update({
+          nama_kelas: cleanNama,
+          tingkat: editTingkatKelas,
+          wali_kelas_id: editWaliKelasId ? Number(editWaliKelasId) : null,
+        })
+        .eq('id', editingKelasId)
+
+      if (error) throw error
+      setEditingKelasId(null)
+      showToast('ok', `Kelas ${cleanNama} berhasil diperbarui!`)
+      await fetchAllSmkMaster()
+    } catch (err) {
+      showToast('err', parseSupabaseError(err, 'Gagal memperbarui kelas SMK'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleDeleteKelas = async (id: number, nama: string) => {
+    const jumlahSiswaDiKelas = listSiswa.filter((s) => s.kelas_id === id).length
+    if (jumlahSiswaDiKelas > 0) {
+      showToast(
+        'err',
+        `Tidak dapat menghapus ${nama} karena masih terdapat ${jumlahSiswaDiKelas} siswa di dalamnya`
+      )
+      return
+    }
+
     if (!confirm(`Hapus kelas ${nama}?`)) return
     const { error } = await supabase.from('kelas').delete().eq('id', id)
     if (error) {
       showToast('err', parseSupabaseError(error, 'Gagal menghapus kelas'))
     } else {
+      if (editingKelasId === id) setEditingKelasId(null)
       showToast('ok', `Kelas ${nama} dihapus`)
-      fetchAllSmkMaster()
+      await fetchAllSmkMaster()
     }
   }
 
+  // =========================================================================
+  // HANDLER TAB 2: SISWA SMK (TAMBAH, EDIT, HAPUS)
+  // =========================================================================
   const handleAddSiswa = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!namaSiswa.trim() || !kelasSiswaId) {
@@ -291,7 +400,6 @@ export default function SmkMasterOperatorPage() {
     setSaving(true)
     try {
       const { error } = await supabase.from('siswa').insert({
-        nis: nisSiswa.trim() || null,
         nisn: nisnSiswa.trim() || null,
         nama_lengkap: namaSiswa.trim().toUpperCase(),
         jenis_kelamin: jkSiswa,
@@ -299,7 +407,6 @@ export default function SmkMasterOperatorPage() {
         jenjang: 'SMK',
       })
       if (error) throw error
-      setNisSiswa('')
       setNisnSiswa('')
       setNamaSiswa('')
       showToast('ok', 'Siswa SMK berhasil disimpan!')
@@ -311,17 +418,59 @@ export default function SmkMasterOperatorPage() {
     }
   }
 
+  const startEditSiswa = (s: SiswaSmk) => {
+    setEditingSiswaId(s.id)
+    setEditNamaSiswa(s.nama_lengkap)
+    setEditNisnSiswa(s.nisn || '')
+    setEditJkSiswa(s.jenis_kelamin || 'L')
+    setEditKelasSiswaId(s.kelas_id ? String(s.kelas_id) : '')
+  }
+
+  const handleUpdateSiswa = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingSiswaId || !editNamaSiswa.trim() || !editKelasSiswaId) {
+      showToast('err', 'Kelas & Nama Lengkap siswa wajib diisi')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('siswa')
+        .update({
+          nisn: editNisnSiswa.trim() || null,
+          nama_lengkap: editNamaSiswa.trim().toUpperCase(),
+          jenis_kelamin: editJkSiswa,
+          kelas_id: Number(editKelasSiswaId),
+        })
+        .eq('id', editingSiswaId)
+
+      if (error) throw error
+      setEditingSiswaId(null)
+      showToast('ok', 'Data siswa SMK berhasil diperbarui!')
+      await fetchAllSmkMaster()
+    } catch (err) {
+      showToast('err', parseSupabaseError(err, 'Gagal memperbarui data siswa'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleDeleteSiswa = async (id: number, nama: string) => {
     if (!confirm(`Hapus data siswa ${nama}?`)) return
     const { error } = await supabase.from('siswa').delete().eq('id', id)
     if (error) {
       showToast('err', parseSupabaseError(error, 'Gagal menghapus data siswa'))
     } else {
+      if (editingSiswaId === id) setEditingSiswaId(null)
       showToast('ok', `Siswa ${nama} dihapus`)
-      fetchAllSmkMaster()
+      await fetchAllSmkMaster()
     }
   }
 
+  // =========================================================================
+  // HANDLER TAB 3: MAPEL SMK (TAMBAH, EDIT, HAPUS)
+  // =========================================================================
   const handleAddMapel = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!namaMapel.trim()) return
@@ -350,17 +499,64 @@ export default function SmkMasterOperatorPage() {
     }
   }
 
+  const startEditMapel = (m: MapelSmk) => {
+    setEditingMapelId(m.id)
+    setEditKodeMapel(m.kode_mapel || '')
+    setEditNamaMapel(m.nama_mapel)
+    setEditKelompokMapel(m.kelompok || 'Kejuruan DKV')
+    setEditTingkatMapel(m.tingkat || 'Semua Tingkat')
+    setEditJumlahJp(String(m.jumlah_jp || 2))
+    setEditSemesterMapel(m.semester || 'Ganjil & Genap')
+    setEditTahunAjaranMapel(m.tahun_ajaran || '2026/2027')
+    setEditUrutanMapel(String(m.urutan || 1))
+  }
+
+  const handleUpdateMapel = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingMapelId || !editNamaMapel.trim()) return
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('mapel')
+        .update({
+          kode_mapel: editKodeMapel.trim().toUpperCase() || null,
+          nama_mapel: editNamaMapel.trim().toUpperCase(),
+          kelompok: editKelompokMapel,
+          tingkat: editTingkatMapel,
+          jumlah_jp: Number(editJumlahJp) || 2,
+          semester: editSemesterMapel,
+          tahun_ajaran: editTahunAjaranMapel.trim() || '2026/2027',
+          urutan: Number(editUrutanMapel) || 1,
+        })
+        .eq('id', editingMapelId)
+
+      if (error) throw error
+      setEditingMapelId(null)
+      showToast('ok', 'Mata pelajaran SMK berhasil diperbarui!')
+      await fetchAllSmkMaster()
+    } catch (err) {
+      showToast('err', parseSupabaseError(err, 'Gagal memperbarui mapel SMK'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleDeleteMapel = async (id: number, nama: string) => {
     if (!confirm(`Hapus mapel ${nama}?`)) return
     const { error } = await supabase.from('mapel').delete().eq('id', id)
     if (error) {
       showToast('err', parseSupabaseError(error, 'Gagal menghapus mapel'))
     } else {
+      if (editingMapelId === id) setEditingMapelId(null)
       showToast('ok', `Mapel ${nama} dihapus`)
-      fetchAllSmkMaster()
+      await fetchAllSmkMaster()
     }
   }
 
+  // =========================================================================
+  // HANDLER TAB 4: GURU SMK (TAMBAH, EDIT PROFIL, UNIT, MAPEL AMPUAN)
+  // =========================================================================
   const handleToggleGuruUnit = async (guru: GuruMaster, nextUnit: string) => {
     const { error } = await supabase
       .from('guru')
@@ -380,11 +576,19 @@ export default function SmkMasterOperatorPage() {
   const handleAddGuruSmk = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!namaGuruBaru.trim() || !emailGuruBaru.trim()) return
+
+    const cleanEmail = emailGuruBaru.trim().toLowerCase()
+    const isEmailExists = listGuru.some((g) => (g.email || '').toLowerCase() === cleanEmail)
+    if (isEmailExists) {
+      showToast('err', `Email ${cleanEmail} sudah terdaftar di data guru`)
+      return
+    }
+
     setSaving(true)
     try {
       const { error } = await supabase.from('guru').insert({
         nama_lengkap: namaGuruBaru.trim(),
-        email: emailGuruBaru.trim().toLowerCase(),
+        email: cleanEmail,
         NUPTK: nuptkGuruBaru.trim() || null,
         jabatan: jabatanGuruBaru.trim() || 'Guru SMK',
         role: 'guru',
@@ -403,7 +607,55 @@ export default function SmkMasterOperatorPage() {
     }
   }
 
-  // Tambah Mapel SMK ke Guru (tabel guru_mapel)
+  const startEditGuru = (g: GuruMaster) => {
+    setEditingGuruId(g.id)
+    setEditNamaGuru(g.nama_lengkap)
+    setEditEmailGuru(g.email || '')
+    setEditNuptkGuru(g.NUPTK || '')
+    setEditJabatanGuru(g.jabatan || '')
+    setEditRoleGuru((g.role || 'guru').toLowerCase())
+  }
+
+  const handleUpdateGuru = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingGuruId || !editNamaGuru.trim() || !editEmailGuru.trim()) {
+      showToast('err', 'Nama dan Email guru wajib diisi')
+      return
+    }
+
+    const cleanEmail = editEmailGuru.trim().toLowerCase()
+    const isEmailExists = listGuru.some(
+      (g) => g.id !== editingGuruId && (g.email || '').toLowerCase() === cleanEmail
+    )
+    if (isEmailExists) {
+      showToast('err', `Email ${cleanEmail} sudah dipakai akun guru lain`)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('guru')
+        .update({
+          nama_lengkap: editNamaGuru.trim(),
+          email: cleanEmail,
+          NUPTK: editNuptkGuru.trim() || null,
+          jabatan: editJabatanGuru.trim() || null,
+          role: editRoleGuru,
+        })
+        .eq('id', editingGuruId)
+
+      if (error) throw error
+      setEditingGuruId(null)
+      showToast('ok', 'Data profil guru berhasil diperbarui!')
+      await fetchAllSmkMaster()
+    } catch (err) {
+      showToast('err', parseSupabaseError(err, 'Gagal memperbarui data guru'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleAssignMapelToGuru = async (guru: GuruMaster) => {
     const pickedMapelId = Number(selectedMapelPerGuru[guru.id] || 0)
     if (!pickedMapelId) {
@@ -449,7 +701,6 @@ export default function SmkMasterOperatorPage() {
     }
   }
 
-  // Hapus Mapel SMK dari Guru
   const handleRemoveGuruMapel = async (gmId: number, mapelNama: string) => {
     const { error } = await supabase.from('guru_mapel').delete().eq('id', gmId)
     if (error) {
@@ -460,9 +711,6 @@ export default function SmkMasterOperatorPage() {
     }
   }
 
-  // =========================================================================
-  // TAMPILAN LOADING & PENOLAKAN NON-OPERATOR
-  // =========================================================================
   if (authChecking) {
     return (
       <div className="h-dvh bg-[#090b10] text-amber-300 flex flex-col items-center justify-center gap-2">
@@ -493,14 +741,12 @@ export default function SmkMasterOperatorPage() {
     )
   }
 
-  // Filter Pencarian Cepat & Urutan Abjad untuk Dropdown
   const q = searchQuery.toLowerCase()
   const filteredKelas = listKelas.filter((k) => k.nama_kelas.toLowerCase().includes(q))
   const filteredSiswa = listSiswa.filter(
     (s) =>
       s.nama_lengkap.toLowerCase().includes(q) ||
-      (s.nisn || '').toLowerCase().includes(q) ||
-      (s.nis || '').toLowerCase().includes(q)
+      (s.nisn || '').toLowerCase().includes(q)
   )
   const filteredMapel = listMapel.filter(
     (m) =>
@@ -518,7 +764,8 @@ export default function SmkMasterOperatorPage() {
     <div className="h-dvh max-h-dvh overflow-hidden bg-[#080a0f] text-slate-100 flex flex-col relative selection:bg-amber-500/30">
       <style jsx global>{`
         @keyframes lanternSway {
-          0%, 100% {
+          0%,
+          100% {
             transform: rotate(-2.5deg);
           }
           50% {
@@ -538,7 +785,6 @@ export default function SmkMasterOperatorPage() {
         }
       `}</style>
 
-      {/* Notifikasi Toast Mengambang */}
       {toastMsg && (
         <div
           className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] px-3.5 py-2 rounded-2xl text-xs font-bold shadow-2xl border flex items-center gap-1.5 backdrop-blur-md ${
@@ -552,9 +798,7 @@ export default function SmkMasterOperatorPage() {
         </div>
       )}
 
-      {/* =====================================================================
-          1. HEADER COMPACT MOBILE-FIRST
-         ===================================================================== */}
+      {/* 1. HEADER COMPACT MOBILE-FIRST */}
       <header className="shrink-0 z-30 bg-[#0b0e16]/90 backdrop-blur-md border-b border-white/10 px-3 py-2.5">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -589,9 +833,7 @@ export default function SmkMasterOperatorPage() {
         </div>
       </header>
 
-      {/* =====================================================================
-          2. STRIP NAVIGASI LENTERA MELUNCUR (MOBILE HORIZONTAL LANTERN BAR)
-         ===================================================================== */}
+      {/* 2. STRIP NAVIGASI LENTERA MELUNCUR (MOBILE HORIZONTAL LANTERN BAR) */}
       <div className="lg:hidden shrink-0 z-20 bg-[#090c14] border-b border-white/10 px-2.5 pt-2 pb-2.5">
         <div className="relative grid grid-cols-4 gap-1 bg-black/40 p-1 rounded-2xl border border-white/5">
           <div
@@ -645,11 +887,8 @@ export default function SmkMasterOperatorPage() {
         </div>
       </div>
 
-      {/* =====================================================================
-          3. AREA UTAMA: SIDEBAR LENTERA DESKTOP + KOLOM SCROLL KONTEN
-         ===================================================================== */}
+      {/* 3. AREA UTAMA: SIDEBAR LENTERA DESKTOP + KOLOM SCROLL KONTEN */}
       <div className="flex-1 min-h-0 max-w-5xl w-full mx-auto flex flex-col lg:flex-row gap-4 p-3">
-        {/* SIDEBAR LENTERA VERTIKAL (DESKTOP) */}
         <aside className="hidden lg:flex w-64 shrink-0 rounded-2xl bg-[#0b0e17] border border-white/10 p-4 flex-col justify-between relative overflow-hidden">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400/80 mb-5 px-2">
@@ -711,13 +950,12 @@ export default function SmkMasterOperatorPage() {
           <div className="rounded-xl bg-amber-400/5 border border-amber-400/20 p-3 text-[11px] text-slate-400 leading-relaxed">
             <span className="text-amber-300 font-bold block mb-0.5">Info Isolasi Data:</span>
             Semua data yang diinput di sini otomatis berlabel{' '}
-            <code className="text-amber-200">jenjang = &apos;SMK&apos;</code> dan terpisah dari SMP.
+            <code className="text-amber-200">jenjang = &apos;SMK&apos;</code> dan dapat diedit
+            kapan saja.
           </div>
         </aside>
 
-        {/* ===================================================================
-            PANEL KONTEN UTAMA (BISA DI-SCROLL DI DALAM KOLOM)
-           =================================================================== */}
+        {/* PANEL KONTEN UTAMA */}
         <main className="flex-1 min-h-0 rounded-2xl bg-[#0e121c]/95 border border-white/10 flex flex-col overflow-hidden shadow-xl">
           <div className="shrink-0 p-3 border-b border-white/10 flex items-center justify-between gap-2 bg-black/20">
             <div className="relative flex-1">
@@ -734,7 +972,7 @@ export default function SmkMasterOperatorPage() {
 
           <div className="flex-1 min-h-0 overflow-y-auto lantern-scroll p-3 pb-28 space-y-4">
             {/* ===============================================================
-                TAB 1: KELOLA KELAS SMK (DKV)
+                TAB 1: KELOLA KELAS SMK (TAMBAH, EDIT, HAPUS)
                =============================================================== */}
             {activeTab === 'kelas' && (
               <>
@@ -808,30 +1046,120 @@ export default function SmkMasterOperatorPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {filteredKelas.map((k) => {
                         const wali = listGuru.find((g) => g.id === k.wali_kelas_id)
+                        const jmlSiswa = listSiswa.filter((s) => s.kelas_id === k.id).length
+                        const isEditing = editingKelasId === k.id
+
+                        if (isEditing) {
+                          return (
+                            <form
+                              key={k.id}
+                              onSubmit={handleUpdateKelas}
+                              className="rounded-xl bg-amber-400/[0.08] border border-amber-400/50 p-3 space-y-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                                  Edit Kelas DKV
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingKelasId(null)}
+                                  className="text-slate-400 hover:text-white cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <input
+                                type="text"
+                                required
+                                value={editNamaKelas}
+                                onChange={(e) => setEditNamaKelas(e.target.value)}
+                                className="w-full bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                              />
+
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <select
+                                  value={editTingkatKelas}
+                                  onChange={(e) => setEditTingkatKelas(e.target.value)}
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                >
+                                  <option value="X">Tingkat X</option>
+                                  <option value="XI">Tingkat XI</option>
+                                  <option value="XII">Tingkat XII</option>
+                                </select>
+
+                                <select
+                                  value={editWaliKelasId}
+                                  onChange={(e) => setEditWaliKelasId(e.target.value)}
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                >
+                                  <option value="">-- Tanpa Wali --</option>
+                                  {listGuru.map((g) => (
+                                    <option key={g.id} value={g.id}>
+                                      {g.nama_lengkap}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingKelasId(null)}
+                                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-bold text-slate-300 cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={saving}
+                                  className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-black flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Save className="w-3 h-3" />
+                                  <span>Simpan</span>
+                                </button>
+                              </div>
+                            </form>
+                          )
+                        }
+
                         return (
                           <div
                             key={k.id}
                             className="rounded-xl bg-white/[0.03] border border-white/10 p-3 flex items-center justify-between gap-2"
                           >
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-xs font-black text-white">{k.nama_kelas}</span>
                                 <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[9px] font-bold">
                                   Tingkat {k.tingkat || '-'}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-white/10 text-slate-300 text-[9px] font-bold">
+                                  {jmlSiswa} Siswa
                                 </span>
                               </div>
                               <p className="text-[10px] text-slate-400 truncate mt-0.5">
                                 Wali: {wali ? wali.nama_lengkap : 'Belum ditentukan'}
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteKelas(k.id, k.nama_kelas)}
-                              className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition cursor-pointer shrink-0"
-                              title="Hapus Kelas"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => startEditKelas(k)}
+                                className="p-2 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 transition cursor-pointer"
+                                title="Edit Kelas"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteKelas(k.id, k.nama_kelas)}
+                                className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition cursor-pointer"
+                                title="Hapus Kelas"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         )
                       })}
@@ -842,7 +1170,7 @@ export default function SmkMasterOperatorPage() {
             )}
 
             {/* ===============================================================
-                TAB 2: KELOLA SISWA SMK (DKV)
+                TAB 2: KELOLA SISWA SMK (TAMBAH, EDIT, HAPUS)
                =============================================================== */}
             {activeTab === 'siswa' && (
               <>
@@ -878,22 +1206,13 @@ export default function SmkMasterOperatorPage() {
                       className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                     />
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={nisSiswa}
-                        onChange={(e) => setNisSiswa(e.target.value)}
-                        placeholder="NIS (Opsional)"
-                        className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                      />
-                      <input
-                        type="text"
-                        value={nisnSiswa}
-                        onChange={(e) => setNisnSiswa(e.target.value)}
-                        placeholder="NISN (Opsional)"
-                        className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={nisnSiswa}
+                      onChange={(e) => setNisnSiswa(e.target.value)}
+                      placeholder="NISN (Opsional)"
+                      className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                    />
 
                     <select
                       value={jkSiswa}
@@ -907,7 +1226,7 @@ export default function SmkMasterOperatorPage() {
 
                   <button
                     type="submit"
-                    disabled={saving}
+                    disabled={saving || listKelas.length === 0}
                     className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -928,6 +1247,91 @@ export default function SmkMasterOperatorPage() {
                     <div className="space-y-1.5">
                       {filteredSiswa.map((s) => {
                         const kelasObj = listKelas.find((k) => k.id === s.kelas_id)
+                        const isEditing = editingSiswaId === s.id
+
+                        if (isEditing) {
+                          return (
+                            <form
+                              key={s.id}
+                              onSubmit={handleUpdateSiswa}
+                              className="rounded-xl bg-amber-400/[0.08] border border-amber-400/50 p-3 space-y-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                                  Edit Data Siswa SMK
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingSiswaId(null)}
+                                  className="text-slate-400 hover:text-white cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <select
+                                  required
+                                  value={editKelasSiswaId}
+                                  onChange={(e) => setEditKelasSiswaId(e.target.value)}
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                >
+                                  <option value="">-- Pilih Kelas DKV --</option>
+                                  {listKelas.map((k) => (
+                                    <option key={k.id} value={k.id}>
+                                      {k.nama_kelas}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <input
+                                  type="text"
+                                  required
+                                  value={editNamaSiswa}
+                                  onChange={(e) => setEditNamaSiswa(e.target.value)}
+                                  placeholder="Nama Lengkap Siswa"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                />
+
+                                <input
+                                  type="text"
+                                  value={editNisnSiswa}
+                                  onChange={(e) => setEditNisnSiswa(e.target.value)}
+                                  placeholder="NISN (Opsional)"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                />
+
+                                <select
+                                  value={editJkSiswa}
+                                  onChange={(e) => setEditJkSiswa(e.target.value)}
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                >
+                                  <option value="L">Laki-laki (L)</option>
+                                  <option value="P">Perempuan (P)</option>
+                                </select>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingSiswaId(null)}
+                                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-bold text-slate-300 cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={saving}
+                                  className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-black flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Save className="w-3 h-3" />
+                                  <span>Simpan Perubahan</span>
+                                </button>
+                              </div>
+                            </form>
+                          )
+                        }
+
                         return (
                           <div
                             key={s.id}
@@ -945,14 +1349,24 @@ export default function SmkMasterOperatorPage() {
                                 • NISN: {s.nisn || '-'} • {s.jenis_kelamin || '-'}
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSiswa(s.id, s.nama_lengkap)}
-                              className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition cursor-pointer shrink-0"
-                              title="Hapus Siswa"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => startEditSiswa(s)}
+                                className="p-2 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 transition cursor-pointer"
+                                title="Edit Siswa"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSiswa(s.id, s.nama_lengkap)}
+                                className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition cursor-pointer"
+                                title="Hapus Siswa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         )
                       })}
@@ -963,7 +1377,7 @@ export default function SmkMasterOperatorPage() {
             )}
 
             {/* ===============================================================
-                TAB 3: KELOLA MATA PELAJARAN SMK (GABUNGAN SEMUA TINGKAT)
+                TAB 3: KELOLA MATA PELAJARAN SMK (TAMBAH, EDIT, HAPUS)
                =============================================================== */}
             {activeTab === 'mapel' && (
               <>
@@ -1087,38 +1501,182 @@ export default function SmkMasterOperatorPage() {
                     </p>
                   ) : (
                     <div className="space-y-1.5">
-                      {filteredMapel.map((m) => (
-                        <div
-                          key={m.id}
-                          className="rounded-xl bg-white/[0.03] border border-white/10 p-2.5 flex items-center justify-between gap-2"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded bg-white/10 text-slate-300 text-[9px] font-bold">
-                                #{m.urutan || '-'}
-                              </span>
-                              {m.kode_mapel && (
-                                <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[9px] font-black">
-                                  {m.kode_mapel}
+                      {filteredMapel.map((m) => {
+                        const isEditing = editingMapelId === m.id
+
+                        if (isEditing) {
+                          return (
+                            <form
+                              key={m.id}
+                              onSubmit={handleUpdateMapel}
+                              className="rounded-xl bg-amber-400/[0.08] border border-amber-400/50 p-3 space-y-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                                  Edit Mata Pelajaran SMK
                                 </span>
-                              )}
-                              <p className="text-xs font-bold text-white truncate">{m.nama_mapel}</p>
-                            </div>
-                            <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                              {m.kelompok || 'Kejuruan DKV'} • {m.tingkat || 'Semua Tingkat'} •{' '}
-                              {m.jumlah_jp || 2} JP • {m.semester || 'Ganjil & Genap'}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMapel(m.id, m.nama_mapel)}
-                            className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition cursor-pointer shrink-0"
-                            title="Hapus Mapel"
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMapelId(null)}
+                                  className="text-slate-400 hover:text-white cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  required
+                                  value={editNamaMapel}
+                                  onChange={(e) => setEditNamaMapel(e.target.value)}
+                                  placeholder="Nama Mapel"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                />
+
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={editKodeMapel}
+                                    onChange={(e) => setEditKodeMapel(e.target.value)}
+                                    placeholder="Kode"
+                                    className="bg-black/50 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                  />
+                                  <div className="relative">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="24"
+                                      value={editJumlahJp}
+                                      onChange={(e) => setEditJumlahJp(e.target.value)}
+                                      className="w-full bg-black/50 border border-white/15 rounded-lg pl-2 pr-6 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                    />
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-bold">
+                                      JP
+                                    </span>
+                                  </div>
+                                  <div className="relative">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="99"
+                                      value={editUrutanMapel}
+                                      onChange={(e) => setEditUrutanMapel(e.target.value)}
+                                      className="w-full bg-black/50 border border-white/15 rounded-lg pl-2 pr-7 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                    />
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-bold">
+                                      Urut
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <select
+                                  value={editKelompokMapel}
+                                  onChange={(e) => setEditKelompokMapel(e.target.value)}
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                >
+                                  <option value="Kejuruan DKV">Kelompok Kejuruan / Produktif DKV</option>
+                                  <option value="Muatan Umum">Kelompok Mata Pelajaran Umum</option>
+                                  <option value="Muatan Lokal / Pesantren">
+                                    Muatan Lokal / Kepesantrenan
+                                  </option>
+                                </select>
+
+                                <select
+                                  value={editTingkatMapel}
+                                  onChange={(e) => setEditTingkatMapel(e.target.value)}
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                >
+                                  <option value="Semua Tingkat">Semua Tingkat (X, XI, XII)</option>
+                                  <option value="X">Khusus Kelas X (Fase E)</option>
+                                  <option value="XI">Khusus Kelas XI (Fase F)</option>
+                                  <option value="XII">Khusus Kelas XII (Fase F)</option>
+                                </select>
+
+                                <select
+                                  value={editSemesterMapel}
+                                  onChange={(e) => setEditSemesterMapel(e.target.value)}
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                >
+                                  <option value="Ganjil & Genap">Semester Ganjil &amp; Genap</option>
+                                  <option value="Ganjil">Semester Ganjil</option>
+                                  <option value="Genap">Semester Genap</option>
+                                </select>
+
+                                <input
+                                  type="text"
+                                  value={editTahunAjaranMapel}
+                                  onChange={(e) => setEditTahunAjaranMapel(e.target.value)}
+                                  placeholder="Tahun Ajaran"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                />
+                              </div>
+
+                              <div className="flex items-center justify-end gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMapelId(null)}
+                                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-bold text-slate-300 cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={saving}
+                                  className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-black flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Save className="w-3 h-3" />
+                                  <span>Simpan Mapel</span>
+                                </button>
+                              </div>
+                            </form>
+                          )
+                        }
+
+                        return (
+                          <div
+                            key={m.id}
+                            className="rounded-xl bg-white/[0.03] border border-white/10 p-2.5 flex items-center justify-between gap-2"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-1.5 py-0.5 rounded bg-white/10 text-slate-300 text-[9px] font-bold">
+                                  #{m.urutan || '-'}
+                                </span>
+                                {m.kode_mapel && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[9px] font-black">
+                                    {m.kode_mapel}
+                                  </span>
+                                )}
+                                <p className="text-xs font-bold text-white truncate">{m.nama_mapel}</p>
+                              </div>
+                              <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                {m.kelompok || 'Kejuruan DKV'} • {m.tingkat || 'Semua Tingkat'} •{' '}
+                                {m.jumlah_jp || 2} JP • {m.semester || 'Ganjil & Genap'} (
+                                {m.tahun_ajaran || '2026/2027'})
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => startEditMapel(m)}
+                                className="p-2 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 transition cursor-pointer"
+                                title="Edit Mapel"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMapel(m.id, m.nama_mapel)}
+                                className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition cursor-pointer"
+                                title="Hapus Mapel"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -1126,7 +1684,7 @@ export default function SmkMasterOperatorPage() {
             )}
 
             {/* ===============================================================
-                TAB 4: PENUGASAN UNIT & PEMETAAN MAPEL SMK PER GURU
+                TAB 4: PENUGASAN UNIT, EDIT PROFIL & MAPEL SMK PER GURU
                =============================================================== */}
             {activeTab === 'guru' && (
               <>
@@ -1193,6 +1751,7 @@ export default function SmkMasterOperatorPage() {
                     {filteredGuru.map((g) => {
                       const currentUnit = (g.unit_mengajar || 'SMP').toUpperCase()
                       const teachesSmk = currentUnit.includes('SMK')
+                      const isEditingGuru = editingGuruId === g.id
 
                       const assignedSmkRows = listGuruMapel
                         .filter((gm) => gm.guru_id === g.id)
@@ -1207,39 +1766,131 @@ export default function SmkMasterOperatorPage() {
                           key={g.id}
                           className="rounded-xl bg-white/[0.03] border border-white/10 p-3 space-y-2.5"
                         >
-                          {/* Baris Atas: Nama Guru & Sakelar Unit */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-white truncate">
-                                {g.nama_lengkap}
-                              </p>
-                              <p className="text-[10px] text-slate-400 truncate">
-                                {g.email || '-'} • Role: {(g.role || 'guru').toUpperCase()}
-                              </p>
-                            </div>
+                          {/* Form Edit Profil Guru jika tombol Pensil diklik */}
+                          {isEditingGuru ? (
+                            <form
+                              onSubmit={handleUpdateGuru}
+                              className="rounded-lg bg-amber-400/[0.08] border border-amber-400/50 p-2.5 space-y-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                                  Edit Profil Guru
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingGuruId(null)}
+                                  className="text-slate-400 hover:text-white cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
 
-                            <div className="flex items-center gap-1 shrink-0">
-                              {(['SMP', 'SMK', 'SMP & SMK'] as const).map((unitOpt) => {
-                                const active = currentUnit === unitOpt
-                                return (
-                                  <button
-                                    key={unitOpt}
-                                    type="button"
-                                    onClick={() => handleToggleGuruUnit(g, unitOpt)}
-                                    className={`px-2 py-1 rounded-lg text-[9px] font-black transition cursor-pointer ${
-                                      active
-                                        ? 'bg-amber-400 text-slate-950 shadow-sm'
-                                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                                    }`}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  required
+                                  value={editNamaGuru}
+                                  onChange={(e) => setEditNamaGuru(e.target.value)}
+                                  placeholder="Nama Lengkap & Gelar"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                />
+                                <input
+                                  type="email"
+                                  required
+                                  value={editEmailGuru}
+                                  onChange={(e) => setEditEmailGuru(e.target.value)}
+                                  placeholder="Email Login Guru"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                />
+                                <input
+                                  type="text"
+                                  value={editNuptkGuru}
+                                  onChange={(e) => setEditNuptkGuru(e.target.value)}
+                                  placeholder="NUPTK (Opsional)"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                />
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={editJabatanGuru}
+                                    onChange={(e) => setEditJabatanGuru(e.target.value)}
+                                    placeholder="Jabatan"
+                                    className="bg-black/50 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                                  />
+                                  <select
+                                    value={editRoleGuru}
+                                    onChange={(e) => setEditRoleGuru(e.target.value)}
+                                    className="bg-black/50 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
                                   >
-                                    {unitOpt}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
+                                    <option value="guru">Role: Guru</option>
+                                    <option value="operator">Role: Operator</option>
+                                  </select>
+                                </div>
+                              </div>
 
-                          {/* Bagian Pemilih Mapel SMK */}
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingGuruId(null)}
+                                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-bold text-slate-300 cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={saving}
+                                  className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-black flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Save className="w-3 h-3" />
+                                  <span>Simpan Profil</span>
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-xs font-bold text-white truncate">
+                                    {g.nama_lengkap}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditGuru(g)}
+                                    className="p-1 rounded bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 transition cursor-pointer shrink-0"
+                                    title="Edit Profil Guru"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400 truncate">
+                                  {g.email || '-'} • {g.jabatan || 'Guru'} • Role:{' '}
+                                  {(g.role || 'guru').toUpperCase()}
+                                  {g.NUPTK ? ` • NUPTK: ${g.NUPTK}` : ''}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                {(['SMP', 'SMK', 'SMP & SMK'] as const).map((unitOpt) => {
+                                  const active = currentUnit === unitOpt
+                                  return (
+                                    <button
+                                      key={unitOpt}
+                                      type="button"
+                                      onClick={() => handleToggleGuruUnit(g, unitOpt)}
+                                      className={`px-2 py-1 rounded-lg text-[9px] font-black transition cursor-pointer ${
+                                        active
+                                          ? 'bg-amber-400 text-slate-950 shadow-sm'
+                                          : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                      }`}
+                                    >
+                                      {unitOpt}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+
                           {teachesSmk && (
                             <div className="pt-2 border-t border-white/10 space-y-2">
                               {assignedSmkRows.length > 0 ? (
@@ -1273,7 +1924,6 @@ export default function SmkMasterOperatorPage() {
                                 </p>
                               )}
 
-                              {/* Dropdown Pilih Mapel SMK (Urut Abjad A-Z & Bersih) */}
                               <div className="flex items-center gap-1.5">
                                 <select
                                   value={selectedMapelPerGuru[g.id] || ''}
@@ -1320,8 +1970,8 @@ export default function SmkMasterOperatorPage() {
         </main>
       </div>
 
-      {/* Kelelawar Piksel di Pojok Kiri Bawah */}
-      <PixelBatSwitcher isDarkMode={true} variant="floating" />
+      {/* Kelelawar Piksel di Pojok Kiri Bawah -> Langsung mengarah ke Dashboard SMP (/) */}
+      <PixelBatSwitcher isDarkMode={true} variant="floating" targetHref="/" />
     </div>
   )
 }

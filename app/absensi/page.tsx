@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
@@ -9,8 +9,17 @@ import { useAuthRole } from '@/hooks/useAuthRole'
 
 // Helper Instansiasi Aman Supabase Client untuk Vercel SSG Build
 const getSupabaseClient = () => {
-  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co').replace(/['"]/g, '').trim()
-  const key = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder').replace(/['"]/g, '').trim()
+  const url = (
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
+  )
+    .replace(/['"]/g, '')
+    .trim()
+  const key = (
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder'
+  )
+    .replace(/['"]/g, '')
+    .trim()
   return createClient(url, key)
 }
 
@@ -21,6 +30,7 @@ interface Siswa {
   nisn: string
   nama_lengkap: string
   kelas_id?: number
+  jenjang?: string | null
   kelas?: any
 }
 
@@ -36,6 +46,7 @@ interface MasterJamItem {
   waktu_mulai: string
   waktu_selesai: string
   keterangan: string
+  jenjang?: string | null
 }
 
 interface AbsensiRecord {
@@ -49,6 +60,7 @@ interface AbsensiRecord {
   semester?: string
   tahun_ajaran?: string
   jam_ke?: string
+  jenjang?: string | null
 }
 
 interface StatusAbsensiMap {
@@ -108,7 +120,7 @@ export default function AbsensiPage() {
   const [jamMulai, setJamMulai] = useState('1')
   const [jamSelesai, setJamSelesai] = useState('1')
 
-  // Dynamic Options
+  // Dynamic Options (Khusus SMP)
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
   const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
@@ -130,10 +142,121 @@ export default function AbsensiPage() {
   const [loadingRekap, setLoadingRekap] = useState(false)
 
   // QR Scanner Ref, Anti-Spam & Feedback State
-  const [scanStatus, setScanStatus] = useState<{ type: 'success' | 'warning' | 'error'; msg: string } | null>(null)
+  const [scanStatus, setScanStatus] = useState<{
+    type: 'success' | 'warning' | 'error'
+    msg: string
+  } | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const qrScannerRef = useRef<any>(null)
   const isCooldownRef = useRef<boolean>(false)
+
+  // Ref terbaru agar QR scanner tidak restart saat state siswa/absensi berubah
+  const siswaListRef = useRef<Siswa[]>([])
+  const absensiMapRef = useRef<StatusAbsensiMap>({})
+  useEffect(() => {
+    siswaListRef.current = siswaList
+  }, [siswaList])
+  useEffect(() => {
+    absensiMapRef.current = absensiMap
+  }, [absensiMap])
+
+  // Fetch Slot Waktu dari Master Jam khusus SMP
+  const fetchMasterJam = useCallback(async () => {
+    const { data } = await supabase
+      .from('master_jam')
+      .select('*')
+      .or('jenjang.eq.SMP,jenjang.is.null')
+      .order('jam_ke', { ascending: true })
+    if (data) setMasterJamList(data)
+  }, [])
+
+  // Fetch Kelas, Mapel & Jadwal Guru khusus SMP (terisolasi dari SMK)
+  const fetchJadwalGuru = useCallback(
+    async (email: string) => {
+      try {
+        if (isOperator) {
+          const [resKelas, resMapel] = await Promise.all([
+            supabase
+              .from('kelas')
+              .select('id, nama_kelas, jenjang')
+              .or('jenjang.eq.SMP,jenjang.is.null')
+              .order('nama_kelas', { ascending: true }),
+            supabase
+              .from('mapel')
+              .select('id, nama_mapel, jenjang')
+              .or('jenjang.eq.SMP,jenjang.is.null')
+              .order('nama_mapel', { ascending: true }),
+          ])
+
+          if (resKelas.data) {
+            const smpKelas = resKelas.data.filter(
+              (k: any) =>
+                (k.jenjang || 'SMP').toUpperCase() !== 'SMK' &&
+                !(k.nama_kelas || '').toUpperCase().includes('DKV')
+            )
+            setKelasList(smpKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
+          }
+          if (resMapel.data) {
+            const smpMapel = resMapel.data.filter(
+              (m: any) =>
+                (m.jenjang || 'SMP').toUpperCase() !== 'SMK' &&
+                !(m.nama_mapel || '').toUpperCase().includes('(SMK)')
+            )
+            setMapelList(smpMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
+          }
+          return
+        }
+
+        const { data, error } = await supabase
+          .from('jadwal')
+          .select(
+            `
+            kelas_id,
+            mapel_id,
+            jenjang,
+            kelas:kelas_id(id, nama_kelas, jenjang),
+            mapel:mapel_id(id, nama_mapel, jenjang)
+          `
+          )
+          .ilike('guru_email', email.trim())
+
+        if (!error && data) {
+          const uniqueKelasMap = new Map<number, string>()
+          const uniqueMapelMap = new Map<number, string>()
+
+          data.forEach((item: any) => {
+            if ((item.jenjang || '').toUpperCase() === 'SMK') return
+            const kJenjang = item.kelas?.jenjang
+            const mJenjang = item.mapel?.jenjang
+            const kNama = item.kelas?.nama_kelas || ''
+            if (kJenjang === 'SMK' || mJenjang === 'SMK') return
+            if (kNama.toUpperCase().includes('DKV')) return
+
+            if (item.kelas && item.kelas.id) {
+              uniqueKelasMap.set(item.kelas.id, item.kelas.nama_kelas)
+            }
+            if (item.mapel && item.mapel.id) {
+              uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
+            }
+          })
+
+          setKelasList(
+            Array.from(uniqueKelasMap.entries())
+              .map(([id, nama]) => ({ id, nama }))
+              .sort((a, b) => a.nama.localeCompare(b.nama))
+          )
+          setMapelList(
+            Array.from(uniqueMapelMap.entries())
+              .map(([id, nama]) => ({ id, nama }))
+              .sort((a, b) => a.nama.localeCompare(b.nama))
+          )
+        }
+      } catch (err) {
+        console.error('Error fetching jadwal guru SMP:', err)
+      }
+    },
+    [isOperator]
+  )
 
   useEffect(() => {
     let isMounted = true
@@ -143,18 +266,24 @@ export default function AbsensiPage() {
     const month = String(now.getMonth() + 1).padStart(2, '0')
     const day = String(now.getDate()).padStart(2, '0')
     const today = `${year}-${month}-${day}`
-    
+
     setTodayStr(today)
     setTanggal(today)
     setFilterTanggal(today)
 
-    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][now.getDay()]
+    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][
+      now.getDay()
+    ]
     if (namaHari !== 'Jumat') {
       setHari(namaHari)
+    } else {
+      setHari('Sabtu')
     }
 
     async function getUserData() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         if (isMounted) router.replace('/login')
         return
@@ -187,6 +316,7 @@ export default function AbsensiPage() {
               .from('kelas')
               .select('id')
               .eq('wali_kelas_id', dataGuruLogin.id)
+              .or('jenjang.eq.SMP,jenjang.is.null')
               .limit(1)
               .maybeSingle()
 
@@ -203,8 +333,8 @@ export default function AbsensiPage() {
         }
       }
 
-      fetchJadwalGuru(rawEmail)
-      fetchMasterJam()
+      await fetchJadwalGuru(rawEmail)
+      await fetchMasterJam()
     }
 
     getUserData()
@@ -212,64 +342,9 @@ export default function AbsensiPage() {
     return () => {
       isMounted = false
     }
-  }, [router, isOperator])
+  }, [router, isOperator, fetchJadwalGuru, fetchMasterJam])
 
-  // Fetch Slot Waktu dari Master Jam
-  async function fetchMasterJam() {
-    const { data } = await supabase.from('master_jam').select('*').order('jam_ke', { ascending: true })
-    if (data) setMasterJamList(data)
-  }
-
-  // Fetch Jadwal Guru
-  async function fetchJadwalGuru(email: string) {
-    try {
-      if (isOperator) {
-        const { data: dataKelas } = await supabase
-          .from('kelas')
-          .select('id, nama_kelas')
-          .order('nama_kelas', { ascending: true })
-        const { data: dataMapel } = await supabase
-          .from('mapel')
-          .select('id, nama_mapel')
-          .order('nama_mapel', { ascending: true })
-
-        if (dataKelas) setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
-        if (dataMapel) setMapelList(dataMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('jadwal')
-        .select(`
-          kelas_id,
-          mapel_id,
-          kelas:kelas_id(id, nama_kelas),
-          mapel:mapel_id(id, nama_mapel)
-        `)
-        .eq('guru_email', email)
-
-      if (!error && data) {
-        const uniqueKelasMap = new Map<number, string>()
-        const uniqueMapelMap = new Map<number, string>()
-
-        data.forEach((item: any) => {
-          if (item.kelas && item.kelas.id) {
-            uniqueKelasMap.set(item.kelas.id, item.kelas.nama_kelas)
-          }
-          if (item.mapel && item.mapel.id) {
-            uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
-          }
-        })
-
-        setKelasList(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama })))
-        setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
-      }
-    } catch (err) {
-      console.error('Error fetching jadwal guru:', err)
-    }
-  }
-
-  // Load Siswa
+  // Load Siswa Khusus SMP (terisolasi saat memilih 1 kelas maupun 'ALL')
   useEffect(() => {
     async function fetchSiswa() {
       if (!selectedKelasId) {
@@ -282,17 +357,29 @@ export default function AbsensiPage() {
       try {
         let query = supabase
           .from('siswa')
-          .select('id, nisn, nama_lengkap, kelas_id, kelas:kelas_id(nama_kelas)')
+          .select('id, nisn, nama_lengkap, kelas_id, jenjang, kelas:kelas_id(nama_kelas, jenjang)')
+          .or('jenjang.eq.SMP,jenjang.is.null')
           .order('nama_lengkap', { ascending: true })
 
         if (selectedKelasId !== 'ALL') {
           query = query.eq('kelas_id', Number(selectedKelasId))
+        } else if (kelasList.length > 0) {
+          const smpKelasIds = kelasList.map((k) => Number(k.id))
+          query = query.in('kelas_id', smpKelasIds)
         }
 
         const { data, error } = await query
 
         if (!error && data) {
-          setSiswaList(data as any)
+          const onlySmpSiswa = (data as any[]).filter((s) => {
+            if ((s.jenjang || 'SMP').toUpperCase() === 'SMK') return false
+            const kObj = Array.isArray(s.kelas) ? s.kelas[0] : s.kelas
+            if (kObj?.jenjang === 'SMK') return false
+            if ((kObj?.nama_kelas || '').toUpperCase().includes('DKV')) return false
+            return true
+          })
+
+          setSiswaList(onlySmpSiswa)
 
           if (selectedMapelId && tanggal) {
             let absensiQuery = supabase
@@ -302,6 +389,7 @@ export default function AbsensiPage() {
               .eq('tanggal', tanggal)
               .eq('semester', selectedSemester)
               .eq('tahun_ajaran', selectedTahunAjaran)
+              .or('jenjang.eq.SMP,jenjang.is.null')
 
             if (selectedKelasId !== 'ALL') {
               absensiQuery = absensiQuery.eq('kelas_id', Number(selectedKelasId))
@@ -323,7 +411,7 @@ export default function AbsensiPage() {
           setSiswaList([])
         }
       } catch (err) {
-        console.error('Error fetching siswa:', err)
+        console.error('Error fetching siswa SMP:', err)
       } finally {
         setLoadingSiswa(false)
       }
@@ -332,9 +420,63 @@ export default function AbsensiPage() {
     if (activeTab === 'input') {
       fetchSiswa()
     }
-  }, [selectedKelasId, selectedMapelId, tanggal, selectedSemester, selectedTahunAjaran, activeTab])
+  }, [
+    selectedKelasId,
+    selectedMapelId,
+    tanggal,
+    selectedSemester,
+    selectedTahunAjaran,
+    activeTab,
+    kelasList,
+  ])
 
-  // QR Scanner Modal Implementation
+  const handleQRScanned = useCallback((scannedText: string) => {
+    const textClean = scannedText.trim()
+    if (isCooldownRef.current) return
+    isCooldownRef.current = true
+    setIsScanning(true)
+
+    const targetSiswa = siswaListRef.current.find(
+      (s) => s.nisn === textClean || String(s.id) === textClean
+    )
+
+    if (targetSiswa && targetSiswa.id) {
+      const sId = String(targetSiswa.id)
+      const currentStatus = absensiMapRef.current[sId]
+
+      if (currentStatus === 'HADIR') {
+        setScanStatus({
+          type: 'warning',
+          msg: `⚠️ ${targetSiswa.nama_lengkap} SUDAH HADIR!`,
+        })
+      } else {
+        setAbsensiMap((prev) => ({
+          ...prev,
+          [sId]: 'HADIR',
+        }))
+        setScanStatus({
+          type: 'success',
+          msg: `✅ BERHASIL: ${targetSiswa.nama_lengkap} (HADIR)`,
+        })
+      }
+    } else {
+      setScanStatus({
+        type: 'error',
+        msg: `❌ NISN/ID: "${textClean}" Tidak Ditemukan di Kelas SMP Terpilih!`,
+      })
+    }
+
+    setTimeout(() => {
+      setIsScanning(false)
+    }, 300)
+
+    setTimeout(() => {
+      isCooldownRef.current = false
+      setScanStatus(null)
+    }, 2200)
+  }, [])
+
+  // QR Scanner Modal Implementation (Stabil tanpa restart saat scan)
   useEffect(() => {
     let html5QrCode: any = null
     let isMounted = true
@@ -368,7 +510,7 @@ export default function AbsensiPage() {
             console.warn('Gagal memulai kamera:', err)
             setScanStatus({
               type: 'error',
-              msg: '⚠️ Kamera tidak tersedia / izin ditolak.'
+              msg: '⚠️ Kamera tidak tersedia / izin ditolak.',
             })
           }
         }
@@ -383,7 +525,7 @@ export default function AbsensiPage() {
         qrScannerRef.current.stop().catch(() => {})
       }
     }
-  }, [showQrModal, activeTab, facingMode, siswaList, absensiMap])
+  }, [showQrModal, activeTab, facingMode, handleQRScanned])
 
   const toggleCameraFacing = async () => {
     const nextMode = facingMode === 'environment' ? 'user' : 'environment'
@@ -399,54 +541,8 @@ export default function AbsensiPage() {
     setFacingMode(nextMode)
   }
 
-  const handleQRScanned = (scannedText: string) => {
-    const textClean = scannedText.trim()
-    if (isCooldownRef.current) return
-    isCooldownRef.current = true
-    setIsScanning(true)
-
-    const targetSiswa = siswaList.find(
-      (s) => s.nisn === textClean || String(s.id) === textClean
-    )
-
-    if (targetSiswa && targetSiswa.id) {
-      const sId = String(targetSiswa.id)
-      const currentStatus = absensiMap[sId]
-
-      if (currentStatus === 'HADIR') {
-        setScanStatus({
-          type: 'warning',
-          msg: `⚠️ ${targetSiswa.nama_lengkap} SUDAH HADIR!`
-        })
-      } else {
-        setAbsensiMap((prev) => ({
-          ...prev,
-          [sId]: 'HADIR',
-        }))
-        setScanStatus({
-          type: 'success',
-          msg: `✅ BERHASIL: ${targetSiswa.nama_lengkap} (HADIR)`
-        })
-      }
-    } else {
-      setScanStatus({
-        type: 'error',
-        msg: `❌ NISN/ID: "${textClean}" Tidak Ditemukan!`
-      })
-    }
-
-    setTimeout(() => {
-      setIsScanning(false)
-    }, 300)
-
-    setTimeout(() => {
-      isCooldownRef.current = false
-      setScanStatus(null)
-    }, 2200)
-  }
-
-  // Fetch Rekap
-  const fetchRekap = async () => {
+  // Fetch Rekap Khusus SMP
+  const fetchRekap = useCallback(async () => {
     setLoadingRekap(true)
     try {
       let query = supabase
@@ -454,10 +550,11 @@ export default function AbsensiPage() {
         .select('*')
         .eq('semester', selectedSemester)
         .eq('tahun_ajaran', selectedTahunAjaran)
+        .or('jenjang.eq.SMP,jenjang.is.null')
         .order('tanggal', { ascending: false })
 
       if (!isOperator && userEmail) {
-        query = query.eq('guru_email', userEmail)
+        query = query.ilike('guru_email', userEmail.trim())
       }
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
@@ -467,30 +564,41 @@ export default function AbsensiPage() {
 
       const { data, error } = await query
       if (!error && data) {
-        setRekapList(data)
+        const onlySmpRekap = data.filter(
+          (r: any) =>
+            (r.jenjang || 'SMP').toUpperCase() !== 'SMK' &&
+            !(r.kelas || '').toUpperCase().includes('DKV')
+        )
+        setRekapList(onlySmpRekap)
       } else {
         setRekapList([])
       }
     } catch (err) {
-      console.error('Error fetching rekap:', err)
+      console.error('Error fetching rekap SMP:', err)
     } finally {
       setLoadingRekap(false)
     }
-  }
+  }, [
+    selectedSemester,
+    selectedTahunAjaran,
+    isOperator,
+    userEmail,
+    filterKelasId,
+    filterMapelId,
+    filterTanggal,
+    searchNama,
+  ])
 
   useEffect(() => {
     if (activeTab === 'rekap') {
       fetchRekap()
     }
-  }, [activeTab, filterKelasId, filterMapelId, filterTanggal, searchNama, selectedSemester, selectedTahunAjaran, userEmail, isOperator])
+  }, [activeTab, fetchRekap])
 
-  useEffect(() => {
-    if (userEmail) {
-      fetchJadwalGuru(userEmail)
-    }
-  }, [isOperator, userEmail])
-  
-  const handleStatusChange = (siswaId: string, status: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA' | '') => {
+  const handleStatusChange = (
+    siswaId: string,
+    status: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA' | ''
+  ) => {
     setAbsensiMap((prev) => {
       const next = { ...prev }
       if (status === '') {
@@ -514,7 +622,7 @@ export default function AbsensiPage() {
 
   const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
 
-  // Simpan Absensi ke Supabase
+  // Simpan Absensi ke Supabase dengan label jenjang: 'SMP'
   const handleSimpanAbsensi = async () => {
     if (!selectedKelasId || !selectedMapelId || !tanggal) {
       alert('Silakan pilih Tanggal, Kelas, dan Mata Pelajaran terlebih dahulu!')
@@ -541,14 +649,22 @@ export default function AbsensiPage() {
     setSaving(true)
     try {
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
-      const startJamObj = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(jamMulai))
-      const endJamObj = masterJamList.find((j) => j.hari === hari && j.jam_ke === Number(jamSelesai))
+      const startJamObj = masterJamList.find(
+        (j) => j.hari === hari && j.jam_ke === Number(jamMulai)
+      )
+      const endJamObj = masterJamList.find(
+        (j) => j.hari === hari && j.jam_ke === Number(jamSelesai)
+      )
 
-      let jamFormattedText = `Jam Ke-${jamMulai}`
+      let jamFormattedText =
+        Number(jamMulai) === Number(jamSelesai)
+          ? `Jam Ke-${jamMulai}`
+          : `Jam Ke-${jamMulai} s/d ${jamSelesai}`
+
       if (startJamObj && endJamObj) {
         const wMulai = startJamObj.waktu_mulai.slice(0, 5)
         const wSelesai = endJamObj.waktu_selesai.slice(0, 5)
-        
+
         if (Number(jamMulai) === Number(jamSelesai)) {
           jamFormattedText = `Jam Ke-${jamMulai} (${wMulai} - ${wSelesai})`
         } else {
@@ -557,7 +673,10 @@ export default function AbsensiPage() {
       }
 
       const rowsToInsert = processedSiswa.map((siswa) => {
-        let namaKelasVal = (siswa.kelas?.nama_kelas) || (Array.isArray(siswa.kelas) ? siswa.kelas[0]?.nama_kelas : '') || ''
+        let namaKelasVal =
+          siswa.kelas?.nama_kelas ||
+          (Array.isArray(siswa.kelas) ? siswa.kelas[0]?.nama_kelas : '') ||
+          ''
         if (!namaKelasVal && selectedKelasId !== 'ALL') {
           const kObj = kelasList.find((k) => k.id === Number(selectedKelasId))
           namaKelasVal = kObj?.nama || ''
@@ -566,9 +685,10 @@ export default function AbsensiPage() {
         return {
           tanggal,
           jam_ke: jamFormattedText,
-          kelas_id: siswa.kelas_id || (selectedKelasId !== 'ALL' ? Number(selectedKelasId) : null),
+          kelas_id:
+            siswa.kelas_id || (selectedKelasId !== 'ALL' ? Number(selectedKelasId) : null),
           mapel_id: Number(selectedMapelId),
-          siswa_id: siswa.id,
+          siswa_id: String(siswa.id),
           kelas: namaKelasVal,
           mapel: selectedMapelObj?.nama || '',
           nama_siswa: siswa.nama_lengkap,
@@ -576,12 +696,13 @@ export default function AbsensiPage() {
           status: absensiMap[String(siswa.id)],
           semester: selectedSemester,
           tahun_ajaran: selectedTahunAjaran,
-          guru_email: userEmail
+          guru_email: userEmail.trim().toLowerCase(),
+          jenjang: 'SMP',
         }
       })
 
       if (selectedKelasId === 'ALL') {
-        const studentIds = processedSiswa.map((s) => s.id)
+        const studentIds = processedSiswa.map((s) => String(s.id))
         await supabase
           .from('absensi')
           .delete()
@@ -590,6 +711,7 @@ export default function AbsensiPage() {
           .eq('tanggal', tanggal)
           .eq('semester', selectedSemester)
           .eq('tahun_ajaran', selectedTahunAjaran)
+          .or('jenjang.eq.SMP,jenjang.is.null')
       } else {
         await supabase
           .from('absensi')
@@ -599,16 +721,15 @@ export default function AbsensiPage() {
           .eq('tanggal', tanggal)
           .eq('semester', selectedSemester)
           .eq('tahun_ajaran', selectedTahunAjaran)
+          .or('jenjang.eq.SMP,jenjang.is.null')
       }
 
-      const { error } = await supabase
-        .from('absensi')
-        .insert(rowsToInsert)
+      const { error } = await supabase.from('absensi').insert(rowsToInsert)
 
       if (error) {
         alert('Gagal menyimpan absensi: ' + error.message)
       } else {
-        alert(`Berhasil menyimpan presensi ${processedSiswa.length} siswa!`)
+        alert(`Berhasil menyimpan presensi SMP (${processedSiswa.length} siswa)!`)
         setFilterTanggal(tanggal)
         if (selectedKelasId !== 'ALL') {
           setFilterKelasId(selectedKelasId)
@@ -642,15 +763,17 @@ export default function AbsensiPage() {
   }
 
   // Siswa terurut A-Z
-  const sortedSiswaList = [...siswaList].sort((a, b) => a.nama_lengkap.localeCompare(b.nama_lengkap))
+  const sortedSiswaList = [...siswaList].sort((a, b) =>
+    a.nama_lengkap.localeCompare(b.nama_lengkap)
+  )
   const siswaBelumAbsen = sortedSiswaList.filter((s) => !absensiMap[String(s.id)])
   const siswaSudahAbsen = sortedSiswaList.filter((s) => absensiMap[String(s.id)])
 
   const totalData = rekapList.length
-  const totalHadir = rekapList.filter(item => item.status === 'HADIR').length
-  const totalIzin = rekapList.filter(item => item.status === 'IZIN').length
-  const totalSakit = rekapList.filter(item => item.status === 'SAKIT').length
-  const totalAlpa = rekapList.filter(item => item.status === 'ALPA').length
+  const totalHadir = rekapList.filter((item) => item.status === 'HADIR').length
+  const totalIzin = rekapList.filter((item) => item.status === 'IZIN').length
+  const totalSakit = rekapList.filter((item) => item.status === 'SAKIT').length
+  const totalAlpa = rekapList.filter((item) => item.status === 'ALPA').length
 
   return (
     <motion.div
@@ -661,46 +784,88 @@ export default function AbsensiPage() {
       }`}
     >
       {/* WATERMARK LOGO */}
-      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
-        isDarkMode ? 'opacity-[0.04]' : 'opacity-[0.12]'
-      }`}>
-        <img src="/logo-smp.jpg" alt="Watermark" className="w-[600px] h-[600px] object-contain max-w-none" />
+      <div
+        className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
+          isDarkMode ? 'opacity-[0.04]' : 'opacity-[0.12]'
+        }`}
+      >
+        <img
+          src="/logo-smp.jpg"
+          alt="Watermark"
+          className="w-[600px] h-[600px] object-contain max-w-none"
+        />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
-        
         {/* 1. SUPER-COMPACT HEADER TOPBAR */}
-        <header className={`border-b px-3 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
-          isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-        }`}>
+        <header
+          className={`border-b px-3 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+            isDarkMode
+              ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
+              : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+          }`}
+        >
           <div className="flex items-center gap-2 shrink-0">
-            <Link href="/" className={`p-1 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali">
+            <Link
+              href="/"
+              className={`p-1 rounded-lg transition ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Kembali"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
               </svg>
             </Link>
             <div className="flex items-center gap-1.5">
-              <img src="/logo-smp.jpg" alt="Logo" className="w-5 h-5 rounded border p-0.5 object-contain" />
-              <h1 className={`font-black text-xs leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                Presensi Siswa
+              <img
+                src="/logo-smp.jpg"
+                alt="Logo"
+                className="w-5 h-5 rounded border p-0.5 object-contain"
+              />
+              <h1
+                className={`font-black text-xs leading-none ${
+                  isDarkMode ? 'text-white' : 'text-slate-900'
+                }`}
+              >
+                Presensi Siswa SMP
               </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
             {/* PERIODE SEMESTER & TAHUN AJARAN */}
-            <div className={`border text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-xs ${
-              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
-            }`}>
-              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className={`font-bold focus:outline-none ${
-                isDarkMode ? 'bg-slate-800 text-indigo-300' : 'bg-white text-indigo-900'
-              }`}>
+            <div
+              className={`border text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-xs ${
+                isDarkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-100'
+                  : 'bg-white border-slate-300 text-slate-800'
+              }`}
+            >
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')}
+                className={`font-bold focus:outline-none ${
+                  isDarkMode ? 'bg-slate-800 text-indigo-300' : 'bg-white text-indigo-900'
+                }`}
+              >
                 <option value="Ganjil">Ganjil</option>
                 <option value="Genap">Genap</option>
               </select>
-              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className={`font-bold focus:outline-none ${
-                isDarkMode ? 'bg-slate-800 text-indigo-300' : 'bg-white text-indigo-900'
-              }`}>
+              <select
+                value={selectedTahunAjaran}
+                onChange={(e) => setSelectedTahunAjaran(e.target.value)}
+                className={`font-bold focus:outline-none ${
+                  isDarkMode ? 'bg-slate-800 text-indigo-300' : 'bg-white text-indigo-900'
+                }`}
+              >
                 {Array.from({ length: 5 }, (_, i) => {
                   const startYear = 2025 + i
                   const tahunOption = `${startYear}/${startYear + 1}`
@@ -755,46 +920,78 @@ export default function AbsensiPage() {
               onClick={handleLogout}
               disabled={isLoggingOut}
               className={`p-1 rounded-md border transition cursor-pointer disabled:opacity-50 ${
-                isDarkMode 
-                  ? 'bg-rose-950/40 border-rose-800 text-rose-400' 
+                isDarkMode
+                  ? 'bg-rose-950/40 border-rose-800 text-rose-400'
                   : 'bg-rose-50 border-rose-300 text-rose-700'
               }`}
               title="Keluar"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
               </svg>
             </button>
           </div>
         </header>
 
         {/* 2. SUB-NAVBAR AKADEMIK (PILLS HORIZONTAL SCROLL) */}
-        <div className={`border-b px-3 py-1 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
-          isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
-        }`}>
+        <div
+          className={`border-b px-3 py-1 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+            isDarkMode
+              ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md'
+              : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
+          }`}
+        >
           <div className="max-w-6xl mx-auto flex items-center gap-1 min-w-max text-[10px] font-bold">
-            <Link href="/jadwal" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
-              isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
-            }`}>
+            <Link
+              href="/jadwal"
+              className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                isDarkMode
+                  ? 'bg-slate-800 text-slate-300 border-slate-700'
+                  : 'bg-white text-slate-700 border-slate-300'
+              }`}
+            >
               <span>🕒</span> Jadwal
             </Link>
-            <Link href="/absensi" className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1">
+            <Link
+              href="/absensi"
+              className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1"
+            >
               <span>📋</span> Absensi
             </Link>
-            <Link href="/nilai" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
-              isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
-            }`}>
+            <Link
+              href="/nilai"
+              className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                isDarkMode
+                  ? 'bg-slate-800 text-slate-300 border-slate-700'
+                  : 'bg-white text-slate-700 border-slate-300'
+              }`}
+            >
               <span>⭐</span> Penilaian
             </Link>
-            <Link href="/jurnal" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
-              isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
-            }`}>
+            <Link
+              href="/jurnal"
+              className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                isDarkMode
+                  ? 'bg-slate-800 text-slate-300 border-slate-700'
+                  : 'bg-white text-slate-700 border-slate-300'
+              }`}
+            >
               <span>📓</span> Jurnal
             </Link>
             {canAccessBimbingan && (
-              <Link href="/bimbingan" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
-                isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
-              }`}>
+              <Link
+                href="/bimbingan"
+                className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                  isDarkMode
+                    ? 'bg-slate-800 text-slate-300 border-slate-700'
+                    : 'bg-white text-slate-700 border-slate-300'
+                }`}
+              >
                 <span>💖</span> Bimbingan
               </Link>
             )}
@@ -803,17 +1000,20 @@ export default function AbsensiPage() {
 
         {/* MAIN CONTENT CONTAINER (NO SCROLL CONTAINER) */}
         <main className="max-w-6xl w-full mx-auto p-2 flex-1 flex flex-col space-y-2 overflow-hidden mb-12">
-          
           {/* TAB SWITCHER: INPUT VS RIWAYAT */}
-          <div className={`grid grid-cols-2 p-0.5 rounded-lg border w-full text-[11px] font-extrabold shrink-0 shadow-xs ${
-            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
-          }`}>
+          <div
+            className={`grid grid-cols-2 p-0.5 rounded-lg border w-full text-[11px] font-extrabold shrink-0 shadow-xs ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
+            }`}
+          >
             <button
               onClick={() => setActiveTab('input')}
               className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
-                activeTab === 'input' 
-                  ? 'bg-indigo-600 text-white shadow-xs' 
-                  : isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                activeTab === 'input'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDarkMode
+                  ? 'text-slate-400'
+                  : 'text-slate-700'
               }`}
             >
               <span>📋</span> Input Presensi
@@ -821,9 +1021,11 @@ export default function AbsensiPage() {
             <button
               onClick={() => setActiveTab('rekap')}
               className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
-                activeTab === 'rekap' 
-                  ? 'bg-indigo-600 text-white shadow-xs' 
-                  : isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                activeTab === 'rekap'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDarkMode
+                  ? 'text-slate-400'
+                  : 'text-slate-700'
               }`}
             >
               <span>📜</span> Riwayat Presensi
@@ -832,11 +1034,12 @@ export default function AbsensiPage() {
 
           {activeTab === 'input' && (
             <div className="flex flex-col h-full overflow-hidden space-y-2">
-              
               {/* AREA 40% ATAS: FORM FILTER COMPACT (FIXED / NON-SCROLL) */}
-              <div className={`border rounded-xl p-2 shrink-0 shadow-xs space-y-1.5 ${
-                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
-              }`}>
+              <div
+                className={`border rounded-xl p-2 shrink-0 shadow-xs space-y-1.5 ${
+                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+                }`}
+              >
                 {/* ROW 1: TANGGAL & JAM MENGAJAR */}
                 <div className="grid grid-cols-12 gap-1.5">
                   <div className="col-span-6">
@@ -848,13 +1051,24 @@ export default function AbsensiPage() {
                         const val = e.target.value
                         setTanggal(val)
                         if (val) {
-                          const d = new Date(val)
-                          const nHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
+                          const p = val.split('-').map(Number)
+                          const d = new Date(p[0], p[1] - 1, p[2])
+                          const nHari = [
+                            'Minggu',
+                            'Senin',
+                            'Selasa',
+                            'Rabu',
+                            'Kamis',
+                            'Jumat',
+                            'Sabtu',
+                          ][d.getDay()]
                           if (nHari !== 'Jumat') setHari(nHari)
                         }
                       }}
                       className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-slate-50 border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
@@ -868,40 +1082,48 @@ export default function AbsensiPage() {
                         if (Number(val) > Number(jamSelesai)) setJamSelesai(val)
                       }}
                       className={`w-full border rounded-lg px-1 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-slate-50 border-slate-300 text-slate-900'
                       }`}
                     >
-                      {jamOptionsForHari.length > 0 ? (
-                        jamOptionsForHari.map((j) => (
-                          <option key={j.id} value={j.jam_ke}>Jam {j.jam_ke}</option>
-                        ))
-                      ) : (
-                        [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
-                          <option key={num} value={num}>Jam {num}</option>
-                        ))
-                      )}
+                      {jamOptionsForHari.length > 0
+                        ? jamOptionsForHari.map((j) => (
+                            <option key={j.id} value={j.jam_ke}>
+                              Jam {j.jam_ke}
+                            </option>
+                          ))
+                        : [1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                            <option key={num} value={num}>
+                              Jam {num}
+                            </option>
+                          ))}
                     </select>
 
                     <select
                       value={jamSelesai}
                       onChange={(e) => setJamSelesai(e.target.value)}
                       className={`w-full border rounded-lg px-1 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-slate-50 border-slate-300 text-slate-900'
                       }`}
                     >
-                      {jamOptionsForHari.length > 0 ? (
-                        jamOptionsForHari
-                          .filter((j) => j.jam_ke >= Number(jamMulai))
-                          .map((j) => (
-                            <option key={j.id} value={j.jam_ke}>s/d {j.jam_ke}</option>
-                          ))
-                      ) : (
-                        [1, 2, 3, 4, 5, 6, 7, 8]
-                          .filter((num) => num >= Number(jamMulai))
-                          .map((num) => (
-                            <option key={num} value={num}>s/d {num}</option>
-                          ))
-                      )}
+                      {jamOptionsForHari.length > 0
+                        ? jamOptionsForHari
+                            .filter((j) => j.jam_ke >= Number(jamMulai))
+                            .map((j) => (
+                              <option key={j.id} value={j.jam_ke}>
+                                s/d {j.jam_ke}
+                              </option>
+                            ))
+                        : [1, 2, 3, 4, 5, 6, 7, 8]
+                            .filter((num) => num >= Number(jamMulai))
+                            .map((num) => (
+                              <option key={num} value={num}>
+                                s/d {num}
+                              </option>
+                            ))}
                     </select>
                   </div>
                 </div>
@@ -913,13 +1135,19 @@ export default function AbsensiPage() {
                       value={selectedKelasId}
                       onChange={(e) => setSelectedKelasId(e.target.value)}
                       className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-slate-50 border-slate-300 text-slate-900'
                       }`}
                     >
-                      <option value="">-- Kelas --</option>
-                      <option value="ALL">✨ Semua Kelas</option>
+                      <option value="">-- Kelas SMP --</option>
+                      {kelasList.length > 0 && (
+                        <option value="ALL">✨ Semua Kelas ({kelasList.length})</option>
+                      )}
                       {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
+                        <option key={k.id} value={k.id}>
+                          {k.nama}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -929,12 +1157,16 @@ export default function AbsensiPage() {
                       value={selectedMapelId}
                       onChange={(e) => setSelectedMapelId(e.target.value)}
                       className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-slate-50 border-slate-300 text-slate-900'
                       }`}
                     >
-                      <option value="">-- Mapel --</option>
+                      <option value="">-- Mapel SMP --</option>
                       {mapelList.map((m) => (
-                        <option key={m.id} value={m.id}>{m.nama}</option>
+                        <option key={m.id} value={m.id}>
+                          {m.nama}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -955,9 +1187,13 @@ export default function AbsensiPage() {
               {/* QR SCANNER MODAL POPUP */}
               {showQrModal && (
                 <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-                  <div className={`w-full max-w-sm rounded-2xl p-4 border shadow-2xl flex flex-col items-center space-y-3 ${
-                    isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`}>
+                  <div
+                    className={`w-full max-w-sm rounded-2xl p-4 border shadow-2xl flex flex-col items-center space-y-3 ${
+                      isDarkMode
+                        ? 'bg-slate-900 border-slate-700 text-white'
+                        : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                  >
                     <div className="w-full flex items-center justify-between">
                       <h3 className="text-xs font-black uppercase flex items-center gap-1.5">
                         <span>📷</span> Scan QR Kartu Pelajar
@@ -1001,11 +1237,15 @@ export default function AbsensiPage() {
                     </div>
 
                     {scanStatus && (
-                      <div className={`w-full text-center px-3 py-1.5 rounded-lg text-xs font-extrabold border ${
-                        scanStatus.type === 'success' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
-                        scanStatus.type === 'warning' ? 'bg-amber-100 text-amber-900 border-amber-300' :
-                        'bg-rose-100 text-rose-900 border-rose-300'
-                      }`}>
+                      <div
+                        className={`w-full text-center px-3 py-1.5 rounded-lg text-xs font-extrabold border ${
+                          scanStatus.type === 'success'
+                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                            : scanStatus.type === 'warning'
+                            ? 'bg-amber-100 text-amber-900 border-amber-300'
+                            : 'bg-rose-100 text-rose-900 border-rose-300'
+                        }`}
+                      >
                         {scanStatus.msg}
                       </div>
                     )}
@@ -1015,15 +1255,19 @@ export default function AbsensiPage() {
 
               {/* SUB-TAB TOGGLE (BELUM VS SUDAH ABSEN) + QUICK BATCH ACTION */}
               <div className="flex items-center justify-between gap-1.5 shrink-0">
-                <div className={`grid grid-cols-2 p-0.5 rounded-lg border text-[10px] font-extrabold flex-1 ${
-                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
-                }`}>
+                <div
+                  className={`grid grid-cols-2 p-0.5 rounded-lg border text-[10px] font-extrabold flex-1 ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
+                  }`}
+                >
                   <button
                     onClick={() => setSubTabAbsen('belum')}
                     className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
-                      subTabAbsen === 'belum' 
-                        ? 'bg-amber-500 text-white shadow-xs' 
-                        : isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                      subTabAbsen === 'belum'
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : isDarkMode
+                        ? 'text-slate-400'
+                        : 'text-slate-600'
                     }`}
                   >
                     <span>⏳ Belum ({siswaBelumAbsen.length})</span>
@@ -1031,9 +1275,11 @@ export default function AbsensiPage() {
                   <button
                     onClick={() => setSubTabAbsen('sudah')}
                     className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
-                      subTabAbsen === 'sudah' 
-                        ? 'bg-emerald-600 text-white shadow-xs' 
-                        : isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                      subTabAbsen === 'sudah'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : isDarkMode
+                        ? 'text-slate-400'
+                        : 'text-slate-600'
                     }`}
                   >
                     <span>✅ Sudah ({siswaSudahAbsen.length})</span>
@@ -1053,16 +1299,26 @@ export default function AbsensiPage() {
               </div>
 
               {/* AREA 60% BAWAH: LIST SISWA (INTERNAL SCROLL AREA) */}
-              <div className={`border rounded-xl p-2 flex-1 flex flex-col overflow-hidden shadow-xs ${
-                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
-              }`}>
+              <div
+                className={`border rounded-xl p-2 flex-1 flex flex-col overflow-hidden shadow-xs ${
+                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+                }`}
+              >
                 {!selectedKelasId || !selectedMapelId ? (
-                  <div className={`py-8 text-center text-xs font-semibold ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                  <div
+                    className={`py-8 text-center text-xs font-semibold ${
+                      isDarkMode ? 'text-slate-500' : 'text-slate-500'
+                    }`}
+                  >
                     Pilih Kelas dan Mapel diajar terlebih dahulu.
                   </div>
                 ) : loadingSiswa ? (
-                  <div className={`py-8 text-center text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Memuat daftar siswa...
+                  <div
+                    className={`py-8 text-center text-xs font-semibold ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                  >
+                    Memuat daftar siswa SMP...
                   </div>
                 ) : subTabAbsen === 'belum' ? (
                   siswaBelumAbsen.length === 0 ? (
@@ -1074,15 +1330,30 @@ export default function AbsensiPage() {
                     <div className="flex-1 overflow-y-auto pr-1 divide-y divide-slate-100 dark:divide-slate-800">
                       {siswaBelumAbsen.map((siswa, idx) => {
                         const sId = String(siswa.id)
-                        const namaKelasSiswa = (siswa.kelas?.nama_kelas) || (Array.isArray(siswa.kelas) ? siswa.kelas[0]?.nama_kelas : '-') || '-'
+                        const namaKelasSiswa =
+                          siswa.kelas?.nama_kelas ||
+                          (Array.isArray(siswa.kelas) ? siswa.kelas[0]?.nama_kelas : '-') ||
+                          '-'
                         return (
-                          <div key={sId} className="py-1.5 flex items-center justify-between gap-1.5">
+                          <div
+                            key={sId}
+                            className="py-1.5 flex items-center justify-between gap-1.5"
+                          >
                             <div className="min-w-0 flex-1">
-                              <h4 className={`text-[11px] font-extrabold truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              <h4
+                                className={`text-[11px] font-extrabold truncate ${
+                                  isDarkMode ? 'text-white' : 'text-slate-900'
+                                }`}
+                              >
                                 {idx + 1}. {siswa.nama_lengkap}
                               </h4>
-                              <p className={`text-[9px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                                NISN: {siswa.nisn || '-'} {selectedKelasId === 'ALL' && `• ${namaKelasSiswa}`}
+                              <p
+                                className={`text-[9px] font-mono ${
+                                  isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                                }`}
+                              >
+                                NISN: {siswa.nisn || '-'}{' '}
+                                {selectedKelasId === 'ALL' && `• ${namaKelasSiswa}`}
                               </p>
                             </div>
 
@@ -1122,47 +1393,61 @@ export default function AbsensiPage() {
                       })}
                     </div>
                   )
+                ) : siswaSudahAbsen.length === 0 ? (
+                  <div
+                    className={`py-8 text-center text-xs font-medium ${
+                      isDarkMode ? 'text-slate-500' : 'text-slate-400'
+                    }`}
+                  >
+                    Belum ada siswa yang di-absen.
+                  </div>
                 ) : (
-                  siswaSudahAbsen.length === 0 ? (
-                    <div className={`py-8 text-center text-xs font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                      Belum ada siswa yang di-absen.
-                    </div>
-                  ) : (
-                    /* AREA SCROLL KHUSUS UNTUK DAFTAR SISWA SUDAH ABSEN */
-                    <div className="flex-1 overflow-y-auto pr-1 divide-y divide-slate-100 dark:divide-slate-800">
-                      {siswaSudahAbsen.map((siswa, idx) => {
-                        const sId = String(siswa.id)
-                        const st = absensiMap[sId]
-                        return (
-                          <div key={sId} className="py-1.5 flex items-center justify-between gap-1.5">
-                            <div className="min-w-0 flex-1">
-                              <h4 className={`text-[11px] font-extrabold truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                                {idx + 1}. {siswa.nama_lengkap}
-                              </h4>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${
-                                st === 'HADIR' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                                st === 'IZIN' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
-                                st === 'SAKIT' ? 'bg-indigo-100 text-indigo-800 border border-indigo-300' :
-                                'bg-rose-100 text-rose-800 border border-rose-300'
-                              }`}>
-                                {st}
-                              </span>
-                              <button
-                                onClick={() => handleStatusChange(sId, '')}
-                                className="text-rose-500 hover:text-rose-700 font-bold p-0.5 text-xs"
-                                title="Batalkan"
-                              >
-                                ✕
-                              </button>
-                            </div>
+                  /* AREA SCROLL KHUSUS UNTUK DAFTAR SISWA SUDAH ABSEN */
+                  <div className="flex-1 overflow-y-auto pr-1 divide-y divide-slate-100 dark:divide-slate-800">
+                    {siswaSudahAbsen.map((siswa, idx) => {
+                      const sId = String(siswa.id)
+                      const st = absensiMap[sId]
+                      return (
+                        <div
+                          key={sId}
+                          className="py-1.5 flex items-center justify-between gap-1.5"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <h4
+                              className={`text-[11px] font-extrabold truncate ${
+                                isDarkMode ? 'text-white' : 'text-slate-900'
+                              }`}
+                            >
+                              {idx + 1}. {siswa.nama_lengkap}
+                            </h4>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${
+                                st === 'HADIR'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : st === 'IZIN'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  : st === 'SAKIT'
+                                  ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                                  : 'bg-rose-100 text-rose-800 border border-rose-300'
+                              }`}
+                            >
+                              {st}
+                            </span>
+                            <button
+                              onClick={() => handleStatusChange(sId, '')}
+                              className="text-rose-500 hover:text-rose-700 font-bold p-0.5 text-xs"
+                              title="Batalkan"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
 
@@ -1171,61 +1456,154 @@ export default function AbsensiPage() {
                 <button
                   type="button"
                   onClick={handleSimpanAbsensi}
-                  disabled={saving || !selectedKelasId || !selectedMapelId || siswaSudahAbsen.length === 0}
+                  disabled={
+                    saving ||
+                    !selectedKelasId ||
+                    !selectedMapelId ||
+                    siswaSudahAbsen.length === 0
+                  }
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 text-white font-black py-1.5 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer shrink-0"
                 >
                   <span>💾</span>
                   <span>
-                    {saving ? 'Menyimpan...' : `SIMPAN PRESENSI (${siswaSudahAbsen.length} SISWA)`}
+                    {saving
+                      ? 'Menyimpan...'
+                      : `SIMPAN PRESENSI SMP (${siswaSudahAbsen.length} SISWA)`}
                   </span>
                 </button>
               )}
-
             </div>
           )}
 
           {/* TAB 2: RIWAYAT & REKAPITULASI (INTERNAL SCROLL AREA) */}
           {activeTab === 'rekap' && (
             <div className="flex flex-col h-full overflow-hidden space-y-2">
-              
               {/* STATISTIK RINGKAS */}
               <div className="grid grid-cols-5 gap-1 shrink-0 text-center">
-                <div className={`border rounded-lg p-1 shadow-xs ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
-                  <p className={`text-[8px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>TOTAL</p>
-                  <p className={`text-xs font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{totalData}</p>
+                <div
+                  className={`border rounded-lg p-1 shadow-xs ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
+                  }`}
+                >
+                  <p
+                    className={`text-[8px] font-black uppercase ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                    }`}
+                  >
+                    TOTAL
+                  </p>
+                  <p
+                    className={`text-xs font-black ${
+                      isDarkMode ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    {totalData}
+                  </p>
                 </div>
-                <div className={`border rounded-lg p-1 shadow-xs ${isDarkMode ? 'bg-slate-900 border-emerald-800' : 'bg-white border-emerald-200'}`}>
-                  <p className={`text-[8px] font-black uppercase ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>HADIR</p>
-                  <p className={`text-xs font-black ${isDarkMode ? 'text-emerald-300' : 'text-emerald-900'}`}>{totalHadir}</p>
+                <div
+                  className={`border rounded-lg p-1 shadow-xs ${
+                    isDarkMode
+                      ? 'bg-slate-900 border-emerald-800'
+                      : 'bg-white border-emerald-200'
+                  }`}
+                >
+                  <p
+                    className={`text-[8px] font-black uppercase ${
+                      isDarkMode ? 'text-emerald-400' : 'text-emerald-700'
+                    }`}
+                  >
+                    HADIR
+                  </p>
+                  <p
+                    className={`text-xs font-black ${
+                      isDarkMode ? 'text-emerald-300' : 'text-emerald-900'
+                    }`}
+                  >
+                    {totalHadir}
+                  </p>
                 </div>
-                <div className={`border rounded-lg p-1 shadow-xs ${isDarkMode ? 'bg-slate-900 border-amber-800' : 'bg-white border-amber-200'}`}>
-                  <p className={`text-[8px] font-black uppercase ${isDarkMode ? 'text-amber-400' : 'text-amber-700'}`}>IZIN</p>
-                  <p className={`text-xs font-black ${isDarkMode ? 'text-amber-300' : 'text-amber-900'}`}>{totalIzin}</p>
+                <div
+                  className={`border rounded-lg p-1 shadow-xs ${
+                    isDarkMode ? 'bg-slate-900 border-amber-800' : 'bg-white border-amber-200'
+                  }`}
+                >
+                  <p
+                    className={`text-[8px] font-black uppercase ${
+                      isDarkMode ? 'text-amber-400' : 'text-amber-700'
+                    }`}
+                  >
+                    IZIN
+                  </p>
+                  <p
+                    className={`text-xs font-black ${
+                      isDarkMode ? 'text-amber-300' : 'text-amber-900'
+                    }`}
+                  >
+                    {totalIzin}
+                  </p>
                 </div>
-                <div className={`border rounded-lg p-1 shadow-xs ${isDarkMode ? 'bg-slate-900 border-indigo-800' : 'bg-white border-indigo-200'}`}>
-                  <p className={`text-[8px] font-black uppercase ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}>SAKIT</p>
-                  <p className={`text-xs font-black ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>{totalSakit}</p>
+                <div
+                  className={`border rounded-lg p-1 shadow-xs ${
+                    isDarkMode ? 'bg-slate-900 border-indigo-800' : 'bg-white border-indigo-200'
+                  }`}
+                >
+                  <p
+                    className={`text-[8px] font-black uppercase ${
+                      isDarkMode ? 'text-indigo-400' : 'text-indigo-700'
+                    }`}
+                  >
+                    SAKIT
+                  </p>
+                  <p
+                    className={`text-xs font-black ${
+                      isDarkMode ? 'text-indigo-300' : 'text-indigo-900'
+                    }`}
+                  >
+                    {totalSakit}
+                  </p>
                 </div>
-                <div className={`border rounded-lg p-1 shadow-xs ${isDarkMode ? 'bg-slate-900 border-rose-800' : 'bg-white border-rose-200'}`}>
-                  <p className={`text-[8px] font-black uppercase ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}>ALPA</p>
-                  <p className={`text-xs font-black ${isDarkMode ? 'text-rose-300' : 'text-rose-900'}`}>{totalAlpa}</p>
+                <div
+                  className={`border rounded-lg p-1 shadow-xs ${
+                    isDarkMode ? 'bg-slate-900 border-rose-800' : 'bg-white border-rose-200'
+                  }`}
+                >
+                  <p
+                    className={`text-[8px] font-black uppercase ${
+                      isDarkMode ? 'text-rose-400' : 'text-rose-700'
+                    }`}
+                  >
+                    ALPA
+                  </p>
+                  <p
+                    className={`text-xs font-black ${
+                      isDarkMode ? 'text-rose-300' : 'text-rose-900'
+                    }`}
+                  >
+                    {totalAlpa}
+                  </p>
                 </div>
               </div>
 
               {/* FILTER BAR REKAP */}
-              <div className={`grid grid-cols-2 gap-1 border p-1 rounded-lg shrink-0 shadow-xs ${
-                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
-              }`}>
+              <div
+                className={`grid grid-cols-2 gap-1 border p-1 rounded-lg shrink-0 shadow-xs ${
+                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+                }`}
+              >
                 <select
                   value={filterKelasId}
                   onChange={(e) => setFilterKelasId(e.target.value)}
                   className={`border rounded px-1 py-0.5 text-[11px] font-bold focus:outline-none ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    isDarkMode
+                      ? 'bg-slate-800 border-slate-700 text-white'
+                      : 'bg-slate-50 border-slate-300 text-slate-900'
                   }`}
                 >
-                  <option value="">Semua Kelas</option>
+                  <option value="">Semua Kelas SMP</option>
                   {kelasList.map((k) => (
-                    <option key={k.id} value={k.id}>{k.nama}</option>
+                    <option key={k.id} value={k.id}>
+                      {k.nama}
+                    </option>
                   ))}
                 </select>
 
@@ -1233,12 +1611,16 @@ export default function AbsensiPage() {
                   value={filterMapelId}
                   onChange={(e) => setFilterMapelId(e.target.value)}
                   className={`border rounded px-1 py-0.5 text-[11px] font-bold focus:outline-none ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    isDarkMode
+                      ? 'bg-slate-800 border-slate-700 text-white'
+                      : 'bg-slate-50 border-slate-300 text-slate-900'
                   }`}
                 >
-                  <option value="">Semua Mapel</option>
+                  <option value="">Semua Mapel SMP</option>
                   {mapelList.map((m) => (
-                    <option key={m.id} value={m.nama}>{m.nama}</option>
+                    <option key={m.id} value={m.nama}>
+                      {m.nama}
+                    </option>
                   ))}
                 </select>
 
@@ -1247,7 +1629,9 @@ export default function AbsensiPage() {
                   value={filterTanggal}
                   onChange={(e) => setFilterTanggal(e.target.value)}
                   className={`border rounded px-1 py-0.5 text-[11px] font-bold focus:outline-none ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    isDarkMode
+                      ? 'bg-slate-800 border-slate-700 text-white'
+                      : 'bg-slate-50 border-slate-300 text-slate-900'
                   }`}
                 />
 
@@ -1257,22 +1641,34 @@ export default function AbsensiPage() {
                   onChange={(e) => setSearchNama(e.target.value)}
                   placeholder="Cari siswa..."
                   className={`border rounded px-1 py-0.5 text-[11px] font-bold focus:outline-none ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    isDarkMode
+                      ? 'bg-slate-800 border-slate-700 text-white'
+                      : 'bg-slate-50 border-slate-300 text-slate-900'
                   }`}
                 />
               </div>
 
               {/* LIST REKAP (INTERNAL SCROLL) */}
-              <div className={`border rounded-xl p-2 flex-1 flex flex-col overflow-hidden shadow-xs ${
-                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
-              }`}>
+              <div
+                className={`border rounded-xl p-2 flex-1 flex flex-col overflow-hidden shadow-xs ${
+                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+                }`}
+              >
                 {loadingRekap ? (
-                  <div className={`py-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <div
+                    className={`py-6 text-center text-xs font-medium ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                  >
                     Memuat riwayat...
                   </div>
                 ) : rekapList.length === 0 ? (
-                  <div className={`py-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Tidak ada riwayat presensi.
+                  <div
+                    className={`py-6 text-center text-xs font-medium ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                  >
+                    Tidak ada riwayat presensi SMP.
                   </div>
                 ) : (
                   <div className="flex-1 overflow-y-auto pr-1 space-y-1.5">
@@ -1280,32 +1676,47 @@ export default function AbsensiPage() {
                       <div
                         key={item.id || index}
                         className={`p-1.5 rounded-lg border transition shadow-xs flex items-center justify-between gap-1.5 ${
-                          isDarkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'
+                          isDarkMode
+                            ? 'bg-slate-800/80 border-slate-700'
+                            : 'bg-slate-50 border-slate-200'
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          <h4 className={`text-[11px] font-extrabold truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                          <h4
+                            className={`text-[11px] font-extrabold truncate ${
+                              isDarkMode ? 'text-white' : 'text-slate-900'
+                            }`}
+                          >
                             {item.nama_siswa}
                           </h4>
-                          <p className={`text-[9px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                          <p
+                            className={`text-[9px] font-mono ${
+                              isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                            }`}
+                          >
                             📅 {item.tanggal} • {item.kelas} • {item.mapel}
                           </p>
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${
-                            item.status === 'HADIR' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                            item.status === 'IZIN' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
-                            item.status === 'SAKIT' ? 'bg-indigo-100 text-indigo-800 border border-indigo-300' :
-                            'bg-rose-100 text-rose-800 border border-rose-300'
-                          }`}>
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${
+                              item.status === 'HADIR'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : item.status === 'IZIN'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : item.status === 'SAKIT'
+                                ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}
+                          >
                             {item.status}
                           </span>
                           <button
                             onClick={async () => {
                               if (item.id && confirm('Hapus record ini?')) {
                                 await supabase.from('absensi').delete().eq('id', item.id)
-                                setRekapList(prev => prev.filter(r => r.id !== item.id))
+                                setRekapList((prev) => prev.filter((r) => r.id !== item.id))
                               }
                             }}
                             className="text-rose-500 hover:text-rose-700 font-bold p-0.5 text-xs"
@@ -1318,57 +1729,81 @@ export default function AbsensiPage() {
                   </div>
                 )}
               </div>
-
             </div>
           )}
-
         </main>
       </div>
 
       {/* 3. FIXED BOTTOM NAVIGATION BAR */}
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
+      <div
+        className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
+          isDarkMode
+            ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
+            : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+        }`}
+      >
         <div className="max-w-xl mx-auto px-4 py-1.5 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
+          <Link
+            href="/"
+            className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
+              isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-950'
+            }`}
+          >
             <span className="text-base leading-none">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
+            <Link
+              href="/siswa"
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-950'
+              }`}
+            >
               <span className="text-base leading-none">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
+            <Link
+              href="/guru"
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-950'
+              }`}
+            >
               <span className="text-base leading-none">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/absensi" className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition">
+          <Link
+            href="/absensi"
+            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition"
+          >
             <span className="text-base leading-none">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
+          <Link
+            href="/laporan"
+            className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
+              isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-950'
+            }`}
+          >
             <span className="text-base leading-none">🖨️</span>
             <span>Laporan</span>
           </Link>
         </div>
       </div>
-
     </motion.div>
   )
 }

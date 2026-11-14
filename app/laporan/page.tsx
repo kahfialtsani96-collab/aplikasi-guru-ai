@@ -1,27 +1,44 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const getSupabaseUrl = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+    .replace(/['"]/g, '')
+    .trim()
+const getSupabaseAnonKey = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder').replace(/['"]/g, '').trim()
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface OptionItem {
   id: number
   nama: string
   tingkat?: string
+  jenjang?: string | null
+  urutan?: number | null
   wali_kelas_id?: number | null
 }
 
 interface SiswaItem {
   id: number
   nama_lengkap: string
+  nis?: string
   nisn?: string
+  jenis_kelamin?: string
+  tempat_lahir?: string
+  tanggal_lahir?: string
+  agama?: string
+  alamat?: string
+  sekolah_asal?: string
+  nama_ayah?: string
+  nama_ibu?: string
+  nama_wali?: string
   kelas_id?: number
   kelas?: any
 }
@@ -32,9 +49,37 @@ interface GuruInfo {
   jabatanLabel: string
 }
 
+// Helper menentukan bobot tingkat kelas kronologis 7 -> 12
+function getKelasGradeWeight(namaKelas: string, tingkatDb?: string | null): number {
+  const t = String(tingkatDb || '').trim()
+  if (['7', '8', '9', '10', '11', '12'].includes(t)) return Number(t)
+
+  const upper = (namaKelas || '').trim().toUpperCase()
+  if (/^(XII|12)\b/.test(upper)) return 12
+  if (/^(XI|11)\b/.test(upper)) return 11
+  if (/^(X|10)\b/.test(upper)) return 10
+  if (/^(IX|9)\b/.test(upper)) return 9
+  if (/^(VIII|8)\b/.test(upper)) return 8
+  if (/^(VII|7)\b/.test(upper)) return 7
+  return 99
+}
+
+// Helper menentukan apakah kelas masuk unit SMK atau SMP
+function detectUnitByKelas(namaKelas: string, jenjangDb?: string | null, tingkatDb?: string | null): 'SMP' | 'SMK' {
+  const j = String(jenjangDb || '').trim().toUpperCase()
+  if (j === 'SMK') return 'SMK'
+  if (j === 'SMP') return 'SMP'
+
+  const w = getKelasGradeWeight(namaKelas, tingkatDb)
+  if (w >= 10 && w <= 12) return 'SMK'
+  if ((namaKelas || '').toUpperCase().includes('DKV')) return 'SMK'
+  return 'SMP'
+}
+
 export default function LaporanPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
+  const raporPreviewRef = useRef<HTMLDivElement>(null)
 
   const [activeTab, setActiveTab] = useState<'pusat' | 'pengaturan'>('pusat')
   const [userDisplayName, setUserDisplayName] = useState('MEMUAT...')
@@ -45,9 +90,8 @@ export default function LaporanPage() {
   const [, setUserEmail] = useState<string | null>(null)
   const [currentDateStr, setCurrentDateStr] = useState('')
 
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
+  // DETEKSI OTOMATIS TEMA DARK MODE
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme')
     if (savedTheme === 'dark') {
@@ -60,12 +104,12 @@ export default function LaporanPage() {
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
   const [siswaList, setSiswaList] = useState<SiswaItem[]>([])
 
-  // Global Filter Periode Akademik & Opsi 5 Tahun Ke Depan
+  // Global Filter Periode Akademik
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
   const [tahunAjaranOptions, setTahunAjaranOptions] = useState<string[]>([])
 
-  // Identitas TTD & Otomatisasi Profil Guru Login
+  // Identitas TTD
   const [namaGuru, setNamaGuru] = useState('Guru Pengampu')
   const [nuptkGuru, setNuptkGuru] = useState('-')
   const [jabatanGuru, setJabatanGuru] = useState('Guru')
@@ -73,13 +117,13 @@ export default function LaporanPage() {
   const [nipKepsek, setNipKepsek] = useState('NUPTK. 6337763664131233')
   const [kotaTtd, setKotaTtd] = useState('Gisting')
 
-  // FITUR CEKLIS TTD & STEMPEL KEPSEK
+  // Ceklis TTD & Stempel Kepsek
   const [pakaiTtdCapKepsek, setPakaiTtdCapKepsek] = useState<boolean>(true)
 
-  // Filter Cetak Laporan
+  // Filter Cetak Laporan (Semua 8 Kartu)
   const [filterKelasAbsensi, setFilterKelasAbsensi] = useState('')
   const [filterBulanAbsensi, setFilterBulanAbsensi] = useState('')
-  
+
   const [filterKelasLeger, setFilterKelasLeger] = useState('')
   const [filterMapelLeger, setFilterMapelLeger] = useState('')
 
@@ -89,33 +133,44 @@ export default function LaporanPage() {
 
   const [filterKelasBimbingan, setFilterKelasBimbingan] = useState('')
   const [filterBulanBimbingan, setFilterBulanBimbingan] = useState('')
-  
-  // FILTER CETAK BANK SOAL
+
+  // Filter Cetak Bank Soal
   const [filterMapelBankSoal, setFilterMapelBankSoal] = useState('')
   const [filterKelasBankSoal, setFilterKelasBankSoal] = useState('')
 
-  // Rapor Per Siswa
+  // Rapor Per Siswa & Modal Live Preview Editor
   const [filterKelasRapor, setFilterKelasRapor] = useState('')
   const [selectedSiswaRapor, setSelectedSiswaRapor] = useState('')
+  const [isRaporPreviewOpen, setIsRaporPreviewOpen] = useState(false)
+  const [raporPreviewHtml, setRaporPreviewHtml] = useState('')
+  const [raporPreviewMeta, setRaporPreviewMeta] = useState<{
+    namaSiswa: string
+    kelasStr: string
+    unit: 'SMP' | 'SMK'
+  } | null>(null)
+  const [isBuildingRapor, setIsBuildingRapor] = useState(false)
 
-  // Riwayat Presensi Detail BK
+  // Riwayat Presensi Detail BK & Riwayat Nilai
   const [tanggalAbsensi, setTanggalAbsensi] = useState('')
   const [bulanAbsensiDetail, setBulanAbsensiDetail] = useState('')
   const [kelasRiwayatAbsensi, setKelasRiwayatAbsensi] = useState('')
   const [kelasNilai, setKelasNilai] = useState('')
   const [mapelNilai, setMapelNilai] = useState('')
 
-  // Helper format NUPTK agar bersih (jika kosong/null/EMPTY menjadi '-')
   const formatNuptk = (val: any): string => {
     if (!val) return '-'
     const str = String(val).trim()
-    if (str === '' || str.toUpperCase() === 'EMPTY' || str.toUpperCase() === 'NULL' || str === '-') {
+    if (
+      str === '' ||
+      str.toUpperCase() === 'EMPTY' ||
+      str.toUpperCase() === 'NULL' ||
+      str === '-'
+    ) {
       return '-'
     }
     return str
   }
 
-  // Helper format Title Case untuk Jabatan (misal "Wali kelas" -> "Wali Kelas")
   const formatTitleCase = (str: string): string => {
     if (!str) return 'Wali Kelas'
     return str
@@ -148,7 +203,6 @@ export default function LaporanPage() {
     }
   }
 
-  // Generate 5 Tahun Ajaran ke Depan
   useEffect(() => {
     const currentYear = new Date().getFullYear()
     const options: string[] = []
@@ -159,7 +213,6 @@ export default function LaporanPage() {
     setTahunAjaranOptions(options)
   }, [])
 
-  // LOAD PENGATURAN DARI LOCALSTORAGE
   useEffect(() => {
     const savedPengaturan = localStorage.getItem('pengaturan_laporan')
     if (savedPengaturan) {
@@ -168,7 +221,8 @@ export default function LaporanPage() {
         if (parsed.namaKepsek) setNamaKepsek(parsed.namaKepsek)
         if (parsed.nipKepsek) setNipKepsek(parsed.nipKepsek)
         if (parsed.kotaTtd) setKotaTtd(parsed.kotaTtd)
-        if (typeof parsed.pakaiTtdCapKepsek === 'boolean') setPakaiTtdCapKepsek(parsed.pakaiTtdCapKepsek)
+        if (typeof parsed.pakaiTtdCapKepsek === 'boolean')
+          setPakaiTtdCapKepsek(parsed.pakaiTtdCapKepsek)
       } catch (e) {
         console.error('Error parsing local storage settings:', e)
       }
@@ -185,7 +239,9 @@ export default function LaporanPage() {
     )
 
     async function getUserData() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user || !user.email) return
 
       const cleanEmail = user.email.trim().toLowerCase()
@@ -232,27 +288,39 @@ export default function LaporanPage() {
     getUserData()
   }, [isOperator])
 
-  // AMBIL MASTER DATA MAPEL & KELAS (GURU HANYA MENDAPATKAN MAPEL YANG DIAMPU & KELAS WALI JIKA ADA)
+  // AMBIL MASTER DATA MAPEL, KELAS (URUT 7-12), & SISWA (URUT A-Z)
   async function fetchMasterData(guruId: number | null, isStrictOperator: boolean) {
     try {
       if (!isStrictOperator && guruId) {
         const { data: listGuruMapel, error: errGuruMapel } = await supabase
           .from('guru_mapel')
-          .select(`
+          .select(
+            `
             mapel_id,
             mapel:mapel_id (
               id,
-              nama_mapel
+              nama_mapel,
+              jenjang,
+              urutan
             )
-          `)
+          `
+          )
           .eq('guru_id', guruId)
 
         if (!errGuruMapel && listGuruMapel && listGuruMapel.length > 0) {
           const formattedMapel = listGuruMapel
             .map((item: any) => item.mapel)
             .filter(Boolean)
-            .map((m: any) => ({ id: m.id, nama: m.nama_mapel }))
-            .sort((a: any, b: any) => a.nama.localeCompare(b.nama))
+            .map((m: any) => ({
+              id: m.id,
+              nama: m.nama_mapel,
+              jenjang: m.jenjang || 'SMP',
+              urutan: m.urutan ?? 999,
+            }))
+            .sort((a: any, b: any) => {
+              if (a.urutan !== b.urutan) return a.urutan - b.urutan
+              return a.nama.localeCompare(b.nama)
+            })
 
           setMapelList(formattedMapel)
 
@@ -267,11 +335,25 @@ export default function LaporanPage() {
       } else {
         const { data: dataMapel } = await supabase
           .from('mapel')
-          .select('id, nama_mapel')
+          .select('id, nama_mapel, jenjang, urutan')
+          .order('urutan', { ascending: true })
           .order('nama_mapel', { ascending: true })
 
         if (dataMapel) {
-          const formatted = dataMapel.map(m => ({ id: m.id, nama: m.nama_mapel }))
+          const formatted = dataMapel
+            .map((m: any) => ({
+              id: m.id,
+              nama: m.nama_mapel,
+              jenjang: m.jenjang || 'SMP',
+              urutan: m.urutan ?? 999,
+            }))
+            .sort((a, b) => {
+              if ((a.urutan ?? 999) !== (b.urutan ?? 999)) {
+                return (a.urutan ?? 999) - (b.urutan ?? 999)
+              }
+              return a.nama.localeCompare(b.nama)
+            })
+
           setMapelList(formatted)
           if (formatted.length > 0) {
             setFilterMapelBankSoal(formatted[0].nama)
@@ -281,25 +363,35 @@ export default function LaporanPage() {
 
       const { data: dataKelas } = await supabase
         .from('kelas')
-        .select('id, nama_kelas, tingkat, wali_kelas_id')
-        .order('nama_kelas', { ascending: true })
+        .select('id, nama_kelas, tingkat, jenjang, wali_kelas_id')
 
       const { data: dataSiswa } = await supabase
         .from('siswa')
-        .select('id, nama_lengkap, nisn, kelas_id')
+        .select('*')
         .order('nama_lengkap', { ascending: true })
 
       if (dataKelas) {
-        const mappedKelas = dataKelas.map(k => ({
-          id: k.id,
-          nama: k.nama_kelas,
-          tingkat: k.tingkat,
-          wali_kelas_id: k.wali_kelas_id,
-        }))
+        const mappedKelas = dataKelas
+          .map((k: any) => ({
+            id: k.id,
+            nama: k.nama_kelas,
+            tingkat: k.tingkat,
+            jenjang: k.jenjang,
+            wali_kelas_id: k.wali_kelas_id,
+          }))
+          .sort((a, b) => {
+            const weightA = getKelasGradeWeight(a.nama, a.tingkat)
+            const weightB = getKelasGradeWeight(b.nama, b.tingkat)
+            if (weightA !== weightB) return weightA - weightB
+            return a.nama.localeCompare(b.nama, 'id', { numeric: true })
+          })
+
         setKelasList(mappedKelas)
 
         if (!isStrictOperator && guruId) {
-          const kelasBinaan = mappedKelas.find(k => Number(k.wali_kelas_id) === Number(guruId))
+          const kelasBinaan = mappedKelas.find(
+            (k) => Number(k.wali_kelas_id) === Number(guruId)
+          )
           if (kelasBinaan) {
             setWaliKelasAssignedId(kelasBinaan.id)
             setFilterKelasRapor(String(kelasBinaan.id))
@@ -311,17 +403,92 @@ export default function LaporanPage() {
         }
       }
 
-      if (dataSiswa) setSiswaList(dataSiswa as any)
-
+      if (dataSiswa) {
+        const sortedSiswa = [...dataSiswa].sort((a: any, b: any) =>
+          (a.nama_lengkap || '').localeCompare(b.nama_lengkap || '', 'id')
+        )
+        setSiswaList(sortedSiswa as any)
+      }
     } catch (err) {
       console.error('Error fetching master data:', err)
     }
   }
 
-  // HELPER KHUSUS MENGAMBIL WALI KELAS BERDASARKAN `kelas.wali_kelas_id`
-  const resolveWaliKelasByKelasId = async (kelasId: number | string | null): Promise<GuruInfo> => {
+  // PENGELOMPOKAN DROPDOWN OPSI A (SMP 7-9 & SMK 10-12)
+  const groupedKelasOptions = useMemo(() => {
+    const smp = kelasList.filter(
+      (k) => detectUnitByKelas(k.nama, k.jenjang, k.tingkat) === 'SMP'
+    )
+    const smk = kelasList.filter(
+      (k) => detectUnitByKelas(k.nama, k.jenjang, k.tingkat) === 'SMK'
+    )
+    return { smp, smk }
+  }, [kelasList])
+
+  const groupedMapelOptions = useMemo(() => {
+    const smp = mapelList.filter(
+      (m) => (m.jenjang || 'SMP').toUpperCase() !== 'SMK'
+    )
+    const smk = mapelList.filter(
+      (m) => (m.jenjang || '').toUpperCase() === 'SMK'
+    )
+    return { smp, smk }
+  }, [mapelList])
+
+  // Helper Render `<optgroup>` Kelas Opsi A untuk dipakai ulang di seluruh 8 kartu
+  const renderKelasOptGroups = (useNameAsValue = false) => (
+    <>
+      {groupedKelasOptions.smp.length > 0 && (
+        <optgroup label="── SMP MUNA MUSTOFA (Kelas 7–9) ──">
+          {groupedKelasOptions.smp.map((k) => (
+            <option key={k.id} value={useNameAsValue ? k.nama : k.id}>
+              {k.nama}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {groupedKelasOptions.smk.length > 0 && (
+        <optgroup label="── SMK MUNA MUSTOFA (Kelas 10–12) ──">
+          {groupedKelasOptions.smk.map((k) => (
+            <option key={k.id} value={useNameAsValue ? k.nama : k.id}>
+              {k.nama}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
+  )
+
+  // Helper Render `<optgroup>` Mapel Terkelompok SMP vs SMK
+  const renderMapelOptGroups = (useNameAsValue = false) => (
+    <>
+      {groupedMapelOptions.smp.length > 0 && (
+        <optgroup label="── MAPEL SMP MUNA MUSTOFA ──">
+          {groupedMapelOptions.smp.map((m) => (
+            <option key={m.id} value={useNameAsValue ? m.nama : m.id}>
+              {m.nama}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {groupedMapelOptions.smk.length > 0 && (
+        <optgroup label="── MAPEL SMK MUNA MUSTOFA ──">
+          {groupedMapelOptions.smk.map((m) => (
+            <option key={m.id} value={useNameAsValue ? m.nama : m.id}>
+              {m.nama}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
+  )
+
+  // HELPER MENGAMBIL WALI KELAS
+  const resolveWaliKelasByKelasId = async (
+    kelasId: number | string | null
+  ): Promise<GuruInfo> => {
     if (kelasId) {
-      const kelasObj = kelasList.find(k => Number(k.id) === Number(kelasId))
+      const kelasObj = kelasList.find((k) => Number(k.id) === Number(kelasId))
       let waliId = kelasObj?.wali_kelas_id
 
       if (!waliId) {
@@ -357,7 +524,6 @@ export default function LaporanPage() {
     }
   }
 
-  // HELPER PENCARI IDENTITAS & JABATAN PENANDATANGAN PDF
   const resolvePenandatanganPDF = async (options: {
     mode: 'mapel' | 'wali' | 'umum'
     mapelId?: number | string | null
@@ -379,11 +545,6 @@ export default function LaporanPage() {
     }
 
     const buildJabatanLabel = (): string => {
-      if (options.mode === 'mapel') {
-        return namaMapelTerpilih
-          ? `Guru Mata Pelajaran ${namaMapelTerpilih}`
-          : 'Guru Mata Pelajaran'
-      }
       if (namaMapelTerpilih) {
         return `Guru Mata Pelajaran ${namaMapelTerpilih}`
       }
@@ -484,14 +645,12 @@ export default function LaporanPage() {
     }
   }
 
-  // KOP SURAT GAMBAR PNG
   const headerKopHTML = `
     <div style="text-align: center; margin-bottom: 12px;">
       <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; max-height: 140px; object-fit: contain;" />
     </div>
   `
 
-  // FOOTER TTD GENERATOR DINAMIS (2 PIHAK - LAPORAN UMUM)
   const getFooterTtdHTML = (guruInfo: GuruInfo) => `
     <div style="margin-top: 25px; font-family: 'Times New Roman', serif; font-size: 9.5pt; page-break-inside: avoid; color: #000;">
       <table style="width: 100%; border: none;">
@@ -524,8 +683,9 @@ export default function LaporanPage() {
   `
 
   const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
-    const csvContent = 'data:text/csv;charset=utf-8,' 
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n')
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...rows.map((e) => e.map((val) => `"${val}"`).join(','))].join('\n')
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
@@ -535,34 +695,37 @@ export default function LaporanPage() {
     document.body.removeChild(link)
   }
 
-  // PARSER & PEMBERSIH OTOMATIS NASKAH SOAL (MEMBUANG KUNCI JAWABAN, DUPLIKASI HEADER, & MERAPIKAN 2 KOLOM)
+  // PARSER NASKAH SOAL 2 KOLOM
   const formatNaskahSoalHematKertas = (rawText: string): string => {
     if (!rawText) return '<p><i>Isi naskah soal kosong di database.</i></p>'
 
-    // 1. Potong semua teks mulai dari bagian KUNCI JAWABAN atau LEMBAR PENGESAHAN ke bawah
     let cleanText = rawText
       .split(/\n\s*#{0,4}\s*(?:KUNCI\s*JAWABAN|PEDOMAN\s*PENSKORAN|LEMBAR\s*PENGESAHAN)/i)[0]
       .trim()
 
-    // 2. Ubah format bold **teks** menjadi <b>teks</b>
     cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
 
     const lines = cleanText.split('\n')
-    const soalItems: { num: string; question: string; options: { letter: string; text: string }[] }[] = []
-    let currentSoal: { num: string; question: string; options: { letter: string; text: string }[] } | null = null
+    const soalItems: {
+      num: string
+      question: string
+      options: { letter: string; text: string }[]
+    }[] = []
+    let currentSoal: {
+      num: string
+      question: string
+      options: { letter: string; text: string }[]
+    } | null = null
     let startedSoal = false
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim()
       if (!line) continue
 
-      // Deteksi nomor soal (misal: "1. Ayat Alquran..." atau "1) ...")
       const qMatch = line.match(/^(\d{1,2})[\.\)]\s+(.+)$/)
       if (qMatch) {
         startedSoal = true
-        if (currentSoal) {
-          soalItems.push(currentSoal)
-        }
+        if (currentSoal) soalItems.push(currentSoal)
         currentSoal = {
           num: qMatch[1],
           question: qMatch[2].trim(),
@@ -571,10 +734,8 @@ export default function LaporanPage() {
         continue
       }
 
-      // Abaikan semua header identitas/petunjuk sebelum soal nomor 1 dimulai
       if (!startedSoal) continue
 
-      // Abaikan sub-judul topik (misal "### Topik 1: ..." atau "A. TOPIK: ...") agar hemat kertas
       if (
         /^#{1,4}\s*/.test(line) ||
         /^[A-Z]\.\s*TOPIK\b/i.test(line) ||
@@ -583,7 +744,6 @@ export default function LaporanPage() {
         continue
       }
 
-      // Deteksi pilihan jawaban a/b/c/d atau A/B/C/D
       const optMatch = line.match(/^([a-dA-D])[\.\)]\s*(.+)$/)
       if (optMatch && currentSoal) {
         currentSoal.options.push({
@@ -593,7 +753,6 @@ export default function LaporanPage() {
         continue
       }
 
-      // Jika baris lanjutan dari pertanyaan atau opsi terakhir
       if (currentSoal) {
         if (currentSoal.options.length > 0) {
           const lastOpt = currentSoal.options[currentSoal.options.length - 1]
@@ -604,15 +763,11 @@ export default function LaporanPage() {
       }
     }
 
-    if (currentSoal) {
-      soalItems.push(currentSoal)
-    }
+    if (currentSoal) soalItems.push(currentSoal)
 
-    // Jika berhasil ter-parse sebagai daftar butir soal, render dengan struktur kompak anti-terpotong
     if (soalItems.length > 0) {
       return soalItems
         .map((item) => {
-          // Cek apakah semua opsi pendek (<= 22 karakter) -> tampilkan 2 baris (A & C kiri, B & D kanan) agar makin hemat
           const isShortOptions =
             item.options.length === 4 && item.options.every((o) => o.text.length <= 22)
 
@@ -650,7 +805,6 @@ export default function LaporanPage() {
         .join('')
     }
 
-    // Fallback jika format soal berupa esai/uraian bebas
     const cleanedLines = lines
       .filter((l) => !/^#{1,4}\s*/.test(l.trim()))
       .map((l) => l.trim())
@@ -658,7 +812,6 @@ export default function LaporanPage() {
     return cleanedLines.map((l) => `<p style="margin: 0 0 4px 0;">${l}</p>`).join('')
   }
 
-  // HELPER FILTER KELAS PRESISI UNTUK BANK SOAL (MENCEGAH VIII A DAN IX A TERCAMPUR)
   const filterSoalByKelasExact = (soalList: any[], selectedKelasNama: string) => {
     if (!selectedKelasNama) return soalList
     const targetClean = selectedKelasNama.trim().toUpperCase()
@@ -667,12 +820,14 @@ export default function LaporanPage() {
     return soalList.filter((s) => {
       const fk = String(s.fase_kelas || '').toUpperCase()
       const fkNoSpace = fk.replace(/\s+/g, '')
-      const regexWord = new RegExp(`(^|[^A-Z0-9])${targetClean.replace(/\s+/g, '\\s*')}([^A-Z0-9]|$)`, 'i')
+      const regexWord = new RegExp(
+        `(^|[^A-Z0-9])${targetClean.replace(/\s+/g, '\\s*')}([^A-Z0-9]|$)`,
+        'i'
+      )
       return regexWord.test(fk) || fkNoSpace.includes(targetNoSpace)
     })
   }
 
-  // HELPER UNDUH FILE MICROSOFT WORD (.DOC) UNTUK SOAL & KUNCI JAWABAN
   const triggerDownloadWord = (filename: string, htmlBody: string) => {
     const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
     const wordHtml = `
@@ -755,15 +910,9 @@ export default function LaporanPage() {
               margin-bottom: 1pt;
               text-align: justify;
             }
-            .soal-num {
-              font-weight: bold;
-            }
-            .opt-list {
-              padding-left: 14pt;
-            }
-            .opt-row {
-              margin-bottom: 0.5pt;
-            }
+            .soal-num { font-weight: bold; }
+            .opt-list { padding-left: 14pt; }
+            .opt-row { margin-bottom: 0.5pt; }
             .opt-grid {
               width: 94%;
               margin-left: 14pt;
@@ -797,7 +946,6 @@ export default function LaporanPage() {
     URL.revokeObjectURL(url)
   }
 
-  // DOWNLOAD WORD (.DOC) NASKAH SOAL SISWA (2 KOLOM HEMAT KERTAS, TANPA KUNCI JAWABAN, SIAP EDIT)
   const handlePrintBankSoal = async () => {
     let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
     if (filterMapelBankSoal) {
@@ -808,13 +956,22 @@ export default function LaporanPage() {
     const soalData = filterSoalByKelasExact(rawSoalData || [], filterKelasBankSoal)
 
     if (error || !soalData || soalData.length === 0) {
-      alert(`Tidak ada naskah bank soal tersimpan ${filterMapelBankSoal ? `untuk mata pelajaran ${filterMapelBankSoal}` : ''} ${filterKelasBankSoal ? `kelas ${filterKelasBankSoal}` : ''}.`)
+      alert(
+        `Tidak ada naskah bank soal tersimpan ${
+          filterMapelBankSoal ? `untuk mata pelajaran ${filterMapelBankSoal}` : ''
+        } ${filterKelasBankSoal ? `kelas ${filterKelasBankSoal}` : ''}.`
+      )
       return
     }
 
     const htmlSections = soalData
-      .map((s, idx) => `
-        ${idx > 0 ? '<br clear="all" style="page-break-before:always; mso-break-type:section-break" />' : ''}
+      .map(
+        (s, idx) => `
+        ${
+          idx > 0
+            ? '<br clear="all" style="page-break-before:always; mso-break-type:section-break" />'
+            : ''
+        }
         <div class="WordSectionHeader">
           <div style="text-align: center; margin-bottom: 4px;">
             <img src="/kop-surat.png" alt="Kop Surat" width="680" style="width: 100%; max-height: 82px; object-fit: contain;" />
@@ -852,7 +1009,8 @@ export default function LaporanPage() {
         <div class="WordSectionSoal">
           ${formatNaskahSoalHematKertas(s.isi_soal)}
         </div>
-      `)
+      `
+      )
       .join('')
 
     const safeMapel = (filterMapelBankSoal || 'Semua_Mapel').replace(/[^a-zA-Z0-9]/g, '_')
@@ -860,7 +1018,6 @@ export default function LaporanPage() {
     triggerDownloadWord(`Naskah_Soal_${safeMapel}_${safeKelas}`, htmlSections)
   }
 
-  // DOWNLOAD WORD (.DOC) KUNCI JAWABAN & PEDOMAN PENILAIAN (SIAP EDIT)
   const handlePrintKunciJawaban = async () => {
     let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
     if (filterMapelBankSoal) {
@@ -937,16 +1094,27 @@ export default function LaporanPage() {
     }
 
     if (jenis === 'absensi') {
-      const selectedK = kelasList.find(k => k.id === Number(filterKelasAbsensi))
-      judulDoc = `LAPORAN REKAPITULASI PRESENSI HARIAN SISWA ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} - SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}`
-      
-      let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
+      const selectedK = kelasList.find((k) => k.id === Number(filterKelasAbsensi))
+      judulDoc = `LAPORAN REKAPITULASI PRESENSI HARIAN SISWA ${
+        selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
+      } - SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}`
+
+      let querySiswa = supabase
+        .from('siswa')
+        .select('*, kelas:kelas_id(nama_kelas)')
+        .order('nama_lengkap', { ascending: true })
       if (filterKelasAbsensi) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasAbsensi))
       const { data: siswaData } = await querySiswa
 
-      let queryAbsensi = supabase.from('absensi').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
-      if (filterKelasAbsensi) queryAbsensi = queryAbsensi.eq('kelas_id', Number(filterKelasAbsensi))
-      if (filterBulanAbsensi) queryAbsensi = queryAbsensi.ilike('tanggal', `${filterBulanAbsensi}%`)
+      let queryAbsensi = supabase
+        .from('absensi')
+        .select('*')
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
+      if (filterKelasAbsensi)
+        queryAbsensi = queryAbsensi.eq('kelas_id', Number(filterKelasAbsensi))
+      if (filterBulanAbsensi)
+        queryAbsensi = queryAbsensi.ilike('tanggal', `${filterBulanAbsensi}%`)
 
       const { data: absensiData } = await queryAbsensi
 
@@ -954,11 +1122,13 @@ export default function LaporanPage() {
         mode: 'umum',
       })
 
-      const rekapSiswa = (siswaData || []).map(siswa => {
-        const riwayatAll = (absensiData || []).filter(a => Number(a.siswa_id) === Number(siswa.id))
-        
+      const rekapSiswa = (siswaData || []).map((siswa) => {
+        const riwayatAll = (absensiData || []).filter(
+          (a) => Number(a.siswa_id) === Number(siswa.id)
+        )
+
         const presensiHarianMap = new Map<string, string>()
-        riwayatAll.forEach(a => {
+        riwayatAll.forEach((a) => {
           const tgl = a.tanggal
           const jamStr = a.jam_ke || ''
           const isJam1 = jamStr.includes('Jam Ke-1') || jamStr.includes('Ke-1')
@@ -973,11 +1143,13 @@ export default function LaporanPage() {
         return {
           nisn: siswa.nisn || '-',
           nama: siswa.nama_lengkap,
-          kelas: (siswa as any).kelas?.nama_kelas || (Array.isArray((siswa as any).kelas) ? (siswa as any).kelas[0]?.nama_kelas : '-'),
-          hadir: statusList.filter(st => st === 'HADIR').length,
-          sakit: statusList.filter(st => st === 'SAKIT').length,
-          izin: statusList.filter(st => st === 'IZIN').length,
-          alpa: statusList.filter(st => st === 'ALPA').length
+          kelas:
+            (siswa as any).kelas?.nama_kelas ||
+            (Array.isArray((siswa as any).kelas) ? (siswa as any).kelas[0]?.nama_kelas : '-'),
+          hadir: statusList.filter((st) => st === 'HADIR').length,
+          sakit: statusList.filter((st) => st === 'SAKIT').length,
+          izin: statusList.filter((st) => st === 'IZIN').length,
+          alpa: statusList.filter((st) => st === 'ALPA').length,
         }
       })
 
@@ -1004,7 +1176,9 @@ export default function LaporanPage() {
           <tbody>
             ${
               rekapSiswa.length > 0
-                ? rekapSiswa.map((s, idx) => `
+                ? rekapSiswa
+                    .map(
+                      (s, idx) => `
                     <tr>
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${s.nisn}</td>
@@ -1015,51 +1189,65 @@ export default function LaporanPage() {
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${s.izin}</td>
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${s.alpa}</td>
                     </tr>
-                  `).join('')
+                  `
+                    )
+                    .join('')
                 : `<tr><td colspan="8" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada data rekapitulasi absensi.</td></tr>`
             }
           </tbody>
         </table>
       `
     } else if (jenis === 'leger') {
-      const selectedK = kelasList.find(k => k.id === Number(filterKelasLeger))
-      const selectedM = mapelList.find(m => m.id === Number(filterMapelLeger))
+      const selectedK = kelasList.find((k) => k.id === Number(filterKelasLeger))
+      const selectedM = mapelList.find((m) => m.id === Number(filterMapelLeger))
 
-      judulDoc = `LEGER NILAI AKADEMIK SISWA ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} ${selectedM ? `- MAPEL: ${selectedM.nama.toUpperCase()}` : ''}`
+      judulDoc = `LEGER NILAI AKADEMIK SISWA ${
+        selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
+      } ${selectedM ? `- MAPEL: ${selectedM.nama.toUpperCase()}` : ''}`
 
       guruCetak = await resolvePenandatanganPDF({
         mode: 'mapel',
         mapelId: filterMapelLeger || null,
       })
 
-      let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
+      let querySiswa = supabase
+        .from('siswa')
+        .select('*, kelas:kelas_id(nama_kelas)')
+        .order('nama_lengkap', { ascending: true })
       if (filterKelasLeger) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasLeger))
       const { data: siswaData } = await querySiswa
 
-      let queryNilai = supabase.from('nilai').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
+      let queryNilai = supabase
+        .from('nilai')
+        .select('*')
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
       if (filterKelasLeger) queryNilai = queryNilai.eq('kelas_id', Number(filterKelasLeger))
       if (filterMapelLeger) queryNilai = queryNilai.eq('mapel_id', Number(filterMapelLeger))
 
       const { data: nilaiData } = await queryNilai
 
-      const rekapLeger = (siswaData || []).map(siswa => {
-        const listN = (nilaiData || []).filter(n => Number(n.siswa_id) === Number(siswa.id))
+      const rekapLeger = (siswaData || []).map((siswa) => {
+        const listN = (nilaiData || []).filter((n) => Number(n.siswa_id) === Number(siswa.id))
         const n = listN.length > 0 ? listN[listN.length - 1] : {}
 
         const tugas = n.nilai_tugas ?? 0
         const uts = n.nilai_uts ?? 0
         const uas = n.nilai_uas ?? 0
-        const komps = [tugas, uts, uas].filter(v => v > 0)
-        const avg = komps.length > 0 ? (komps.reduce((a, b) => a + b, 0) / komps.length).toFixed(1) : '0.0'
+        const komps = [tugas, uts, uas].filter((v) => v > 0)
+        const avg =
+          komps.length > 0 ? (komps.reduce((a, b) => a + b, 0) / komps.length).toFixed(1) : '0.0'
 
         return {
           nama: siswa.nama_lengkap,
-          kelas: (siswa as any).kelas?.nama_kelas || (Array.isArray((siswa as any).kelas) ? (siswa as any).kelas[0]?.nama_kelas : '-'),
+          kelas:
+            (siswa as any).kelas?.nama_kelas ||
+            (Array.isArray((siswa as any).kelas) ? (siswa as any).kelas[0]?.nama_kelas : '-'),
           mapel: n.mata_pelajaran || selectedM?.nama || '-',
           tugas: n.nilai_tugas ?? '-',
           uts: n.nilai_uts ?? '-',
           uas: n.nilai_uas ?? '-',
-          avg
+          avg,
         }
       })
 
@@ -1082,7 +1270,9 @@ export default function LaporanPage() {
           <tbody>
             ${
               rekapLeger.length > 0
-                ? rekapLeger.map((s, idx) => `
+                ? rekapLeger
+                    .map(
+                      (s, idx) => `
                     <tr>
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
                       <td style="border: 1px solid #000; padding: 5px;">${s.nama}</td>
@@ -1093,19 +1283,28 @@ export default function LaporanPage() {
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${s.uas}</td>
                       <td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">${s.avg}</td>
                     </tr>
-                  `).join('')
+                  `
+                    )
+                    .join('')
                 : `<tr><td colspan="8" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada data nilai akademik.</td></tr>`
             }
           </tbody>
         </table>
       `
     } else if (jenis === 'jurnal') {
-      const selectedK = kelasList.find(k => k.id === Number(filterKelasJurnal))
-      judulDoc = `JURNAL AGENDA MENGAJAR HARIAN GURU ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
+      const selectedK = kelasList.find((k) => k.id === Number(filterKelasJurnal))
+      judulDoc = `JURNAL AGENDA MENGAJAR HARIAN GURU ${
+        selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
+      }`
 
-      let queryAgenda = supabase.from('jurnal_agenda').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('created_at', { ascending: false })
+      let queryAgenda = supabase
+        .from('jurnal_agenda')
+        .select('*')
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
+        .order('created_at', { ascending: false })
       if (filterKelasJurnal) queryAgenda = queryAgenda.eq('kelas_id', Number(filterKelasJurnal))
-      
+
       if (filterTanggalJurnal) {
         queryAgenda = queryAgenda.eq('tanggal', filterTanggalJurnal)
       } else if (filterBulanJurnal) {
@@ -1114,7 +1313,9 @@ export default function LaporanPage() {
 
       const { data: agendaData } = await queryAgenda
 
-      const uniqueMapels = Array.from(new Set((agendaData || []).map((a: any) => a.mapel).filter(Boolean)))
+      const uniqueMapels = Array.from(
+        new Set((agendaData || []).map((a: any) => a.mapel).filter(Boolean))
+      )
       const singleMapelJurnal = uniqueMapels.length === 1 ? String(uniqueMapels[0]) : null
       const firstAgenda = (agendaData || [])[0]
 
@@ -1129,7 +1330,13 @@ export default function LaporanPage() {
         <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 5px;">${judulDoc}</h3>
         <p style="text-align: center; font-size: 10pt; margin-bottom: 15px;">
           Semester: <b>${selectedSemester}</b> | Tahun Ajaran: <b>${selectedTahunAjaran}</b>
-          ${filterTanggalJurnal ? ` | Tanggal: <b>${filterTanggalJurnal}</b>` : filterBulanJurnal ? ` | Bulan: <b>${filterBulanJurnal}</b>` : ''}
+          ${
+            filterTanggalJurnal
+              ? ` | Tanggal: <b>${filterTanggalJurnal}</b>`
+              : filterBulanJurnal
+              ? ` | Bulan: <b>${filterBulanJurnal}</b>`
+              : ''
+          }
         </p>
         <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
           <thead>
@@ -1146,7 +1353,9 @@ export default function LaporanPage() {
           <tbody>
             ${
               (agendaData || []).length > 0
-                ? agendaData!.map((a, idx) => `
+                ? agendaData!
+                    .map(
+                      (a, idx) => `
                     <tr>
                       <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
                       <td style="border: 1px solid #000; padding: 6px; text-align: center;">${a.tanggal || '-'}</td>
@@ -1156,19 +1365,24 @@ export default function LaporanPage() {
                       <td style="border: 1px solid #000; padding: 6px; font-family: monospace; font-size: 9pt;">${a.absen_siswa || 'Nihil'}</td>
                       <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${a.status || 'SELESAI'}</td>
                     </tr>
-                  `).join('')
+                  `
+                    )
+                    .join('')
                 : `<tr><td colspan="7" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada data agenda mengajar tersimpan.</td></tr>`
             }
           </tbody>
         </table>
       `
     } else if (jenis === 'bimbingan') {
-      const selectedK = kelasList.find(k => k.id === Number(filterKelasBimbingan))
-      judulDoc = `LAPORAN CATATAN BIMBINGAN GURU WALI ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
+      const selectedK = kelasList.find((k) => k.id === Number(filterKelasBimbingan))
+      judulDoc = `LAPORAN CATATAN BIMBINGAN GURU WALI ${
+        selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
+      }`
 
       let queryBimbingan = supabase.from('bimbingan_wali').select('*')
       if (selectedK) queryBimbingan = queryBimbingan.eq('kelas', selectedK.nama)
-      if (filterBulanBimbingan) queryBimbingan = queryBimbingan.ilike('tanggal', `${filterBulanBimbingan}%`)
+      if (filterBulanBimbingan)
+        queryBimbingan = queryBimbingan.ilike('tanggal', `${filterBulanBimbingan}%`)
 
       const { data: bimbinganData } = await queryBimbingan
 
@@ -1179,7 +1393,11 @@ export default function LaporanPage() {
 
       contentBody = `
         <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 5px;">${judulDoc}</h3>
-        ${filterBulanBimbingan ? `<p style="text-align: center; font-size: 10pt; margin-bottom: 15px;">Filter Bulan: <b>${filterBulanBimbingan}</b></p>` : ''}
+        ${
+          filterBulanBimbingan
+            ? `<p style="text-align: center; font-size: 10pt; margin-bottom: 15px;">Filter Bulan: <b>${filterBulanBimbingan}</b></p>`
+            : ''
+        }
         <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
           <thead>
             <tr style="background-color: #f2f2f2;">
@@ -1193,7 +1411,9 @@ export default function LaporanPage() {
           <tbody>
             ${
               (bimbinganData || []).length > 0
-                ? bimbinganData!.map((b, idx) => `
+                ? bimbinganData!
+                    .map(
+                      (b, idx) => `
                     <tr>
                       <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
                       <td style="border: 1px solid #000; padding: 5px;">${b.nama_siswa || 'Siswa'}</td>
@@ -1201,7 +1421,9 @@ export default function LaporanPage() {
                       <td style="border: 1px solid #000; padding: 5px;">${b.masalah || '-'}</td>
                       <td style="border: 1px solid #000; padding: 5px;">${b.solusi || b.keterangan_hukuman || '-'}</td>
                     </tr>
-                  `).join('')
+                  `
+                    )
+                    .join('')
                 : `<tr><td colspan="5" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada catatan bimbingan guru wali tersimpan.</td></tr>`
             }
           </tbody>
@@ -1212,38 +1434,82 @@ export default function LaporanPage() {
     executePrint(judulDoc, contentBody, guruCetak)
   }
 
-  // GENERATOR DOKUMEN RAPOR PROFESIONAL 2 HALAMAN (UNTUK PDF & MICROSOFT WORD)
+  // =========================================================================
+  // GENERATOR DOKUMEN RAPOR 3 HALAMAN (COVER + IDENTITAS SISWA + NILAI)
+  // ISOLASI KETAT MAPEL SMP vs SMK & MENYESUAIKAN FASE D/E/F + PKL
+  // =========================================================================
   const buildRaporDocumentData = async () => {
     if (!selectedSiswaRapor) {
-      alert('Pilih siswa terlebih dahulu untuk mencetak Lembar Rapor!')
+      alert('Pilih siswa terlebih dahulu untuk mencetak atau mengedit Lembar Rapor!')
       return null
     }
 
-    const targetSiswa = siswaList.find(s => s.id === Number(selectedSiswaRapor))
+    const targetSiswa = siswaList.find((s) => s.id === Number(selectedSiswaRapor))
     if (!targetSiswa) return null
 
-    const kelasObj = kelasList.find(k => Number(k.id) === Number(targetSiswa.kelas_id))
+    const kelasObj = kelasList.find((k) => Number(k.id) === Number(targetSiswa.kelas_id))
     let namaKelasStr = kelasObj?.nama || '-'
     let tingkatStr = kelasObj?.tingkat || ''
+    let jenjangKelas = kelasObj?.jenjang || null
 
     if (targetSiswa.kelas_id && !kelasObj) {
       const { data: kelasSiswa } = await supabase
         .from('kelas')
-        .select('nama_kelas, tingkat')
+        .select('nama_kelas, tingkat, jenjang')
         .eq('id', targetSiswa.kelas_id)
         .maybeSingle()
       if (kelasSiswa) {
         namaKelasStr = kelasSiswa.nama_kelas
         tingkatStr = kelasSiswa.tingkat || ''
+        jenjangKelas = kelasSiswa.jenjang || null
       }
     }
 
+    // Deteksi Otomatis Unit & Fase Siswa
+    const unitSiswa: 'SMP' | 'SMK' = detectUnitByKelas(namaKelasStr, jenjangKelas, tingkatStr)
+    const gradeWeight = getKelasGradeWeight(namaKelasStr, tingkatStr)
+    const faseKurikulum =
+      unitSiswa === 'SMP' ? 'D' : gradeWeight === 10 ? 'E' : 'F'
+    const namaSatuanPendidikan =
+      unitSiswa === 'SMP' ? 'SMP MUNA MUSTOFA' : 'SMK MUNA MUSTOFA'
+    const namaSatuanTitle =
+      unitSiswa === 'SMP' ? 'SMP Muna Mustofa' : 'SMK Muna Mustofa'
+    const sekolahAsalDefault =
+      targetSiswa.sekolah_asal ||
+      (unitSiswa === 'SMP' ? 'SD / MI ........................................' : 'SMP / MTs ........................................')
+
+    // Ambil Master Mapel dengan ISOLASI KETAT sesuai unitSiswa (Mencegah mapel SMK masuk ke rapor SMP)
     const { data: allMapelDb } = await supabase
       .from('mapel')
-      .select('id, nama_mapel')
+      .select('id, nama_mapel, jenjang, urutan, tingkat')
+      .order('urutan', { ascending: true })
       .order('nama_mapel', { ascending: true })
 
-    const semuaMapel = (allMapelDb || []).map(m => ({ id: m.id, nama: m.nama_mapel }))
+    const filteredMapelUnit = (allMapelDb || [])
+      .filter((m: any) => {
+        const mJenjang = String(m.jenjang || 'SMP').trim().toUpperCase()
+        if (unitSiswa === 'SMP') {
+          return mJenjang !== 'SMK'
+        } else {
+          if (mJenjang !== 'SMK') return false
+          // Jika mapel SMK memiliki batas tingkat tertentu (misal 'X', 'XI', 'XII'), saring juga
+          const mTingkat = String(m.tingkat || '').trim().toUpperCase()
+          if (!mTingkat || mTingkat === 'SEMUA' || mTingkat === 'ALL') return true
+          if (gradeWeight === 10 && (mTingkat === 'X' || mTingkat === '10')) return true
+          if (gradeWeight === 11 && (mTingkat === 'XI' || mTingkat === '11')) return true
+          if (gradeWeight === 12 && (mTingkat === 'XII' || mTingkat === '12')) return true
+          return false
+        }
+      })
+      .map((m: any) => ({
+        id: m.id,
+        nama: m.nama_mapel,
+        urutan: m.urutan ?? 999,
+      }))
+      .sort((a, b) => {
+        if (a.urutan !== b.urutan) return a.urutan - b.urutan
+        return a.nama.localeCompare(b.nama)
+      })
 
     const { data: nilaiSiswa } = await supabase
       .from('nilai')
@@ -1259,10 +1525,12 @@ export default function LaporanPage() {
       .eq('semester', selectedSemester)
       .eq('tahun_ajaran', selectedTahunAjaran)
 
-    const waliKelasInfo = await resolveWaliKelasByKelasId(targetSiswa.kelas_id || filterKelasRapor)
+    const waliKelasInfo = await resolveWaliKelasByKelasId(
+      targetSiswa.kelas_id || filterKelasRapor
+    )
 
     const presensiHarianMap = new Map<string, string>()
-    ;(absensiSiswa || []).forEach(a => {
+    ;(absensiSiswa || []).forEach((a) => {
       const tgl = a.tanggal
       const jamStr = a.jam_ke || ''
       const isJam1 = jamStr.includes('Jam Ke-1') || jamStr.includes('Ke-1')
@@ -1273,14 +1541,14 @@ export default function LaporanPage() {
     })
 
     const statusList = Array.from(presensiHarianMap.values())
-    const sakit = statusList.filter(st => st === 'SAKIT').length
-    const izin = statusList.filter(st => st === 'IZIN').length
-    const alpa = statusList.filter(st => st === 'ALPA').length
+    const sakit = statusList.filter((st) => st === 'SAKIT').length
+    const izin = statusList.filter((st) => st === 'IZIN').length
+    const alpa = statusList.filter((st) => st === 'ALPA').length
 
-    const mapelUtama = semuaMapel.filter(m => !/qiro|pramuka|ekstra/i.test(m.nama))
-    const mapelEkskul = semuaMapel.filter(m => /qiro|pramuka|ekstra/i.test(m.nama))
+    const mapelUtama = filteredMapelUnit.filter((m) => !/qiro|pramuka|ekstra/i.test(m.nama))
+    const mapelEkskul = filteredMapelUnit.filter((m) => /qiro|pramuka|ekstra/i.test(m.nama))
 
-    const rowQiroah = (nilaiSiswa || []).find(n => /qiro/i.test(n.mata_pelajaran || ''))
+    const rowQiroah = (nilaiSiswa || []).find((n) => /qiro/i.test(n.mata_pelajaran || ''))
     const nilaiQiroahNum = rowQiroah
       ? Math.round(
           [rowQiroah.nilai_tugas, rowQiroah.nilai_uts, rowQiroah.nilai_uas]
@@ -1290,113 +1558,243 @@ export default function LaporanPage() {
       : 85
     const predikatQiroah = getPredikatRapor(nilaiQiroahNum, "Qiro'ah & Tahfidz")
 
+    // Keputusan Kenaikan / Kelulusan Sesuai Unit SMP (7-9) atau SMK (10-12)
     let teksKeputusan = ''
     if (selectedSemester === 'Genap') {
-      const upperKelas = namaKelasStr.toUpperCase()
-      if (tingkatStr === '7' || upperKelas.startsWith('VII ')) {
-        teksKeputusan = 'NAIK KE KELAS VIII (DELAPAN)'
-      } else if (tingkatStr === '8' || upperKelas.startsWith('VIII ')) {
-        teksKeputusan = 'NAIK KE KELAS IX (SEMBILAN)'
+      if (unitSiswa === 'SMP') {
+        if (gradeWeight === 7) teksKeputusan = 'NAIK KE KELAS VIII (DELAPAN)'
+        else if (gradeWeight === 8) teksKeputusan = 'NAIK KE KELAS IX (SEMBILAN)'
+        else teksKeputusan = `LULUS DARI SATUAN PENDIDIKAN ${namaSatuanPendidikan}`
       } else {
-        teksKeputusan = 'LULUS DARI SATUAN PENDIDIKAN'
+        if (gradeWeight === 10) teksKeputusan = 'NAIK KE KELAS XI (SEBELAS)'
+        else if (gradeWeight === 11) teksKeputusan = 'NAIK KE KELAS XII (DUA BELAS)'
+        else teksKeputusan = `LULUS DARI SATUAN PENDIDIKAN ${namaSatuanPendidikan}`
       }
     }
+
+    const ttlText =
+      targetSiswa.tempat_lahir || targetSiswa.tanggal_lahir
+        ? `${targetSiswa.tempat_lahir || '................'}, ${targetSiswa.tanggal_lahir || '................'}`
+        : '........................................................'
 
     const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
     const htmlRaporLengkap = `
       <!-- WATERMARK LOGO HALUS -->
       <div class="watermark">
-        <img src="${originUrl}/logo-smp.jpg" alt="Watermark SMP" />
+        <img src="${originUrl}/logo-smp.jpg" alt="Watermark Sekolah" />
       </div>
 
-      <!-- ==================== HALAMAN 1: IDENTITAS & CAPAIAN AKADEMIK ==================== -->
+      <!-- ==================== HALAMAN 1: COVER RAPOR ==================== -->
+      <div class="page-section cover-box">
+        <div style="text-align: center; margin-top: 24px;">
+          <img src="${originUrl}/logo-smp.jpg" alt="Logo Sekolah" style="width: 115px; height: 115px; object-fit: contain; margin: 0 auto;" />
+          <h2 style="margin: 18px 0 4px 0; font-size: 16pt; letter-spacing: 1px; text-transform: uppercase;">
+            LAPORAN HASIL BELAJAR
+          </h2>
+          <h3 style="margin: 0 0 6px 0; font-size: 14pt; letter-spacing: 0.8px; text-transform: uppercase;">
+            (RAPOR PESERTA DIDIK)
+          </h3>
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; text-transform: uppercase;">
+            ${namaSatuanPendidikan}
+          </p>
+          ${
+            unitSiswa === 'SMK'
+              ? `<p style="margin: 4px 0 0 0; font-size: 10.5pt; font-weight: bold;">Program Keahlian: Desain Komunikasi Visual (DKV)</p>`
+              : ''
+          }
+        </div>
+
+        <div style="margin: 70px auto 60px auto; width: 82%; text-align: center;">
+          <p style="margin: 0 0 8px 0; font-size: 11pt; font-weight: bold;">NAMA PESERTA DIDIK :</p>
+          <div style="border: 2px solid #000; padding: 12px 16px; font-size: 14pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 24px;">
+            ${targetSiswa.nama_lengkap.toUpperCase()}
+          </div>
+
+          <p style="margin: 0 0 8px 0; font-size: 11pt; font-weight: bold;">NIS / NISN :</p>
+          <div style="border: 2px solid #000; padding: 10px 16px; font-size: 12.5pt; font-weight: bold; letter-spacing: 1px;">
+            ${targetSiswa.nis || '-'} / ${targetSiswa.nisn || '-'}
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 80px; font-size: 11pt; font-weight: bold; line-height: 1.5; text-transform: uppercase;">
+          <p style="margin: 0;">YAYASAN MUNA MUSTOFA</p>
+          <p style="margin: 0;">${namaSatuanPendidikan}</p>
+          <p style="margin: 4px 0 0 0; font-size: 9.5pt; font-weight: normal; text-transform: none;">
+            Kalidadi, Kec. Kalirejo, Kab. Lampung Tengah / Gisting, Lampung
+          </p>
+          <p style="margin: 14px 0 0 0; font-size: 10.5pt;">
+            KEMENTERIAN PENDIDIKAN DASAR DAN MENENGAH<br/>REPUBLIK INDONESIA
+          </p>
+        </div>
+      </div>
+
+      <div class="page-break"></div>
+
+      <!-- ==================== HALAMAN 2: IDENTITAS SEKOLAH & PESERTA DIDIK ==================== -->
       <div class="page-section">
-        <div style="text-align: center; margin-bottom: 10px;">
-          <img src="${originUrl}/kop-surat.png" alt="Kop Surat" style="width: 100%; max-height: 130px; object-fit: contain;" />
-        </div>
-
         <div style="text-align: center; margin-bottom: 14px;">
-          <h2 style="margin: 0; font-size: 13pt; letter-spacing: 0.8px; text-transform: uppercase;">LAPORAN HASIL BELAJAR PESERTA DIDIK</h2>
-          <p style="margin: 2px 0 0 0; font-size: 10pt; font-weight: bold;">(RAPOR AKADEMIK SEMESTER ${selectedSemester.toUpperCase()})</p>
+          <h3 style="margin: 0; font-size: 12.5pt; text-transform: uppercase; text-decoration: underline;">
+            IDENTITAS SATUAN PENDIDIKAN &amp; PESERTA DIDIK
+          </h3>
         </div>
 
+        <h4 class="section-title">I. IDENTITAS SATUAN PENDIDIKAN</h4>
+        <table class="table-identitas" style="margin-bottom: 14px;">
+          <tr><td style="width: 34%;">1. Nama Satuan Pendidikan</td><td style="width: 3%;">:</td><td><b>${namaSatuanPendidikan}</b></td></tr>
+          <tr><td>2. NPSN / NSS</td><td>:</td><td>........................................................</td></tr>
+          <tr><td>3. Alamat Sekolah</td><td>:</td><td>Kalidadi, Kecamatan Kalirejo / Gisting, Provinsi Lampung</td></tr>
+          <tr><td>4. Kabupaten / Provinsi</td><td>:</td><td>Lampung Tengah / Lampung</td></tr>
+          ${
+            unitSiswa === 'SMK'
+              ? `<tr><td>5. Program / Konsentrasi Keahlian</td><td>:</td><td>Desain Komunikasi Visual (DKV)</td></tr>`
+              : ''
+          }
+        </table>
+
+        <h4 class="section-title">II. KETERANGAN TENTANG DIRI PESERTA DIDIK</h4>
         <table class="table-identitas">
+          <tr><td style="width: 34%;">1. Nama Peserta Didik (Lengkap)</td><td style="width: 3%;">:</td><td><b>${targetSiswa.nama_lengkap.toUpperCase()}</b></td></tr>
+          <tr><td>2. Nomor Induk / NISN</td><td>:</td><td>${targetSiswa.nis || '-'} / ${targetSiswa.nisn || '-'}</td></tr>
+          <tr><td>3. Tempat, Tanggal Lahir</td><td>:</td><td>${ttlText}</td></tr>
+          <tr><td>4. Jenis Kelamin</td><td>:</td><td>${targetSiswa.jenis_kelamin || 'Laki-laki / Perempuan'}</td></tr>
+          <tr><td>5. Agama</td><td>:</td><td>${targetSiswa.agama || 'Islam'}</td></tr>
+          <tr><td>6. Status dalam Keluarga</td><td>:</td><td>Anak Kandung</td></tr>
+          <tr><td>7. Anak ke</td><td>:</td><td>........</td></tr>
+          <tr><td>8. Alamat Peserta Didik</td><td>:</td><td>${targetSiswa.alamat || '........................................................'}</td></tr>
+          <tr><td>9. Nomor Telepon Rumah / HP</td><td>:</td><td>........................................................</td></tr>
+          <tr><td>10. Sekolah Asal</td><td>:</td><td>${sekolahAsalDefault}</td></tr>
+          <tr><td>11. Diterima di Sekolah Ini</td><td></td><td></td></tr>
+          <tr><td style="padding-left: 16px;">a. Di Kelas</td><td>:</td><td><b>${namaKelasStr}</b></td></tr>
+          <tr><td style="padding-left: 16px;">b. Pada Tanggal</td><td>:</td><td>Juli ${selectedTahunAjaran.split('/')[0]}</td></tr>
+          <tr><td>12. Nama Orang Tua</td><td></td><td></td></tr>
+          <tr><td style="padding-left: 16px;">a. Ayah</td><td>:</td><td>${targetSiswa.nama_ayah || '........................................................'}</td></tr>
+          <tr><td style="padding-left: 16px;">b. Ibu</td><td>:</td><td>${targetSiswa.nama_ibu || '........................................................'}</td></tr>
+          <tr><td>13. Alamat Orang Tua</td><td>:</td><td>${targetSiswa.alamat || '........................................................'}</td></tr>
+          <tr><td>14. Pekerjaan Orang Tua (Ayah / Ibu)</td><td>:</td><td>.................................... / ....................................</td></tr>
+          <tr><td>15. Nama Wali Peserta Didik</td><td>:</td><td>${targetSiswa.nama_wali || '-'}</td></tr>
+          <tr><td>16. Pekerjaan Wali Peserta Didik</td><td>:</td><td>-</td></tr>
+        </table>
+
+        <!-- KOTAK PAS FOTO 3X4 & TTD KEPALA SEKOLAH -->
+        <table style="width: 100%; border: none; margin-top: 24px; font-size: 9.5pt;">
+          <tr>
+            <td style="width: 45%; border: none; text-align: center; vertical-align: middle;">
+              <div style="width: 85px; height: 112px; border: 1px solid #000; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 8.5pt; color: #555;">
+                Pas Foto<br/>3 x 4 cm
+              </div>
+            </td>
+            <td style="width: 55%; border: none; text-align: left; vertical-align: top; padding-left: 20px;">
+              ${kotaTtd}, Juli ${selectedTahunAjaran.split('/')[0]}<br/>
+              <strong>Kepala ${namaSatuanTitle},</strong>
+              <div style="position: relative; height: 68px; display: flex; align-items: center;">
+                ${
+                  pakaiTtdCapKepsek
+                    ? `
+                      <img src="${originUrl}/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: -10px; top: 0px; height: 72px; opacity: 0.9; z-index: 1;" />
+                      <img src="${originUrl}/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 10px; top: 4px; height: 58px; z-index: 2;" />
+                    `
+                    : ''
+                }
+              </div>
+              <u><strong>${namaKepsek}</strong></u><br/>
+              ${nipKepsek}
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="page-break"></div>
+
+      <!-- ==================== HALAMAN 3: CAPAIAN HASIL BELAJAR (NILAI & DESKRIPSI) ==================== -->
+      <div class="page-section">
+        <div style="text-align: center; margin-bottom: 8px;">
+          <img src="${originUrl}/kop-surat.png" alt="Kop Surat" style="width: 100%; max-height: 110px; object-fit: contain;" />
+        </div>
+
+        <div style="text-align: center; margin-bottom: 10px;">
+          <h2 style="margin: 0; font-size: 12pt; letter-spacing: 0.6px; text-transform: uppercase;">
+            LAPORAN HASIL BELAJAR PESERTA DIDIK (${unitSiswa})
+          </h2>
+        </div>
+
+        <table class="table-identitas" style="margin-bottom: 10px; font-size: 9.5pt;">
           <tr>
             <td style="width: 18%;">Nama Peserta Didik</td>
             <td style="width: 36%;">: <b>${targetSiswa.nama_lengkap.toUpperCase()}</b></td>
-            <td style="width: 18%;">Kelas</td>
-            <td style="width: 28%;">: <b>${namaKelasStr}</b></td>
+            <td style="width: 18%;">Kelas / Fase</td>
+            <td style="width: 28%;">: <b>${namaKelasStr} / Fase ${faseKurikulum}</b></td>
           </tr>
           <tr>
-            <td>NISN</td>
-            <td>: ${targetSiswa.nisn || '-'}</td>
+            <td>NIS / NISN</td>
+            <td>: ${targetSiswa.nis || '-'} / ${targetSiswa.nisn || '-'}</td>
             <td>Semester</td>
             <td>: ${selectedSemester}</td>
           </tr>
           <tr>
             <td>Nama Sekolah</td>
-            <td>: SMP Muna Mustofa</td>
+            <td>: ${namaSatuanTitle}</td>
             <td>Tahun Pelajaran</td>
             <td>: ${selectedTahunAjaran}</td>
           </tr>
         </table>
 
         <h4 class="section-title">A. CAPAIAN KOMPETENSI AKADEMIK</h4>
-        <table class="table-data">
+        <table class="table-data" style="margin-bottom: 12px;">
           <thead>
             <tr>
               <th style="width: 5%; text-align: center;">No</th>
-              <th style="width: 25%; text-align: left;">Mata Pelajaran</th>
+              <th style="width: 26%; text-align: left;">Mata Pelajaran</th>
               <th style="width: 7%; text-align: center;">KKM</th>
               <th style="width: 10%; text-align: center;">Nilai Akhir</th>
               <th style="width: 13%; text-align: center;">Predikat</th>
-              <th style="width: 40%; text-align: left;">Capaian Kompetensi</th>
+              <th style="width: 39%; text-align: left;">Capaian Kompetensi</th>
             </tr>
           </thead>
           <tbody>
             ${
-              mapelUtama.map((mapel, idx) => {
-                const rowN = (nilaiSiswa || []).find(n => n.mata_pelajaran === mapel.nama) || {}
-                const t = rowN.nilai_tugas ?? 0
-                const u = rowN.nilai_uts ?? 0
-                const a = rowN.nilai_uas ?? 0
-                const komps = [t, u, a].filter(v => v > 0)
-                const hasNilai = komps.length > 0
-                const avgNum = hasNilai ? Math.round(komps.reduce((x, y) => x + y, 0) / komps.length) : 0
-                const predObj = hasNilai ? getPredikatRapor(avgNum, mapel.nama) : null
+              mapelUtama.length > 0
+                ? mapelUtama
+                    .map((mapel, idx) => {
+                      const rowN =
+                        (nilaiSiswa || []).find((n) => n.mata_pelajaran === mapel.nama) || {}
+                      const t = rowN.nilai_tugas ?? 0
+                      const u = rowN.nilai_uts ?? 0
+                      const a = rowN.nilai_uas ?? 0
+                      const komps = [t, u, a].filter((v) => v > 0)
+                      const hasNilai = komps.length > 0
+                      const avgNum = hasNilai
+                        ? Math.round(komps.reduce((x, y) => x + y, 0) / komps.length)
+                        : 0
+                      const predObj = hasNilai ? getPredikatRapor(avgNum, mapel.nama) : null
 
-                return `
-                  <tr>
-                    <td style="text-align: center;">${idx + 1}</td>
-                    <td><b>${mapel.nama}</b></td>
-                    <td style="text-align: center;">75</td>
-                    <td style="text-align: center; font-weight: bold; font-size: 10.5pt;">${hasNilai ? avgNum : '-'}</td>
-                    <td style="text-align: center; font-weight: bold;">
-                      ${predObj ? `${predObj.huruf} (${predObj.keterangan})` : '-'}
-                    </td>
-                    <td style="font-size: 8.8pt; text-align: justify;">
-                      ${predObj ? predObj.deskripsi : `Capaian kompetensi mata pelajaran ${mapel.nama} sedang dalam proses penilaian semester.`}
-                    </td>
-                  </tr>
-                `
-              }).join('')
+                      return `
+                        <tr>
+                          <td style="text-align: center;">${idx + 1}</td>
+                          <td><b>${mapel.nama}</b></td>
+                          <td style="text-align: center;">75</td>
+                          <td style="text-align: center; font-weight: bold; font-size: 10pt;">${hasNilai ? avgNum : '-'}</td>
+                          <td style="text-align: center; font-weight: bold;">
+                            ${predObj ? `${predObj.huruf} (${predObj.keterangan})` : '-'}
+                          </td>
+                          <td style="font-size: 8.5pt; text-align: justify;">
+                            ${
+                              predObj
+                                ? predObj.deskripsi
+                                : `Capaian kompetensi mata pelajaran ${mapel.nama} sedang dalam proses penilaian semester.`
+                            }
+                          </td>
+                        </tr>
+                      `
+                    })
+                    .join('')
+                : `<tr><td colspan="6" style="text-align: center;">Belum ada mata pelajaran ${unitSiswa} terdaftar.</td></tr>`
             }
           </tbody>
         </table>
-      </div>
 
-      <!-- ==================== HALAMAN 2: KEAGAMAAN, EKSKUL, KEHADIRAN & PENGESAHAN ==================== -->
-      <div class="page-break"></div>
-
-      <div class="page-section">
-        <div style="border-bottom: 1.5px solid #000; padding-bottom: 4px; margin-bottom: 12px; display: flex; justify-content: space-between; font-size: 9pt;">
-          <span>Nama Peserta Didik: <b>${targetSiswa.nama_lengkap.toUpperCase()}</b> (${targetSiswa.nisn || '-'})</span>
-          <span>Kelas: <b>${namaKelasStr}</b> | Semester ${selectedSemester} TA ${selectedTahunAjaran}</span>
-        </div>
-
-        <h4 class="section-title">B. PEMBIASAAN KEAGAMAAN &amp; QIRO&apos;AH (CIRI KHAS SEKOLAH)</h4>
-        <table class="table-data" style="margin-bottom: 14px;">
+        <h4 class="section-title">B. PEMBIASAAN KEAGAMAAN &amp; QIRO&apos;AH</h4>
+        <table class="table-data" style="margin-bottom: 12px;">
           <thead>
             <tr>
               <th style="width: 5%; text-align: center;">No</th>
@@ -1410,19 +1808,47 @@ export default function LaporanPage() {
               <td style="text-align: center;">1</td>
               <td><b>Qiro&apos;ah &amp; Tahsin Al-Qur&apos;an</b></td>
               <td style="text-align: center; font-weight: bold;">${predikatQiroah.huruf} (${predikatQiroah.keterangan})</td>
-              <td style="font-size: 9pt;">Mampu membaca Al-Qur&apos;an sesuai kaidah tajwid dan makharijul huruf dengan ${predikatQiroah.keterangan.toLowerCase()}.</td>
+              <td style="font-size: 8.8pt;">Mampu membaca Al-Qur&apos;an sesuai kaidah tajwid dan makharijul huruf dengan ${predikatQiroah.keterangan.toLowerCase()}.</td>
             </tr>
             <tr>
               <td style="text-align: center;">2</td>
               <td><b>Shalat Berjamaah &amp; Adab Islami</b></td>
               <td style="text-align: center; font-weight: bold;">A (Sangat Baik)</td>
-              <td style="font-size: 9pt;">Membiasakan shalat berjamaah di sekolah, berakhlak santun kepada guru, serta menghormati sesama teman.</td>
+              <td style="font-size: 8.8pt;">Membiasakan shalat berjamaah di sekolah, berakhlak santun kepada guru, serta menghormati sesama teman.</td>
             </tr>
           </tbody>
         </table>
 
-        <h4 class="section-title">C. KEGIATAN EKSTRAKURIKULER</h4>
-        <table class="table-data" style="margin-bottom: 14px;">
+        ${
+          unitSiswa === 'SMK'
+            ? `
+              <h4 class="section-title">C. PRAKTIK KERJA LAPANGAN (PKL)</h4>
+              <table class="table-data" style="margin-bottom: 12px;">
+                <thead>
+                  <tr>
+                    <th style="width: 5%; text-align: center;">No</th>
+                    <th style="width: 30%; text-align: left;">Mitra DU/DI</th>
+                    <th style="width: 25%; text-align: left;">Lokasi</th>
+                    <th style="width: 15%; text-align: center;">Lamanya</th>
+                    <th style="width: 25%; text-align: left;">Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="text-align: center;">1</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td style="text-align: center;">-</td>
+                    <td>Belum melaksanakan PKL pada semester ini.</td>
+                  </tr>
+                </tbody>
+              </table>
+            `
+            : ''
+        }
+
+        <h4 class="section-title">${unitSiswa === 'SMK' ? 'D' : 'C'}. KEGIATAN EKSTRAKURIKULER</h4>
+        <table class="table-data" style="margin-bottom: 12px;">
           <thead>
             <tr>
               <th style="width: 5%; text-align: center;">No</th>
@@ -1434,36 +1860,39 @@ export default function LaporanPage() {
           <tbody>
             ${
               mapelEkskul.length > 0
-                ? mapelEkskul.map((m, idx) => {
-                    const rowN = (nilaiSiswa || []).find(n => n.mata_pelajaran === m.nama) || {}
-                    const avg = rowN.nilai_uas ?? rowN.nilai_tugas ?? 85
-                    const predObj = getPredikatRapor(avg, m.nama)
-                    return `
+                ? mapelEkskul
+                    .map((m, idx) => {
+                      const rowN =
+                        (nilaiSiswa || []).find((n) => n.mata_pelajaran === m.nama) || {}
+                      const avg = rowN.nilai_uas ?? rowN.nilai_tugas ?? 85
+                      const predObj = getPredikatRapor(avg, m.nama)
+                      return `
                       <tr>
                         <td style="text-align: center;">${idx + 1}</td>
                         <td><b>${m.nama}</b></td>
                         <td style="text-align: center; font-weight: bold;">${predObj.huruf} (${predObj.keterangan})</td>
-                        <td style="font-size: 9pt;">Aktif dan disiplin mengikuti kegiatan ${m.nama} dengan capaian ${predObj.keterangan.toLowerCase()}.</td>
+                        <td style="font-size: 8.8pt;">Aktif dan disiplin mengikuti kegiatan ${m.nama} dengan capaian ${predObj.keterangan.toLowerCase()}.</td>
                       </tr>
                     `
-                  }).join('')
+                    })
+                    .join('')
                 : `
                   <tr>
                     <td style="text-align: center;">1</td>
                     <td><b>Pramuka</b></td>
                     <td style="text-align: center; font-weight: bold;">B (Baik)</td>
-                    <td style="font-size: 9pt;">Aktif mengikuti kegiatan kepramukaan, kerja sama tim, dan kedisiplinan di sekolah.</td>
+                    <td style="font-size: 8.8pt;">Aktif mengikuti kegiatan kepramukaan, kerja sama tim, dan kedisiplinan di sekolah.</td>
                   </tr>
                 `
             }
           </tbody>
         </table>
 
-        <!-- D. KETIDAKHADIRAN & E. CATATAN WALI KELAS (2 KOLOM BERDAMPINGAN) -->
-        <table style="width: 100%; border: none; border-collapse: collapse; margin-bottom: 14px;">
+        <!-- KETIDAKHADIRAN & CATATAN WALI KELAS -->
+        <table style="width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px;">
           <tr>
             <td style="width: 38%; vertical-align: top; padding-right: 12px; border: none;">
-              <h4 class="section-title">D. KETIDAKHADIRAN</h4>
+              <h4 class="section-title">${unitSiswa === 'SMK' ? 'E' : 'D'}. KETIDAKHADIRAN</h4>
               <table class="table-data">
                 <tr>
                   <td style="width: 65%;">1. Sakit</td>
@@ -1480,8 +1909,8 @@ export default function LaporanPage() {
               </table>
             </td>
             <td style="width: 62%; vertical-align: top; border: none;">
-              <h4 class="section-title">E. CATATAN WALI KELAS</h4>
-              <div style="border: 1px solid #000; padding: 10px; min-height: 76px; font-size: 9.5pt; font-style: italic; background-color: #fafafa;">
+              <h4 class="section-title">${unitSiswa === 'SMK' ? 'F' : 'E'}. CATATAN WALI KELAS</h4>
+              <div style="border: 1px solid #000; padding: 8px 10px; min-height: 72px; font-size: 9pt; font-style: italic; background-color: #fafafa;">
                 &ldquo;Pertahankan semangat belajar, kedisiplinan, dan akhlak mulia baik di lingkungan sekolah maupun di rumah. Terus tingkatkan prestasi pada semester berikutnya.&rdquo;
               </div>
             </td>
@@ -1491,11 +1920,11 @@ export default function LaporanPage() {
         ${
           selectedSemester === 'Genap'
             ? `
-              <div style="border: 1.5px solid #000; padding: 10px 14px; margin-bottom: 16px; background-color: #f8fafc;">
-                <p style="margin: 0; font-size: 10pt;">
+              <div style="border: 1.5px solid #000; padding: 8px 12px; margin-bottom: 12px; background-color: #f8fafc;">
+                <p style="margin: 0; font-size: 9.5pt;">
                   <b>KEPUTUSAN:</b> Berdasarkan pencapaian seluruh kompetensi pada Semester Ganjil dan Genap Tahun Pelajaran ${selectedTahunAjaran}, peserta didik dinyatakan:
                 </p>
-                <p style="margin: 6px 0 0 0; font-size: 11pt; font-weight: bold; text-align: center; letter-spacing: 0.5px;">
+                <p style="margin: 4px 0 0 0; font-size: 10.5pt; font-weight: bold; text-align: center; letter-spacing: 0.5px;">
                   ${teksKeputusan}
                 </p>
               </div>
@@ -1503,9 +1932,9 @@ export default function LaporanPage() {
             : ''
         }
 
-        <!-- TANDA TANGAN 3 PIHAK (ORANG TUA, WALI KELAS, KEPALA SEKOLAH) -->
-        <div style="margin-top: 18px; page-break-inside: avoid;">
-          <table style="width: 100%; border: none; font-size: 9.5pt;">
+        <!-- TANDA TANGAN 3 PIHAK -->
+        <div style="margin-top: 14px; page-break-inside: avoid;">
+          <table style="width: 100%; border: none; font-size: 9pt;">
             <tr>
               <td style="width: 45%; border: none; text-align: center; vertical-align: top;">
                 Mengetahui,<br/>
@@ -1521,15 +1950,15 @@ export default function LaporanPage() {
               </td>
             </tr>
             <tr>
-              <td colspan="3" style="border: none; text-align: center; padding-top: 14px; vertical-align: top;">
+              <td colspan="3" style="border: none; text-align: center; padding-top: 10px; vertical-align: top;">
                 Mengetahui,<br/>
-                <strong>Kepala Sekolah</strong><br/>
-                <div style="position: relative; height: 68px; display: flex; align-items: center; justify-content: center;">
+                <strong>Kepala ${namaSatuanTitle}</strong><br/>
+                <div style="position: relative; height: 64px; display: flex; align-items: center; justify-content: center;">
                   ${
                     pakaiTtdCapKepsek
                       ? `
-                        <img src="${originUrl}/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 41%; top: 0px; height: 72px; opacity: 0.9; z-index: 1;" />
-                        <img src="${originUrl}/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 46%; top: 4px; height: 58px; z-index: 2;" />
+                        <img src="${originUrl}/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 41%; top: 0px; height: 68px; opacity: 0.9; z-index: 1;" />
+                        <img src="${originUrl}/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 46%; top: 4px; height: 55px; z-index: 2;" />
                       `
                       : '<br/><br/>'
                   }
@@ -1546,83 +1975,138 @@ export default function LaporanPage() {
     return {
       targetSiswa,
       namaKelasStr,
+      unitSiswa,
       htmlRaporLengkap,
     }
   }
 
-  // CETAK PDF RAPOR SISWA (2 HALAMAN STANDAR PROFESIONAL)
-  const handlePrintRaporSiswa = async () => {
-    const docData = await buildRaporDocumentData()
-    if (!docData) return
-
-    const printWindow = window.open('', '_blank')
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>RAPOR SISWA - ${docData.targetSiswa.nama_lengkap.toUpperCase()} (${docData.namaKelasStr})</title>
-            <style>
-              @page { margin: 1.3cm 1.5cm; size: A4; }
-              body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.35; font-size: 10pt; margin: 0; padding: 0; }
-              .watermark {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                opacity: 0.06;
-                z-index: -1;
-                pointer-events: none;
-              }
-              .watermark img { width: 420px; height: 420px; object-fit: contain; }
-              .table-identitas { width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px; font-size: 10pt; }
-              .table-identitas td { border: none; padding: 2px 4px; vertical-align: top; }
-              .section-title { margin: 0 0 6px 0; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.3px; }
-              .table-data { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
-              .table-data th { background-color: #f1f5f9; border: 1px solid #000; padding: 6px; font-weight: bold; }
-              .table-data td { border: 1px solid #000; padding: 5px 6px; vertical-align: middle; }
-              .page-break { page-break-before: always; }
-            </style>
-          </head>
-          <body>
-            ${docData.htmlRaporLengkap}
-          </body>
-        </html>
-      `)
-      printWindow.document.close()
-      setTimeout(() => { printWindow.print() }, 500)
+  // BUKA MODAL LIVE PREVIEW & EDIT RAPOR (3 HALAMAN)
+  const handleOpenRaporLivePreview = async () => {
+    setIsBuildingRapor(true)
+    try {
+      const docData = await buildRaporDocumentData()
+      if (!docData) return
+      setRaporPreviewHtml(docData.htmlRaporLengkap)
+      setRaporPreviewMeta({
+        namaSiswa: docData.targetSiswa.nama_lengkap,
+        kelasStr: docData.namaKelasStr,
+        unit: docData.unitSiswa,
+      })
+      setIsRaporPreviewOpen(true)
+    } finally {
+      setIsBuildingRapor(false)
     }
   }
 
-  // DOWNLOAD WORD (.DOC) RAPOR SISWA AGAR BISA DIEDIT MANUAL
-  const handleDownloadRaporWord = async () => {
+  // HELPER CETAK HTML RAPOR (BAIK DARI LIVE EDITOR MAUPUN LANGSUNG)
+  const openRaporPrintWindow = (titleText: string, innerHtml: string) => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${titleText}</title>
+          <style>
+            @page { margin: 1.2cm 1.4cm; size: A4 portrait; }
+            body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.35; font-size: 10pt; margin: 0; padding: 0; }
+            .watermark {
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              opacity: 0.05;
+              z-index: -1;
+              pointer-events: none;
+            }
+            .watermark img { width: 420px; height: 420px; object-fit: contain; }
+            .cover-box {
+              border: 3px double #000;
+              padding: 28px 24px;
+              min-height: 25.5cm;
+              box-sizing: border-box;
+            }
+            .table-identitas { width: 100%; border: none; border-collapse: collapse; margin-bottom: 10px; font-size: 10pt; }
+            .table-identitas td { border: none; padding: 2.5px 4px; vertical-align: top; }
+            .section-title { margin: 0 0 5px 0; font-size: 9.8pt; text-transform: uppercase; letter-spacing: 0.3px; }
+            .table-data { width: 100%; border-collapse: collapse; font-size: 9.2pt; }
+            .table-data th { background-color: #f1f5f9; border: 1px solid #000; padding: 5px 6px; font-weight: bold; }
+            .table-data td { border: 1px solid #000; padding: 4.5px 6px; vertical-align: middle; }
+            .page-break { page-break-before: always; }
+          </style>
+        </head>
+        <body>
+          ${innerHtml}
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+    setTimeout(() => {
+      printWindow.print()
+    }, 500)
+  }
+
+  // CETAK PDF LANGSUNG DARI LIVE EDITOR (TERMASUK SUNTINGAN MANUAL PENGGUNA)
+  const handlePrintFromLiveEditor = () => {
+    const editedHtml = raporPreviewRef.current
+      ? raporPreviewRef.current.innerHTML
+      : raporPreviewHtml
+    const titleText = raporPreviewMeta
+      ? `RAPOR_${raporPreviewMeta.unit}_${raporPreviewMeta.namaSiswa.toUpperCase()}`
+      : 'RAPOR_PESERTA_DIDIK'
+    openRaporPrintWindow(titleText, editedHtml)
+  }
+
+  // DOWNLOAD WORD DARI LIVE EDITOR (TERMASUK SUNTINGAN MANUAL PENGGUNA)
+  const handleDownloadWordFromLiveEditor = () => {
+    const editedHtml = raporPreviewRef.current
+      ? raporPreviewRef.current.innerHTML
+      : raporPreviewHtml
+    const safeName = (raporPreviewMeta?.namaSiswa || 'Siswa').replace(/[^a-zA-Z0-9]/g, '_')
+    const safeKelas = (raporPreviewMeta?.kelasStr || '').replace(/\s+/g, '')
+    downloadRaporWordBlob(
+      `Rapor_${raporPreviewMeta?.unit || 'SMP'}_${safeName}_${safeKelas}_${selectedSemester}`,
+      editedHtml
+    )
+  }
+
+  // CETAK PDF RAPOR LANGSUNG TANPA BUKA MODAL
+  const handlePrintRaporSiswa = async () => {
     const docData = await buildRaporDocumentData()
     if (!docData) return
+    openRaporPrintWindow(
+      `RAPOR ${docData.unitSiswa} - ${docData.targetSiswa.nama_lengkap.toUpperCase()} (${docData.namaKelasStr})`,
+      docData.htmlRaporLengkap
+    )
+  }
 
+  const downloadRaporWordBlob = (filename: string, innerHtml: string) => {
     const wordHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
         <head>
           <meta charset="utf-8" />
-          <title>Rapor_${docData.targetSiswa.nama_lengkap}</title>
+          <title>${filename}</title>
           <style>
             @page WordSection1 {
               size: 21cm 29.7cm;
-              margin: 1.3cm 1.5cm 1.3cm 1.5cm;
+              margin: 1.2cm 1.4cm 1.2cm 1.4cm;
             }
             div.WordSection1 { page: WordSection1; }
             body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-height: 1.35; color: #000; }
             .watermark { display: none; }
-            .table-identitas { width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px; font-size: 10pt; }
-            .table-identitas td { border: none; padding: 2px 4px; vertical-align: top; }
-            .section-title { margin: 0 0 6px 0; font-size: 10pt; text-transform: uppercase; }
-            .table-data { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
-            .table-data th { background-color: #f1f5f9; border: 1px solid #000; padding: 6px; font-weight: bold; }
-            .table-data td { border: 1px solid #000; padding: 5px 6px; vertical-align: middle; }
+            .cover-box { border: 3px double #000; padding: 24px; }
+            .table-identitas { width: 100%; border: none; border-collapse: collapse; margin-bottom: 10px; font-size: 10pt; }
+            .table-identitas td { border: none; padding: 2.5px 4px; vertical-align: top; }
+            .section-title { margin: 0 0 5px 0; font-size: 9.8pt; text-transform: uppercase; }
+            .table-data { width: 100%; border-collapse: collapse; font-size: 9.2pt; }
+            .table-data th { background-color: #f1f5f9; border: 1px solid #000; padding: 5px 6px; font-weight: bold; }
+            .table-data td { border: 1px solid #000; padding: 4.5px 6px; vertical-align: middle; }
             .page-break { page-break-before: always; mso-break-type: section-break; }
           </style>
         </head>
         <body>
           <div class="WordSection1">
-            ${docData.htmlRaporLengkap}
+            ${innerHtml}
           </div>
         </body>
       </html>
@@ -1633,73 +2117,117 @@ export default function LaporanPage() {
     })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    const safeName = docData.targetSiswa.nama_lengkap.replace(/[^a-zA-Z0-9]/g, '_')
     link.href = url
-    link.download = `Rapor_${safeName}_${docData.namaKelasStr.replace(/\s+/g, '')}_${selectedSemester}.doc`
+    link.download = `${filename}.doc`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
   }
 
+  // DOWNLOAD WORD (.DOC) RAPOR SISWA LANGSUNG
+  const handleDownloadRaporWord = async () => {
+    const docData = await buildRaporDocumentData()
+    if (!docData) return
+    const safeName = docData.targetSiswa.nama_lengkap.replace(/[^a-zA-Z0-9]/g, '_')
+    downloadRaporWordBlob(
+      `Rapor_${docData.unitSiswa}_${safeName}_${docData.namaKelasStr.replace(/\s+/g, '')}_${selectedSemester}`,
+      docData.htmlRaporLengkap
+    )
+  }
+
   const handleExportLegerExcel = async () => {
-    let querySiswa = supabase.from('siswa').select('*, kelas:kelas_id(nama_kelas)').order('nama_lengkap', { ascending: true })
+    let querySiswa = supabase
+      .from('siswa')
+      .select('*, kelas:kelas_id(nama_kelas)')
+      .order('nama_lengkap', { ascending: true })
     if (filterKelasLeger) querySiswa = querySiswa.eq('kelas_id', Number(filterKelasLeger))
     const { data: siswaData } = await querySiswa
 
-    let queryNilai = supabase.from('nilai').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran)
+    let queryNilai = supabase
+      .from('nilai')
+      .select('*')
+      .eq('semester', selectedSemester)
+      .eq('tahun_ajaran', selectedTahunAjaran)
     if (filterKelasLeger) queryNilai = queryNilai.eq('kelas_id', Number(filterKelasLeger))
     if (filterMapelLeger) queryNilai = queryNilai.eq('mapel_id', Number(filterMapelLeger))
     const { data: nilaiData } = await queryNilai
 
     const rows = (siswaData || []).map((s, idx) => {
-      const listN = (nilaiData || []).filter(n => Number(n.siswa_id) === Number(s.id))
+      const listN = (nilaiData || []).filter((n) => Number(n.siswa_id) === Number(s.id))
       const n = listN.length > 0 ? listN[listN.length - 1] : {}
       const tugas = n.nilai_tugas ?? 0
       const uts = n.nilai_uts ?? 0
       const uas = n.nilai_uas ?? 0
-      const komps = [tugas, uts, uas].filter(v => v > 0)
-      const avg = komps.length > 0 ? (komps.reduce((a, b) => a + b, 0) / komps.length).toFixed(1) : '0.0'
+      const komps = [tugas, uts, uas].filter((v) => v > 0)
+      const avg =
+        komps.length > 0 ? (komps.reduce((a, b) => a + b, 0) / komps.length).toFixed(1) : '0.0'
 
-      const namaKelas = (s as any).kelas?.nama_kelas || (Array.isArray((s as any).kelas) ? (s as any).kelas[0]?.nama_kelas : '-')
+      const namaKelas =
+        (s as any).kelas?.nama_kelas ||
+        (Array.isArray((s as any).kelas) ? (s as any).kelas[0]?.nama_kelas : '-')
 
-      return [idx + 1, s.nama_lengkap, namaKelas, n.mata_pelajaran || '-', n.nilai_tugas ?? 0, n.nilai_uts ?? 0, n.nilai_uas ?? 0, avg]
+      return [
+        idx + 1,
+        s.nama_lengkap,
+        namaKelas,
+        n.mata_pelajaran || '-',
+        n.nilai_tugas ?? 0,
+        n.nilai_uts ?? 0,
+        n.nilai_uas ?? 0,
+        avg,
+      ]
     })
 
-    downloadCSV(`Leger_Nilai_${selectedSemester}_${selectedTahunAjaran.replace('/', '-')}`, ['No', 'Nama Siswa', 'Kelas', 'Mapel', 'Tugas', 'UTS', 'UAS', 'Rata-Rata'], rows)
+    downloadCSV(
+      `Leger_Nilai_${selectedSemester}_${selectedTahunAjaran.replace('/', '-')}`,
+      ['No', 'Nama Siswa', 'Kelas', 'Mapel', 'Tugas', 'UTS', 'UAS', 'Rata-Rata'],
+      rows
+    )
   }
 
-  // RIWAYAT PRESENSI DETAIL BK LENGKAP JAM 1 S/D JAM 8
   const handlePrintRiwayatAbsensi = async () => {
-    let query = supabase.from('absensi').select('*').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('tanggal', { ascending: false })
+    let query = supabase
+      .from('absensi')
+      .select('*')
+      .eq('semester', selectedSemester)
+      .eq('tahun_ajaran', selectedTahunAjaran)
+      .order('tanggal', { ascending: false })
 
-    if (tanggalAbsensi && tanggalAbsensi.trim() !== '') query = query.eq('tanggal', tanggalAbsensi.trim())
+    if (tanggalAbsensi && tanggalAbsensi.trim() !== '')
+      query = query.eq('tanggal', tanggalAbsensi.trim())
     if (bulanAbsensiDetail) query = query.ilike('tanggal', `${bulanAbsensiDetail}%`)
     if (kelasRiwayatAbsensi) query = query.eq('kelas_id', Number(kelasRiwayatAbsensi))
 
     const { data: absensiData } = await query
-    const selectedK = kelasList.find(k => k.id === Number(kelasRiwayatAbsensi))
-    const judulDoc = `LAPORAN DETAIL PRESENSI SISWA BK (JAM KE-1 S/D JAM KE-8) ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'}`
+    const selectedK = kelasList.find((k) => k.id === Number(kelasRiwayatAbsensi))
+    const judulDoc = `LAPORAN DETAIL PRESENSI SISWA BK (JAM KE-1 S/D JAM KE-8) ${
+      selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
+    }`
 
     const guruCetak = await resolvePenandatanganPDF({
       mode: 'umum',
     })
 
-    const matrixMap = new Map<string, { nama: string; kelas: string; tanggal: string; jam: { [key: number]: string } }>()
+    const matrixMap = new Map<
+      string,
+      { nama: string; kelas: string; tanggal: string; jam: { [key: number]: string } }
+    >()
 
-    ;(absensiData || []).forEach(a => {
+    ;(absensiData || []).forEach((a) => {
       const key = `${a.siswa_id}_${a.tanggal}`
       if (!matrixMap.has(key)) {
         matrixMap.set(key, {
           nama: a.nama_siswa,
           kelas: a.kelas || '-',
           tanggal: a.tanggal,
-          jam: {}
+          jam: {},
         })
       }
-      
+
       const record = matrixMap.get(key)!
-      const jamMatch = (a.jam_ke || '').match(/Jam Ke-(\d+)/i) || (a.jam_ke || '').match(/Ke-(\d+)/i)
+      const jamMatch =
+        (a.jam_ke || '').match(/Jam Ke-(\d+)/i) || (a.jam_ke || '').match(/Ke-(\d+)/i)
       const jamNum = jamMatch ? parseInt(jamMatch[1]) : 1
       record.jam[jamNum] = a.status
     })
@@ -1735,31 +2263,44 @@ export default function LaporanPage() {
         <tbody>
           ${
             matrixRows.length > 0
-              ? matrixRows.map((r, idx) => {
-                  let statusBolos = false
-                  if (r.jam[1] === 'HADIR') {
-                    for (let j = 2; j <= 8; j++) {
-                      if (r.jam[j] === 'ALPA') statusBolos = true
+              ? matrixRows
+                  .map((r, idx) => {
+                    let statusBolos = false
+                    if (r.jam[1] === 'HADIR') {
+                      for (let j = 2; j <= 8; j++) {
+                        if (r.jam[j] === 'ALPA') statusBolos = true
+                      }
                     }
-                  }
 
-                  return `
+                    return `
                     <tr>
                       <td style="border: 1px solid #000; padding: 4px; text-align: center;">${idx + 1}</td>
                       <td style="border: 1px solid #000; padding: 4px; text-align: center;">${r.tanggal}</td>
                       <td style="border: 1px solid #000; padding: 4px;">${r.nama}</td>
                       <td style="border: 1px solid #000; padding: 4px; text-align: center;">${r.kelas}</td>
-                      ${[1, 2, 3, 4, 5, 6, 7, 8].map(j => {
-                        const st = r.jam[j] || '-'
-                        const color = st === 'HADIR' ? '#d1fae5' : st === 'ALPA' ? '#ffe4e6' : st === 'IZIN' || st === 'SAKIT' ? '#fef3c7' : '#ffffff'
-                        return `<td style="border: 1px solid #000; padding: 4px; text-align: center; background-color: ${color}; font-weight: bold;">${st.charAt(0)}</td>`
-                      }).join('')}
-                      <td style="border: 1px solid #000; padding: 4px; text-align: center; font-weight: bold; color: ${statusBolos ? 'red' : 'green'};">
+                      ${[1, 2, 3, 4, 5, 6, 7, 8]
+                        .map((j) => {
+                          const st = r.jam[j] || '-'
+                          const color =
+                            st === 'HADIR'
+                              ? '#d1fae5'
+                              : st === 'ALPA'
+                              ? '#ffe4e6'
+                              : st === 'IZIN' || st === 'SAKIT'
+                              ? '#fef3c7'
+                              : '#ffffff'
+                          return `<td style="border: 1px solid #000; padding: 4px; text-align: center; background-color: ${color}; font-weight: bold;">${st.charAt(0)}</td>`
+                        })
+                        .join('')}
+                      <td style="border: 1px solid #000; padding: 4px; text-align: center; font-weight: bold; color: ${
+                        statusBolos ? 'red' : 'green'
+                      };">
                         ${statusBolos ? '⚠️ Terindikasi Bolos KBM' : 'Nihil'}
                       </td>
                     </tr>
                   `
-                }).join('')
+                  })
+                  .join('')
               : `<tr><td colspan="13" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada riwayat presensi detail untuk filter ini.</td></tr>`
           }
         </tbody>
@@ -1770,20 +2311,27 @@ export default function LaporanPage() {
   }
 
   const handlePrintRiwayatNilai = async () => {
-    let query = supabase.from('nilai').select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))').eq('semester', selectedSemester).eq('tahun_ajaran', selectedTahunAjaran).order('created_at', { ascending: false })
+    let query = supabase
+      .from('nilai')
+      .select('*, siswa:siswa_id(nama_lengkap, kelas:kelas_id(nama_kelas))')
+      .eq('semester', selectedSemester)
+      .eq('tahun_ajaran', selectedTahunAjaran)
+      .order('created_at', { ascending: false })
     if (kelasNilai) query = query.eq('kelas_id', Number(kelasNilai))
     if (mapelNilai) query = query.eq('mapel_id', Number(mapelNilai))
 
     const { data: nilaiData } = await query
-    const selectedK = kelasList.find(k => k.id === Number(kelasNilai))
-    const selectedM = mapelList.find(m => m.id === Number(mapelNilai))
+    const selectedK = kelasList.find((k) => k.id === Number(kelasNilai))
+    const selectedM = mapelList.find((m) => m.id === Number(mapelNilai))
 
     const guruCetak = await resolvePenandatanganPDF({
       mode: 'mapel',
       mapelId: mapelNilai || null,
     })
 
-    const judulDoc = `LAPORAN RIWAYAT INPUT NILAI AKADEMIK ${selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'} ${selectedM ? `- ${selectedM.nama.toUpperCase()}` : ''}`
+    const judulDoc = `LAPORAN RIWAYAT INPUT NILAI AKADEMIK ${
+      selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
+    } ${selectedM ? `- ${selectedM.nama.toUpperCase()}` : ''}`
 
     const contentBody = `
       <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 15px;">${judulDoc}</h3>
@@ -1802,17 +2350,33 @@ export default function LaporanPage() {
         <tbody>
           ${
             (nilaiData || []).length > 0
-              ? nilaiData!.map((n: { created_at?: string; siswa?: { nama_lengkap?: string }; mata_pelajaran?: string; nilai_tugas?: number; nilai_uts?: number; nilai_uas?: number }, idx: number) => `
+              ? nilaiData!
+                  .map(
+                    (
+                      n: {
+                        created_at?: string
+                        siswa?: { nama_lengkap?: string }
+                        mata_pelajaran?: string
+                        nilai_tugas?: number
+                        nilai_uts?: number
+                        nilai_uas?: number
+                      },
+                      idx: number
+                    ) => `
                   <tr>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
-                    <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.created_at ? new Date(n.created_at).toLocaleDateString('id-ID') : '-'}</td>
+                    <td style="border: 1px solid #000; padding: 5px; text-align: center;">${
+                      n.created_at ? new Date(n.created_at).toLocaleDateString('id-ID') : '-'
+                    }</td>
                     <td style="border: 1px solid #000; padding: 5px;">${n.siswa?.nama_lengkap || '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px;">${n.mata_pelajaran || '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.nilai_tugas ?? '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.nilai_uts ?? '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.nilai_uas ?? '-'}</td>
                   </tr>
-                `).join('')
+                `
+                  )
+                  .join('')
               : `<tr><td colspan="7" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada riwayat input nilai akademik untuk filter ini.</td></tr>`
           }
         </tbody>
@@ -1836,7 +2400,7 @@ export default function LaporanPage() {
       printWindow.document.write(`
         <html>
           <head>
-            <title>${judulDoc} - SMP MUNA MUSTOFA</title>
+            <title>${judulDoc} - MUNA MUSTOFA</title>
             <style>
               @page { margin: 1.5cm; size: A4; }
               body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.4; }
@@ -1851,7 +2415,9 @@ export default function LaporanPage() {
         </html>
       `)
       printWindow.document.close()
-      setTimeout(() => { printWindow.print() }, 500)
+      setTimeout(() => {
+        printWindow.print()
+      }, 500)
     }
   }
 
@@ -1860,18 +2426,37 @@ export default function LaporanPage() {
       namaKepsek,
       nipKepsek,
       kotaTtd,
-      pakaiTtdCapKepsek
+      pakaiTtdCapKepsek,
     }
     localStorage.setItem('pengaturan_laporan', JSON.stringify(dataToSave))
     alert('✅ Pengaturan profil kepsek & stempel cetakan berhasil disimpan secara permanen!')
   }
 
-  // Kelas yang tersedia di dropdown Rapor: Operator melihat semua kelas, Wali Kelas hanya kelas binaan
+  // Kelas yang tersedia di dropdown Rapor (urut 7-12)
   const kelasRaporOptions = isStrictOperatorRole
     ? kelasList
     : waliKelasAssignedId
-      ? kelasList.filter(k => Number(k.id) === Number(waliKelasAssignedId))
-      : []
+    ? kelasList.filter((k) => Number(k.id) === Number(waliKelasAssignedId))
+    : []
+
+  // Siswa di dropdown Rapor (urut abjad A-Z)
+  const siswaRaporOptions = useMemo(() => {
+    if (!filterKelasRapor) return []
+    return siswaList
+      .filter((s) => Number(s.kelas_id) === Number(filterKelasRapor))
+      .sort((a, b) => (a.nama_lengkap || '').localeCompare(b.nama_lengkap || '', 'id'))
+  }, [siswaList, filterKelasRapor])
+
+  // Badge info otomatis unit kelas rapor terpilih
+  const selectedKelasRaporInfo = useMemo(() => {
+    if (!filterKelasRapor) return null
+    const k = kelasList.find((item) => Number(item.id) === Number(filterKelasRapor))
+    if (!k) return null
+    const unit = detectUnitByKelas(k.nama, k.jenjang, k.tingkat)
+    const w = getKelasGradeWeight(k.nama, k.tingkat)
+    const fase = unit === 'SMP' ? 'D' : w === 10 ? 'E' : 'F'
+    return { nama: k.nama, unit, fase }
+  }, [filterKelasRapor, kelasList])
 
   return (
     <motion.div
@@ -1882,71 +2467,139 @@ export default function LaporanPage() {
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
-      <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
-        isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
-      }`}>
-        <img src="/logo-smp.jpg" alt="Watermark" className="w-[850px] h-[850px] object-contain max-w-none" />
+      <div
+        className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none print:hidden transition-opacity duration-300 ${
+          isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
+        }`}
+      >
+        <img
+          src="/logo-smp.jpg"
+          alt="Watermark"
+          className="w-[850px] h-[850px] object-contain max-w-none"
+        />
       </div>
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
-        <header className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
-          isDarkMode ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md' : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
-        }`}>
+        <header
+          className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+            isDarkMode
+              ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md'
+              : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <Link href="/" className={`p-1.5 rounded-lg transition ${isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`} title="Kembali ke Dashboard">
+            <Link
+              href="/"
+              className={`p-1.5 rounded-lg transition ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Kembali ke Dashboard"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
               </svg>
             </Link>
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
-                isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
-              }`}>
+              <div
+                className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                  isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+                }`}
+              >
                 <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className={`font-bold text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
-                <p className={`text-[11px] font-bold mt-0.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>Pusat Laporan &amp; Cetak Dokumen</p>
+                <h1
+                  className={`font-bold text-base leading-none ${
+                    isDarkMode ? 'text-white' : 'text-slate-900'
+                  }`}
+                >
+                  Aplikasi Guru AI
+                </h1>
+                <p
+                  className={`text-[11px] font-bold mt-0.5 ${
+                    isDarkMode ? 'text-emerald-400' : 'text-emerald-800'
+                  }`}
+                >
+                  Pusat Laporan &amp; Cetak Dokumen
+                </p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
-              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
-            }`}>
-              <span className={`text-[10px] uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Periode:</span>
-              <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
-                isDarkMode ? 'bg-slate-700 text-indigo-300' : 'bg-slate-100 text-indigo-900'
-              }`}>
+            <div
+              className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
+                isDarkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-100'
+                  : 'bg-white border-slate-300 text-slate-800'
+              }`}
+            >
+              <span
+                className={`text-[10px] uppercase ${
+                  isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                }`}
+              >
+                Periode:
+              </span>
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(e.target.value as 'Ganjil' | 'Genap')}
+                className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
+                  isDarkMode ? 'bg-slate-700 text-indigo-300' : 'bg-slate-100 text-indigo-900'
+                }`}
+              >
                 <option value="Ganjil">Ganjil</option>
                 <option value="Genap">Genap</option>
               </select>
-              <select value={selectedTahunAjaran} onChange={(e) => setSelectedTahunAjaran(e.target.value)} className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
-                isDarkMode ? 'bg-slate-700 text-indigo-300' : 'bg-slate-100 text-indigo-900'
-              }`}>
-                {tahunAjaranOptions.map(t => (
-                  <option key={t} value={t}>{t}</option>
+              <select
+                value={selectedTahunAjaran}
+                onChange={(e) => setSelectedTahunAjaran(e.target.value)}
+                className={`font-bold rounded px-1 py-0.5 focus:outline-none ${
+                  isDarkMode ? 'bg-slate-700 text-indigo-300' : 'bg-slate-100 text-indigo-900'
+                }`}
+              >
+                {tahunAjaranOptions.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
                 ))}
               </select>
             </div>
 
-            {/* BADGE PROFIL POJOK KANAN ATAS: NAMA LENGKAP GURU + NUPTK */}
-            <div className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2.5 shadow-xs ${
-              isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
-            }`}>
+            <div
+              className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2.5 shadow-xs ${
+                isDarkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-100'
+                  : 'bg-white border-slate-300 text-slate-800'
+              }`}
+            >
               <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
                 {userDisplayName.charAt(0)}
               </span>
               <div className="flex flex-col leading-tight">
                 <span className="font-extrabold">{userDisplayName}</span>
-                <span className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span
+                  className={`text-[10px] font-mono ${
+                    isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                  }`}
+                >
                   NUPTK: {userNuptkDisplay}
                 </span>
               </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
-                isDarkMode ? 'bg-indigo-950 text-indigo-300 border-indigo-800' : 'bg-indigo-100 text-indigo-800 border-indigo-200'
-              }`}>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+                  isDarkMode
+                    ? 'bg-indigo-950 text-indigo-300 border-indigo-800'
+                    : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                }`}
+              >
                 {isStrictOperatorRole ? 'Operator' : waliKelasAssignedId ? 'Wali Kelas' : 'Guru'}
               </span>
             </div>
@@ -1957,33 +2610,50 @@ export default function LaporanPage() {
                 router.replace('/login')
               }}
               className={`border p-2 rounded-xl transition cursor-pointer ${
-                isDarkMode 
-                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60' 
+                isDarkMode
+                  ? 'bg-rose-950/50 border-rose-800 text-rose-400 hover:bg-rose-900/60'
                   : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200'
               }`}
               title="Keluar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
               </svg>
             </button>
           </div>
         </header>
 
-        <div className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
-          isDarkMode ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md' : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
-        }`}>
+        <div
+          className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+            isDarkMode
+              ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md'
+              : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
+          }`}
+        >
           <div className="max-w-6xl mx-auto flex items-center justify-between text-xs font-bold">
             <div className="flex items-center gap-2">
-              <span className={`font-black pr-2 border-r flex items-center gap-1 ${isDarkMode ? 'text-indigo-400 border-slate-800' : 'text-indigo-900 border-slate-300'}`}>
+              <span
+                className={`font-black pr-2 border-r flex items-center gap-1 ${
+                  isDarkMode
+                    ? 'text-indigo-400 border-slate-800'
+                    : 'text-indigo-900 border-slate-300'
+                }`}
+              >
                 🖨️ Laporan:
               </span>
               <button
                 onClick={() => setActiveTab('pusat')}
                 className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'pusat' 
-                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold' 
-                    : isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-300'
+                  activeTab === 'pusat'
+                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                    : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-300'
                 }`}
               >
                 <span>🖨️</span> Pusat Cetak Laporan
@@ -1991,9 +2661,11 @@ export default function LaporanPage() {
               <button
                 onClick={() => setActiveTab('pengaturan')}
                 className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'pengaturan' 
-                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold' 
-                    : isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-300'
+                  activeTab === 'pengaturan'
+                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                    : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-300'
                 }`}
               >
                 <span>⚙️</span> Pengaturan TTD Kepsek
@@ -2015,8 +2687,7 @@ export default function LaporanPage() {
         <main className="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col min-h-0 overflow-y-auto space-y-4">
           {activeTab === 'pusat' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
-              
-              {/* DOWNLOAD WORD NASKAH SOAL & KUNCI JAWABAN (FORMAT 2 KOLOM HEMAT KERTAS, SIAP EDIT) */}
+              {/* 1. DOWNLOAD WORD NASKAH SOAL & KUNCI JAWABAN */}
               <div className="md:col-span-2 bg-gradient-to-r from-amber-700 via-orange-800 to-amber-950 text-white rounded-2xl p-4 shadow-md space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 font-extrabold text-sm">
@@ -2028,9 +2699,11 @@ export default function LaporanPage() {
                   </span>
                 </div>
                 <p className="text-xs text-amber-100 font-medium">
-                  Naskah otomatis diunduh dalam format Microsoft Word (.doc) 2 kolom koran (maksimal 2 lembar A4) tanpa kunci jawaban sehingga guru bebas mengedit teks sebelum dicetak.
+                  Naskah otomatis diunduh dalam format Microsoft Word (.doc) 2 kolom koran
+                  (maksimal 2 lembar A4) tanpa kunci jawaban sehingga guru bebas mengedit teks
+                  sebelum dicetak.
                 </p>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase mb-1 text-amber-200">
@@ -2044,16 +2717,14 @@ export default function LaporanPage() {
                       {mapelList.length === 0 ? (
                         <option value="">(Belum Ada Mapel Terdaftar)</option>
                       ) : (
-                        mapelList.map((m) => (
-                          <option key={m.id} value={m.nama}>{m.nama}</option>
-                        ))
+                        renderMapelOptGroups(true)
                       )}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase mb-1 text-amber-200">
-                      2. FILTER KELAS
+                      2. FILTER KELAS (7–12)
                     </label>
                     <select
                       value={filterKelasBankSoal}
@@ -2061,9 +2732,7 @@ export default function LaporanPage() {
                       className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none"
                     >
                       <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.nama}>{k.nama}</option>
-                      ))}
+                      {renderKelasOptGroups(true)}
                     </select>
                   </div>
 
@@ -2087,25 +2756,40 @@ export default function LaporanPage() {
                 </div>
               </div>
 
-              {/* CETAK RAPOR INDIVIDU SISWA (STANDAR 2 HALAMAN PDF & WORD) */}
+              {/* 2. CETAK RAPOR INDIVIDU SISWA (3 HALAMAN: COVER + IDENTITAS + NILAI & LIVE EDITOR) */}
               <div className="md:col-span-2 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 text-white rounded-2xl p-4 shadow-md space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-extrabold text-sm">
                     <span>🎓</span>
-                    <h3>Cetak Lembar Rapor Hasil Belajar Peserta Didik (Standar 2 Halaman)</h3>
+                    <h3>
+                      Cetak Lembar Rapor Hasil Belajar Peserta Didik (Cover + Biodata + Nilai)
+                    </h3>
                   </div>
-                  <span className="text-[10px] bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold text-emerald-200">
-                    KKM: 75 (C: 75–78 | B: 79–85 | A: ≥86)
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {selectedKelasRaporInfo && (
+                      <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full font-black">
+                        Unit Terdeteksi: {selectedKelasRaporInfo.unit} • Fase{' '}
+                        {selectedKelasRaporInfo.fase}
+                      </span>
+                    )}
+                    <span className="text-[10px] bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold text-emerald-200">
+                      KKM: 75 (C: 75–78 | B: 79–85 | A: ≥86)
+                    </span>
+                  </div>
                 </div>
                 <p className="text-xs text-emerald-100 font-medium">
-                  Format rapor resmi lengkap dengan Capaian Kompetensi, Pembiasaan Qiro&apos;ah, Ekstrakurikuler, Catatan Wali Kelas, &amp; TTD 3 Pihak (PDF / Word).
+                  Format rapor resmi 3 halaman lengkap (Cover, Identitas Sekolah &amp; Siswa,
+                  Capaian Kompetensi, Ekskul, Absensi, &amp; TTD 3 Pihak). Otomatis memfilter mapel
+                  khusus SMP atau SMK sesuai kelas siswa dan dapat diedit langsung sebelum dicetak.
                 </p>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">
-                      1. KELAS PERWALIAN {(!isStrictOperatorRole && waliKelasAssignedId) ? '(TERKUNCI SESUAI TUGAS)' : ''}
+                      1. KELAS PERWALIAN (URUT 7–12){' '}
+                      {!isStrictOperatorRole && waliKelasAssignedId
+                        ? '(TERKUNCI SESUAI TUGAS)'
+                        : ''}
                     </label>
                     <select
                       value={filterKelasRapor}
@@ -2116,42 +2800,57 @@ export default function LaporanPage() {
                       disabled={!isStrictOperatorRole}
                       className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none disabled:bg-emerald-100 disabled:text-emerald-950 disabled:cursor-not-allowed"
                     >
-                      {isStrictOperatorRole && <option value="">Pilih Kelas</option>}
+                      {isStrictOperatorRole && <option value="">Pilih Kelas (7–12)</option>}
                       {kelasRaporOptions.length === 0 ? (
                         <option value="">(Khusus Wali Kelas / Operator)</option>
+                      ) : isStrictOperatorRole ? (
+                        renderKelasOptGroups(false)
                       ) : (
                         kelasRaporOptions.map((k) => (
-                          <option key={k.id} value={k.id}>{k.nama}</option>
+                          <option key={k.id} value={k.id}>
+                            {k.nama}
+                          </option>
                         ))
                       )}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">2. PILIH PESERTA DIDIK</label>
+                    <label className="block text-[10px] font-extrabold uppercase mb-1 text-emerald-200">
+                      2. PILIH PESERTA DIDIK (URUT A–Z)
+                    </label>
                     <select
                       value={selectedSiswaRapor}
                       onChange={(e) => setSelectedSiswaRapor(e.target.value)}
                       disabled={!filterKelasRapor}
                       className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none disabled:bg-slate-200"
                     >
-                      <option value="">Pilih Siswa</option>
-                      {siswaList
-                        .filter(s => Number(s.kelas_id) === Number(filterKelasRapor))
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>{s.nama_lengkap} (NISN: {s.nisn || '-'})</option>
-                        ))}
+                      <option value="">Pilih Siswa ({siswaRaporOptions.length} Siswa)</option>
+                      {siswaRaporOptions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nama_lengkap} (NISN: {s.nisn || '-'})
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  <button
+                    onClick={handleOpenRaporLivePreview}
+                    disabled={!selectedSiswaRapor || isBuildingRapor}
+                    className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-400 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    <span>👁️</span>{' '}
+                    {isBuildingRapor ? 'Menyiapkan...' : 'Preview & Edit Rapor (3 Hal)'}
+                  </button>
+
                   <button
                     onClick={handlePrintRaporSiswa}
                     disabled={!selectedSiswaRapor}
                     className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-slate-400 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                   >
-                    <span>🖨️</span> Cetak PDF Rapor Resmi
+                    <span>🖨️</span> Cetak PDF Langsung
                   </button>
 
                   <button
@@ -2159,49 +2858,71 @@ export default function LaporanPage() {
                     disabled={!selectedSiswaRapor}
                     className="w-full bg-sky-500 hover:bg-sky-600 disabled:bg-slate-400 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                   >
-                    <span>📝</span> Download Word (.doc) untuk Edit Manual
+                    <span>📝</span> Download Word (.doc)
                   </button>
                 </div>
               </div>
 
-              {/* ABSENSI */}
-              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
-                isDarkMode 
-                  ? 'bg-slate-900/90 border-slate-800' 
-                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
-              }`}>
+              {/* 3. ABSENSI */}
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 border-slate-800'
+                    : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+                }`}
+              >
                 <div>
-                  <div className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-950'}`}>
+                  <div
+                    className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${
+                      isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
+                    }`}
+                  >
                     <span>📄</span>
                     <h3>Cetak PDF Rekap Presensi Harian</h3>
                   </div>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Laporan rekapitulasi presensi siswa per kelas (dihitung per hari dari jam 1).</p>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Laporan rekapitulasi presensi siswa per kelas (dihitung per hari dari jam 1).
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      KELAS (7–12)
+                    </label>
                     <select
                       value={filterKelasAbsensi}
                       onChange={(e) => setFilterKelasAbsensi(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
-                      ))}
+                      {renderKelasOptGroups(false)}
                     </select>
                   </div>
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>BULAN</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      BULAN
+                    </label>
                     <input
                       type="month"
                       value={filterBulanAbsensi}
                       onChange={(e) => setFilterBulanAbsensi(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
@@ -2215,53 +2936,73 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* LEGER NILAI */}
-              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
-                isDarkMode 
-                  ? 'bg-slate-900/90 border-slate-800' 
-                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
-              }`}>
+              {/* 4. LEGER NILAI */}
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 border-slate-800'
+                    : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+                }`}
+              >
                 <div>
-                  <div className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-950'}`}>
+                  <div
+                    className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${
+                      isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
+                    }`}
+                  >
                     <span>📄</span>
                     <h3>Cetak PDF Leger Nilai Akademik</h3>
                   </div>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Leger nilai akumulasi Tugas, UTS, UAS &amp; Rata-Rata per Mapel.</p>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Leger nilai akumulasi Tugas, UTS, UAS &amp; Rata-Rata per Mapel.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      KELAS (7–12)
+                    </label>
                     <select
                       value={filterKelasLeger}
                       onChange={(e) => setFilterKelasLeger(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
-                      ))}
+                      {renderKelasOptGroups(false)}
                     </select>
                   </div>
 
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>MAPEL</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      MAPEL
+                    </label>
                     <select
                       value={filterMapelLeger}
                       onChange={(e) => setFilterMapelLeger(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       {isStrictOperatorRole && <option value="">Semua Mapel</option>}
                       {mapelList.length === 0 ? (
                         <option value="">(Belum Ada Mapel)</option>
                       ) : (
-                        mapelList.map((m) => (
-                          <option key={m.id} value={m.id}>{m.nama}</option>
-                        ))
+                        renderMapelOptGroups(false)
                       )}
                     </select>
                   </div>
@@ -2283,39 +3024,59 @@ export default function LaporanPage() {
                 </div>
               </div>
 
-              {/* JURNAL AGENDA HARIAN / BULANAN */}
-              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
-                isDarkMode 
-                  ? 'bg-slate-900/90 border-slate-800' 
-                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
-              }`}>
+              {/* 5. JURNAL AGENDA HARIAN / BULANAN */}
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 border-slate-800'
+                    : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+                }`}
+              >
                 <div>
-                  <div className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-950'}`}>
+                  <div
+                    className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${
+                      isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
+                    }`}
+                  >
                     <span>📄</span>
                     <h3>Jurnal Agenda Mengajar Harian / Bulanan</h3>
                   </div>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Dokumen resmi jurnal mengajar harian/bulanan guru pengampu.</p>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Dokumen resmi jurnal mengajar harian/bulanan guru pengampu.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className={`block text-[9px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS</label>
+                    <label
+                      className={`block text-[9px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      KELAS (7–12)
+                    </label>
                     <select
                       value={filterKelasJurnal}
                       onChange={(e) => setFilterKelasJurnal(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
-                      ))}
+                      {renderKelasOptGroups(false)}
                     </select>
                   </div>
 
                   <div>
-                    <label className={`block text-[9px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>TANGGAL (HARIAN)</label>
+                    <label
+                      className={`block text-[9px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      TANGGAL (HARIAN)
+                    </label>
                     <input
                       type="date"
                       value={filterTanggalJurnal}
@@ -2324,13 +3085,21 @@ export default function LaporanPage() {
                         if (e.target.value) setFilterBulanJurnal('')
                       }}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
 
                   <div>
-                    <label className={`block text-[9px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>BULAN (BULANAN)</label>
+                    <label
+                      className={`block text-[9px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      BULAN (BULANAN)
+                    </label>
                     <input
                       type="month"
                       value={filterBulanJurnal}
@@ -2339,7 +3108,9 @@ export default function LaporanPage() {
                         if (e.target.value) setFilterTanggalJurnal('')
                       }}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
@@ -2353,45 +3124,67 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* BIMBINGAN WALI */}
-              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
-                isDarkMode 
-                  ? 'bg-slate-900/90 border-slate-800' 
-                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
-              }`}>
+              {/* 6. BIMBINGAN WALI */}
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 border-slate-800'
+                    : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+                }`}
+              >
                 <div>
-                  <div className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-950'}`}>
+                  <div
+                    className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${
+                      isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
+                    }`}
+                  >
                     <span>📄</span>
                     <h3>Catatan Bimbingan Guru Wali</h3>
                   </div>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Laporan penanganan siswa perwalian untuk arsip sekolah.</p>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Laporan penanganan siswa perwalian untuk arsip sekolah.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      KELAS (7–12)
+                    </label>
                     <select
                       value={filterKelasBimbingan}
                       onChange={(e) => setFilterKelasBimbingan(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
-                      ))}
+                      {renderKelasOptGroups(false)}
                     </select>
                   </div>
 
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>BULAN</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      BULAN
+                    </label>
                     <input
                       type="month"
                       value={filterBulanBimbingan}
                       onChange={(e) => setFilterBulanBimbingan(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
@@ -2405,56 +3198,86 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* RIWAYAT PRESENSI DETAIL BK JAM 1-8 */}
-              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
-                isDarkMode 
-                  ? 'bg-slate-900/90 border-slate-800' 
-                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
-              }`}>
+              {/* 7. RIWAYAT PRESENSI DETAIL BK JAM 1-8 */}
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 border-slate-800'
+                    : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+                }`}
+              >
                 <div>
-                  <div className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-950'}`}>
+                  <div
+                    className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${
+                      isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
+                    }`}
+                  >
                     <span>📄</span>
                     <h3>Laporan Detail Presensi BK (Jam Ke-1 s/d 8)</h3>
                   </div>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Matriks presensi jam ke-1 hingga ke-8 untuk mendeteksi siswa bolos KBM.</p>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Matriks presensi jam ke-1 hingga ke-8 untuk mendeteksi siswa bolos KBM.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className={`block text-[9px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>TANGGAL</label>
+                    <label
+                      className={`block text-[9px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      TANGGAL
+                    </label>
                     <input
                       type="date"
                       value={tanggalAbsensi}
                       onChange={(e) => setTanggalAbsensi(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
                   <div>
-                    <label className={`block text-[9px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>BULAN</label>
+                    <label
+                      className={`block text-[9px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      BULAN
+                    </label>
                     <input
                       type="month"
                       value={bulanAbsensiDetail}
                       onChange={(e) => setBulanAbsensiDetail(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
                   <div>
-                    <label className={`block text-[9px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS</label>
+                    <label
+                      className={`block text-[9px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      KELAS (7–12)
+                    </label>
                     <select
                       value={kelasRiwayatAbsensi}
                       onChange={(e) => setKelasRiwayatAbsensi(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
-                      ))}
+                      {renderKelasOptGroups(false)}
                     </select>
                   </div>
                 </div>
@@ -2467,52 +3290,72 @@ export default function LaporanPage() {
                 </button>
               </div>
 
-              {/* RIWAYAT NILAI */}
-              <div className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
-                isDarkMode 
-                  ? 'bg-slate-900/90 border-slate-800' 
-                  : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
-              }`}>
+              {/* 8. RIWAYAT NILAI */}
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 border-slate-800'
+                    : 'bg-gradient-to-br from-indigo-100/90 via-slate-100/90 to-indigo-50/90 border-indigo-200/80'
+                }`}
+              >
                 <div>
-                  <div className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-950'}`}>
+                  <div
+                    className={`flex items-center gap-2 font-extrabold text-sm mb-1 ${
+                      isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
+                    }`}
+                  >
                     <span>📄</span>
                     <h3>Laporan Riwayat Input Nilai</h3>
                   </div>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Daftar entri nilai Tugas, UTS, dan UAS per mata pelajaran.</p>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Daftar entri nilai Tugas, UTS, dan UAS per mata pelajaran.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>KELAS</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      KELAS (7–12)
+                    </label>
                     <select
                       value={kelasNilai}
                       onChange={(e) => setKelasNilai(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       <option value="">Semua Kelas</option>
-                      {kelasList.map((k) => (
-                        <option key={k.id} value={k.id}>{k.nama}</option>
-                      ))}
+                      {renderKelasOptGroups(false)}
                     </select>
                   </div>
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>MAPEL</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      MAPEL
+                    </label>
                     <select
                       value={mapelNilai}
                       onChange={(e) => setMapelNilai(e.target.value)}
                       className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
                       }`}
                     >
                       {isStrictOperatorRole && <option value="">Semua Mapel</option>}
                       {mapelList.length === 0 ? (
                         <option value="">(Belum Ada Mapel)</option>
                       ) : (
-                        mapelList.map((m) => (
-                          <option key={m.id} value={m.id}>{m.nama}</option>
-                        ))
+                        renderMapelOptGroups(false)
                       )}
                     </select>
                   </div>
@@ -2525,51 +3368,82 @@ export default function LaporanPage() {
                   <span>🖨️</span> Cetak PDF Riwayat Nilai
                 </button>
               </div>
-
             </div>
           )}
 
           {activeTab === 'pengaturan' && (
             <div className="space-y-4 pb-12">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className={`backdrop-blur-md border rounded-2xl p-4 space-y-3 shadow-xs ${
-                  isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
-                }`}>
-                  <h3 className={`font-extrabold text-xs uppercase border-b pb-2 ${isDarkMode ? 'text-indigo-400 border-slate-800' : 'text-indigo-950 border-slate-200'}`}>
+                <div
+                  className={`backdrop-blur-md border rounded-2xl p-4 space-y-3 shadow-xs ${
+                    isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
+                  }`}
+                >
+                  <h3
+                    className={`font-extrabold text-xs uppercase border-b pb-2 ${
+                      isDarkMode
+                        ? 'text-indigo-400 border-slate-800'
+                        : 'text-indigo-950 border-slate-200'
+                    }`}
+                  >
                     IDENTITAS GURU PENGAMPU (OTOMATIS DARI TABEL GURU)
                   </h3>
                   <div className="space-y-2">
                     <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NAMA LENGKAP &amp; GELAR (LOGIN AKUN)</label>
+                      <label
+                        className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                          isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                        }`}
+                      >
+                        NAMA LENGKAP &amp; GELAR (LOGIN AKUN)
+                      </label>
                       <input
                         type="text"
                         value={namaGuru}
                         readOnly
                         className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-not-allowed ${
-                          isDarkMode ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-200/70 border-slate-300 text-slate-700'
+                          isDarkMode
+                            ? 'bg-slate-800/60 border-slate-700 text-slate-300'
+                            : 'bg-slate-200/70 border-slate-300 text-slate-700'
                         }`}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK</label>
+                        <label
+                          className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                            isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                          }`}
+                        >
+                          NUPTK
+                        </label>
                         <input
                           type="text"
                           value={nuptkGuru}
                           readOnly
                           className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-not-allowed ${
-                            isDarkMode ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-200/70 border-slate-300 text-slate-700'
+                            isDarkMode
+                              ? 'bg-slate-800/60 border-slate-700 text-slate-300'
+                              : 'bg-slate-200/70 border-slate-300 text-slate-700'
                           }`}
                         />
                       </div>
                       <div>
-                        <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>JABATAN</label>
+                        <label
+                          className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                            isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                          }`}
+                        >
+                          JABATAN
+                        </label>
                         <input
                           type="text"
                           value={jabatanGuru}
                           readOnly
                           className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-not-allowed ${
-                            isDarkMode ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-200/70 border-slate-300 text-slate-700'
+                            isDarkMode
+                              ? 'bg-slate-800/60 border-slate-700 text-slate-300'
+                              : 'bg-slate-200/70 border-slate-300 text-slate-700'
                           }`}
                         />
                       </div>
@@ -2577,32 +3451,56 @@ export default function LaporanPage() {
                   </div>
                 </div>
 
-                <div className={`backdrop-blur-md border rounded-2xl p-4 space-y-3 shadow-xs ${
-                  isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
-                }`}>
-                  <h3 className={`font-extrabold text-xs uppercase border-b pb-2 ${isDarkMode ? 'text-indigo-400 border-slate-800' : 'text-indigo-950 border-slate-200'}`}>
+                <div
+                  className={`backdrop-blur-md border rounded-2xl p-4 space-y-3 shadow-xs ${
+                    isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
+                  }`}
+                >
+                  <h3
+                    className={`font-extrabold text-xs uppercase border-b pb-2 ${
+                      isDarkMode
+                        ? 'text-indigo-400 border-slate-800'
+                        : 'text-indigo-950 border-slate-200'
+                    }`}
+                  >
                     IDENTITAS KEPALA SEKOLAH (TTD SEBELAH KANAN)
                   </h3>
                   <div className="space-y-2">
                     <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NAMA KEPALA SEKOLAH</label>
+                      <label
+                        className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                          isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                        }`}
+                      >
+                        NAMA KEPALA SEKOLAH
+                      </label>
                       <input
                         type="text"
                         value={namaKepsek}
                         onChange={(e) => setNamaKepsek(e.target.value)}
                         className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
-                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                          isDarkMode
+                            ? 'bg-slate-800 border-slate-700 text-white'
+                            : 'bg-slate-50 border-slate-300 text-slate-900'
                         }`}
                       />
                     </div>
                     <div>
-                      <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NIP / NUPTK KEPALA SEKOLAH</label>
+                      <label
+                        className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                          isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                        }`}
+                      >
+                        NIP / NUPTK KEPALA SEKOLAH
+                      </label>
                       <input
                         type="text"
                         value={nipKepsek}
                         onChange={(e) => setNipKepsek(e.target.value)}
                         className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
-                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                          isDarkMode
+                            ? 'bg-slate-800 border-slate-700 text-white'
+                            : 'bg-slate-50 border-slate-300 text-slate-900'
                         }`}
                       />
                     </div>
@@ -2610,21 +3508,37 @@ export default function LaporanPage() {
                 </div>
               </div>
 
-              <div className={`backdrop-blur-md border rounded-2xl p-4 space-y-3 shadow-xs ${
-                isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
-              }`}>
-                <h3 className={`font-extrabold text-xs uppercase border-b pb-2 ${isDarkMode ? 'text-indigo-400 border-slate-800' : 'text-indigo-950 border-slate-200'}`}>
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-4 space-y-3 shadow-xs ${
+                  isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-300'
+                }`}
+              >
+                <h3
+                  className={`font-extrabold text-xs uppercase border-b pb-2 ${
+                    isDarkMode
+                      ? 'text-indigo-400 border-slate-800'
+                      : 'text-indigo-950 border-slate-200'
+                  }`}
+                >
                   IDENTITAS LOKASI SURAT
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className={`block text-[10px] font-extrabold uppercase mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>KOTA / TEMPAT TTD</label>
+                    <label
+                      className={`block text-[10px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                      }`}
+                    >
+                      KOTA / TEMPAT TTD
+                    </label>
                     <input
                       type="text"
                       value={kotaTtd}
                       onChange={(e) => setKotaTtd(e.target.value)}
                       className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-slate-50 border-slate-300 text-slate-900'
                       }`}
                     />
                   </div>
@@ -2644,55 +3558,216 @@ export default function LaporanPage() {
         </main>
 
         <div className="pb-16 pt-1 flex justify-center shrink-0 print:hidden">
-          <div className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
-            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100/90 border-slate-300 text-slate-700'
-          }`}>
+          <div
+            className={`border px-4 py-0.5 rounded-full text-center text-[10px] font-medium shadow-xs transition-colors duration-300 ${
+              isDarkMode
+                ? 'bg-slate-900 border-slate-800 text-slate-400'
+                : 'bg-slate-100/90 border-slate-300 text-slate-700'
+            }`}
+          >
             <span>Aplikasi Guru AI</span>
             <span className="mx-2">•</span>
-            <span>Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong></span>
+            <span>
+              Created by <strong className="text-emerald-500 font-bold">MUZAINI AL KAHFI</strong>
+            </span>
           </div>
         </div>
       </div>
 
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
+      {/* =====================================================================
+          MODAL LIVE PREVIEW & EDITOR RAPOR (3 HALAMAN: COVER + BIO + NILAI)
+         ===================================================================== */}
+      {isRaporPreviewOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 print:hidden">
+          <div
+            className={`w-full max-w-5xl h-[92vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
+              isDarkMode
+                ? 'bg-slate-900 border-slate-700 text-slate-100'
+                : 'bg-slate-100 border-slate-300 text-slate-900'
+            }`}
+          >
+            {/* Header Modal Editor */}
+            <div
+              className={`px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2 shrink-0 ${
+                isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-300'
+              }`}
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-black">
+                    LIVE EDITOR RAPOR ({raporPreviewMeta?.unit})
+                  </span>
+                  <h3 className="font-extrabold text-sm">
+                    {raporPreviewMeta?.namaSiswa.toUpperCase()} — Kelas {raporPreviewMeta?.kelasStr}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-amber-500 font-bold mt-0.5">
+                  ✏️ Klik langsung pada teks mana saja di dalam kertas rapor di bawah untuk
+                  menyunting biodata, capaian kompetensi, atau catatan wali kelas sebelum mencetak!
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintFromLiveEditor}
+                  className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>🖨️</span> Cetak PDF (3 Halaman)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadWordFromLiveEditor}
+                  className="bg-sky-600 hover:bg-sky-700 text-white font-black px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>📝</span> Unduh Word
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRaporPreviewOpen(false)}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-black px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
+                >
+                  ✕ Tutup
+                </button>
+              </div>
+            </div>
+
+            {/* Area Kertas A4 Editable */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-500/30">
+              <style>{`
+                .rapor-paper-canvas {
+                  font-family: 'Times New Roman', Times, serif;
+                  color: #000;
+                  line-height: 1.35;
+                  font-size: 10pt;
+                }
+                .rapor-paper-canvas .watermark { display: none; }
+                .rapor-paper-canvas .cover-box {
+                  border: 3px double #000;
+                  padding: 28px 24px;
+                  margin-bottom: 24px;
+                }
+                .rapor-paper-canvas .page-section {
+                  background: #fff;
+                  padding: 24px 28px;
+                  margin-bottom: 24px;
+                  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+                }
+                .rapor-paper-canvas .table-identitas {
+                  width: 100%;
+                  border: none;
+                  border-collapse: collapse;
+                  margin-bottom: 10px;
+                  font-size: 10pt;
+                }
+                .rapor-paper-canvas .table-identitas td {
+                  border: none;
+                  padding: 2.5px 4px;
+                  vertical-align: top;
+                }
+                .rapor-paper-canvas .section-title {
+                  margin: 0 0 5px 0;
+                  font-size: 9.8pt;
+                  text-transform: uppercase;
+                  letter-spacing: 0.3px;
+                }
+                .rapor-paper-canvas .table-data {
+                  width: 100%;
+                  border-collapse: collapse;
+                  font-size: 9.2pt;
+                }
+                .rapor-paper-canvas .table-data th {
+                  background-color: #f1f5f9;
+                  border: 1px solid #000;
+                  padding: 5px 6px;
+                  font-weight: bold;
+                }
+                .rapor-paper-canvas .table-data td {
+                  border: 1px solid #000;
+                  padding: 4.5px 6px;
+                  vertical-align: middle;
+                }
+              `}</style>
+
+              <div
+                ref={raporPreviewRef}
+                contentEditable={true}
+                suppressContentEditableWarning={true}
+                className="rapor-paper-canvas max-w-[21cm] mx-auto focus:outline-none"
+                dangerouslySetInnerHTML={{ __html: raporPreviewHtml }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FIXED BOTTOM NAVIGATION BAR */}
+      <div
+        className={`border-t fixed bottom-0 left-0 right-0 z-40 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
+          isDarkMode
+            ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
+            : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+        }`}
+      >
         <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
+          <Link
+            href="/"
+            className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-950'
+            }`}
+          >
             <span className="text-base">🕒</span>
             <span>Dashboard</span>
           </Link>
 
           {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
+            <Link
+              href="/siswa"
+              className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-950'
+              }`}
+            >
               <span className="text-base">👥</span>
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
-            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
+            <Link
+              href="/guru"
+              className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-950'
+              }`}
+            >
               <span className="text-base">👨‍🏫</span>
               <span>Guru</span>
             </Link>
           )}
 
-          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
+          <Link
+            href="/jadwal"
+            className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
+              isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-950'
+            }`}
+          >
             <span className="text-base">🎓</span>
             <span>Akademik</span>
           </Link>
 
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-bold transition ${
-            isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
-          }`}>
+          <Link
+            href="/laporan"
+            className={`flex flex-col items-center gap-0.5 text-[11px] font-bold transition ${
+              isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
+            }`}
+          >
             <span className="text-base">🖨️</span>
             <span>Laporan</span>
           </Link>

@@ -12,8 +12,6 @@ import {
   FileSpreadsheet,
   NotebookPen,
   HeartHandshake,
-  Sparkles,
-  Printer,
   LogOut,
   Layers,
   GraduationCap,
@@ -81,7 +79,7 @@ const LAMP_CONFIG: Record<
 export default function SmkDashboardPage() {
   const router = useRouter()
 
-  // State Lampu Gantung Interaktif (Selalu mulai MATI setiap kali masuk dashboard SMK)
+  // State Lampu Gantung Interaktif (Bertahan selama berada di area SMK, mati jika pindah ke SMP)
   const [isLampOn, setIsLampOn] = useState(false)
   const [isPulling, setIsPulling] = useState(false)
   const [activeColor, setActiveColor] = useState<LampColorKey>('green')
@@ -108,19 +106,13 @@ export default function SmkDashboardPage() {
 
   const theme = LAMP_CONFIG[activeColor]
 
-  // Pastikan lampu selalu mati saat pertama masuk & otomatis dimatikan saat keluar halaman
+  // Pulihkan status lampu terakhir selama sesi SMK masih aktif
   useEffect(() => {
-    setIsLampOn(false)
-    sessionStorage.removeItem('smk_lamp_on')
+    const savedLampOn = sessionStorage.getItem('smk_lamp_on') === 'true'
+    setIsLampOn(savedLampOn)
 
     const savedCol = sessionStorage.getItem('smk_lamp_color') as LampColorKey | null
     if (savedCol && LAMP_CONFIG[savedCol]) setActiveColor(savedCol)
-
-    return () => {
-      // Cleanup saat berpindah ke SMP atau halaman lain: matikan lampu
-      setIsLampOn(false)
-      sessionStorage.removeItem('smk_lamp_on')
-    }
   }, [])
 
   // Autentikasi & Ambil Data Khusus SMK Muna Mustofa (DKV)
@@ -191,12 +183,16 @@ export default function SmkDashboardPage() {
     }
   }, [router])
 
-  // Tarik Tali Sakelar dengan Pantulan Elastis
+  // Tarik Tali Sakelar dengan Pantulan Elastis & Simpan Status ke sessionStorage
   const handlePullCord = () => {
     if (isPulling) return
     setIsPulling(true)
     setTimeout(() => {
-      setIsLampOn((prev) => !prev)
+      setIsLampOn((prev) => {
+        const nextState = !prev
+        sessionStorage.setItem('smk_lamp_on', nextState ? 'true' : 'false')
+        return nextState
+      })
     }, 140)
     setTimeout(() => {
       setIsPulling(false)
@@ -208,6 +204,12 @@ export default function SmkDashboardPage() {
     if (!isLampOn) return
     setActiveColor(color)
     sessionStorage.setItem('smk_lamp_color', color)
+  }
+
+  // Reset status lampu SMK saat berpindah ke SMP
+  const handleExitToSmp = () => {
+    setIsLampOn(false)
+    sessionStorage.removeItem('smk_lamp_on')
   }
 
   // Logout: matikan lampu terlebih dahulu sebelum keluar sesi
@@ -258,18 +260,6 @@ export default function SmkDashboardPage() {
       sub: 'Catatan pembinaan siswa',
       href: '/smk/bimbingan',
       icon: HeartHandshake,
-    },
-    {
-      title: 'AI Tools SMK (DKV)',
-      sub: 'Modul ajar & soal Fase E/F',
-      href: '/smk/ai',
-      icon: Sparkles,
-    },
-    {
-      title: 'Laporan & Cetak',
-      sub: 'Rekap nilai & kop SMK',
-      href: '/smk/laporan',
-      icon: Printer,
     },
   ]
 
@@ -628,8 +618,10 @@ export default function SmkDashboardPage() {
         </div>
       </main>
 
-      {/* Kelelawar Piksel Ukuran Koin di Pojok Kiri Bawah untuk Kembali ke SMP */}
-      <PixelBatSwitcher isDarkMode={true} variant="floating" />
+      {/* Kelelawar Piksel Ukuran Koin di Pojok Kiri Bawah untuk Kembali ke SMP (otomatis matikan lampu SMK) */}
+      <div onClickCapture={handleExitToSmp}>
+        <PixelBatSwitcher isDarkMode={true} variant="floating" targetHref="/" />
+      </div>
     </div>
   )
 }
