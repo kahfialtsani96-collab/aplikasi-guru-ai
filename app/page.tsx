@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [userDisplayName, setUserDisplayName] = useState('MEMUAT...')
   const [userNuptkDisplay, setUserNuptkDisplay] = useState('-')
   const [isStrictOperatorRole, setIsStrictOperatorRole] = useState(false)
+  const [canAccessSmkPortal, setCanAccessSmkPortal] = useState(false)
   const [waliKelasAssignedId, setWaliKelasAssignedId] = useState<number | null>(null)
 
   const { isOperator, canAccessBimbingan } = useAuthRole()
@@ -47,12 +48,13 @@ export default function DashboardPage() {
     return str
   }
 
-  // 1. BACA TEMA TERAKHIR SAAT DASHBOARD DIMUAT
+  // 1. BACA TEMA TERAKHIR & MATIKAN LAMPU SMK SAAT MASUK DASHBOARD SMP
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme')
     if (savedTheme === 'dark') {
       setIsDarkMode(true)
     }
+    sessionStorage.removeItem('smk_lamp_on')
   }, [])
 
   // 2. LOGIKA ANIMASI CIRCULAR REVEAL DARK MODE + PERSISTENSI STORAGE
@@ -118,10 +120,10 @@ export default function DashboardPage() {
       if (user && user.email) {
         const cleanEmail = user.email.trim().toLowerCase()
 
-        // Ambil identitas lengkap dari tabel master `guru`
+        // Ambil identitas lengkap & unit_mengajar dari tabel master `guru`
         const { data: dataGuruLogin } = await supabase
           .from('guru')
-          .select('id, nama_lengkap, role, NUPTK, email, jabatan')
+          .select('id, nama_lengkap, role, NUPTK, email, jabatan, unit_mengajar')
           .ilike('email', cleanEmail)
           .maybeSingle()
 
@@ -132,10 +134,16 @@ export default function DashboardPage() {
           const cleanNuptk = formatNuptk(dataGuruLogin.NUPTK)
           const isUserStrictOperator =
             (dataGuruLogin.role || '').toLowerCase() === 'operator'
+          const unitMengajarUpper = (dataGuruLogin.unit_mengajar || '').toUpperCase()
+
+          // Tampilkan tombol Bat hanya untuk Operator atau guru yang mengajar di SMK (SMK / SMP & SMK)
+          const hasSmkAccess =
+            isUserStrictOperator || unitMengajarUpper.includes('SMK')
 
           setUserDisplayName(namaLengkapResmi.toUpperCase())
           setUserNuptkDisplay(cleanNuptk)
           setIsStrictOperatorRole(isUserStrictOperator)
+          setCanAccessSmkPortal(hasSmkAccess)
 
           // Cek apakah guru bertugas sebagai Wali Kelas
           if (!isUserStrictOperator && dataGuruLogin.id) {
@@ -156,6 +164,7 @@ export default function DashboardPage() {
           setUserDisplayName(fallbackName.toUpperCase())
           setUserNuptkDisplay('-')
           setIsStrictOperatorRole(isOperator)
+          setCanAccessSmkPortal(isOperator)
         }
       }
 
@@ -202,6 +211,7 @@ export default function DashboardPage() {
     try {
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('just_logged_in')
+        sessionStorage.removeItem('smk_lamp_on')
       }
       await supabase.auth.signOut({ scope: 'local' })
       router.replace('/login')
@@ -1214,8 +1224,8 @@ export default function DashboardPage() {
         </main>
       </div>
 
-      {/* KELELAWAR PIKSEL SEUKURAN KOIN (POJOK KIRI BAWAH - KHUSUS OPERATOR) */}
-      {(isOperator || isStrictOperatorRole) && (
+      {/* KELELAWAR PIKSEL SEUKURAN KOIN (MUNCUL UNTUK OPERATOR & GURU YANG MENGAJAR DI SMK / SMP & SMK) */}
+      {(isOperator || isStrictOperatorRole || canAccessSmkPortal) && (
         <PixelBatSwitcher isDarkMode={isDarkMode} variant="floating" />
       )}
 

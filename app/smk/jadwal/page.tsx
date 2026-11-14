@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -145,10 +147,10 @@ export default function SmkJadwalPage() {
   const [userName, setUserName] = useState('')
   const [isOperator, setIsOperator] = useState(false)
 
-  // Hari & Filter UI
-  const initialDayInfo = useMemo(() => getInitialDayInfo(), [])
-  const [selectedHari, setSelectedHari] = useState<HariAktifType>(initialDayInfo.day)
-  const [isFridayToday] = useState<boolean>(initialDayInfo.isFridayHoliday)
+  // Hari & Filter UI (Inisialisasi statis aman untuk Next.js build, di-update di client via useEffect)
+  const [todayDayName, setTodayDayName] = useState<HariAktifType>('Senin')
+  const [selectedHari, setSelectedHari] = useState<HariAktifType>('Senin')
+  const [isFridayToday, setIsFridayToday] = useState<boolean>(false)
   const [selectedKelasFilter, setSelectedKelasFilter] = useState<string>('ALL')
   const [scopeMode, setScopeMode] = useState<'ALL' | 'MINE'>('ALL')
   const [viewMode, setViewMode] = useState<'LIST' | 'MATRIX'>('LIST')
@@ -170,7 +172,7 @@ export default function SmkJadwalPage() {
   // State Form Tambah / Edit (Khusus Operator)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingRowIds, setEditingRowIds] = useState<number[]>([])
-  const [formHari, setFormHari] = useState<HariAktifType>(initialDayInfo.day)
+  const [formHari, setFormHari] = useState<HariAktifType>('Senin')
   const [formJamMulai, setFormJamMulai] = useState<string>('1')
   const [formJamSampai, setFormJamSampai] = useState<string>('1')
   const [formKelasId, setFormKelasId] = useState<string>('')
@@ -181,6 +183,15 @@ export default function SmkJadwalPage() {
   const showToast = useCallback((type: 'ok' | 'err', text: string) => {
     setToastMsg({ type, text })
     setTimeout(() => setToastMsg(null), 4500)
+  }, [])
+
+  // 0. Deteksi Hari Lokal Hanya di Browser Client (Mencegah Error Prerender Next.js)
+  useEffect(() => {
+    const info = getInitialDayInfo()
+    setTodayDayName(info.day)
+    setSelectedHari(info.day)
+    setFormHari(info.day)
+    setIsFridayToday(info.isFridayHoliday)
   }, [])
 
   // 1. Cek Sesi & Peran Pengguna (Operator vs Guru)
@@ -762,7 +773,7 @@ export default function SmkJadwalPage() {
   }
 
   const isSelectedHariToday =
-    !isFridayToday && selectedHari.toLowerCase() === initialDayInfo.day.toLowerCase()
+    !isFridayToday && selectedHari.toLowerCase() === todayDayName.toLowerCase()
 
   return (
     <div className="h-dvh max-h-dvh overflow-hidden bg-[#07090e] text-slate-100 flex flex-col relative selection:bg-amber-400/30">
