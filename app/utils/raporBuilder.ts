@@ -142,8 +142,13 @@ function normalizeKelompokMapel(kelompokRaw: string | null | undefined, unit: 'S
     if (upper.includes('KEJURUAN') || upper.includes('PRODUKTIF') || upper === 'B') {
       return 'B. Kelompok Mata Pelajaran Kejuruan'
     }
-    if (upper.includes('MULOK') || upper.includes('MUATAN LOKAL') || upper.includes('KEAGAMAAN')) {
-      return 'C. Muatan Lokal & Keagamaan'
+    if (
+      upper.includes('MULOK') ||
+      upper.includes('MUATAN LOKAL') ||
+      upper.includes('KEAGAMAAN') ||
+      upper.includes('PESANTREN')
+    ) {
+      return 'C. Muatan Lokal & Kepesantrenan'
     }
     return 'A. Kelompok Mata Pelajaran Umum'
   } else {
@@ -154,16 +159,23 @@ function normalizeKelompokMapel(kelompokRaw: string | null | undefined, unit: 'S
   }
 }
 
-// Helper memeriksa kecocokan tingkat mapel SMK
+// Helper memeriksa kecocokan tingkat mapel SMK (termasuk "Semua Tingkat")
 function isMapelMatchGrade(tingkatMapel: string | null | undefined, gradeWeight: number): boolean {
   const raw = String(tingkatMapel || '').trim().toUpperCase()
-  if (!raw || raw === 'SEMUA' || raw === 'ALL' || raw === '-') return true
+  if (!raw || raw.includes('SEMUA') || raw === 'ALL' || raw === '-') return true
 
   const tokens = raw.split(/[,;/\-\s]+/).filter(Boolean)
   if (gradeWeight === 10) return tokens.includes('X') || tokens.includes('10')
   if (gradeWeight === 11) return tokens.includes('XI') || tokens.includes('11')
   if (gradeWeight === 12) return tokens.includes('XII') || tokens.includes('12')
   return true
+}
+
+// Helper memeriksa kecocokan semester mapel
+function isMapelMatchSemester(semesterMapel: string | null | undefined, selectedSem: 'Ganjil' | 'Genap'): boolean {
+  const raw = String(semesterMapel || '').trim().toLowerCase()
+  if (!raw || raw.includes('&') || raw.includes('semua') || raw === '-') return true
+  return raw === selectedSem.toLowerCase()
 }
 
 export async function buildRaporDocument(params: BuildRaporParams): Promise<BuiltRaporResult> {
@@ -206,6 +218,30 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
   const gradeWeight = getKelasGradeWeight(namaKelasStr, tingkatStr)
   const faseKurikulum = !isSmk ? 'D' : gradeWeight === 10 ? 'E' : 'F'
 
+  // Deteksi Kepala Sekolah otomatis sesuai jenjang (SMK vs SMP) dari tabel guru
+  let finalNamaKepsek = namaKepsek
+  let finalNipKepsek = nipKepsek
+
+  if (isSmk) {
+    const { data: kepsekSmkRow } = await supabase
+      .from('guru')
+      .select('nama_lengkap, NUPTK')
+      .ilike('jabatan', '%Kepala Sekolah SMK%')
+      .maybeSingle()
+
+    if (kepsekSmkRow?.nama_lengkap) {
+      finalNamaKepsek = kepsekSmkRow.nama_lengkap.trim()
+      const nuptkRaw = String(kepsekSmkRow.NUPTK || '').trim()
+      finalNipKepsek =
+        nuptkRaw && nuptkRaw.toUpperCase() !== 'NULL' && nuptkRaw.toUpperCase() !== 'EMPTY'
+          ? `NUPTK. ${nuptkRaw}`
+          : 'NUPTK. -'
+    } else {
+      finalNamaKepsek = 'RIZIEQ NIZAR'
+      finalNipKepsek = 'NUPTK. -'
+    }
+  }
+
   const namaSatuanPendidikan = isSmk ? 'SMK MUNA MUSTOFA' : 'SMP MUNA MUSTOFA'
   const namaSatuanTitle = isSmk ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'
   const npsnSekolah = isSmk ? '- (Menginduk)' : '71407877'
@@ -219,7 +255,7 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
   // 1. Ambil seluruh master mapel
   const { data: allMapelDb } = await supabase
     .from('mapel')
-    .select('id, nama_mapel, kelompok, tingkat, jenjang, urutan')
+    .select('id, nama_mapel, kelompok, tingkat, jenjang, semester, urutan')
     .order('urutan', { ascending: true })
     .order('nama_mapel', { ascending: true })
 
@@ -236,7 +272,9 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
       } else {
         const matchUnit = mJenjang === 'SMK' || mJenjang === 'SEMUA' || mJenjang === 'SMP & SMK'
         if (!matchUnit) return false
-        return isMapelMatchGrade(m.tingkat, gradeWeight)
+        if (!isMapelMatchGrade(m.tingkat, gradeWeight)) return false
+        if (!isMapelMatchSemester(m.semester, selectedSemester)) return false
+        return true
       }
     })
     .map((m: any) => ({
@@ -438,10 +476,17 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
     </div>
   `
 
-  // Kop Surat Halaman 3
+  // Kop Surat Halaman 3 (SMK fallback ke header teks resmi jika kop-smk.png belum tersedia)
   const kopRaporHtml = !isSmk
     ? `<img src="${originUrl}/kop-surat.png" alt="Kop Surat SMP" style="width: 100%; max-height: 110px; object-fit: contain;" />`
-    : `<img src="${originUrl}/kop-smk.png" alt="Kop Surat SMK" onerror="this.style.display='none'" style="width: 100%; max-height: 110px; object-fit: contain;" />`
+    : `
+      <div style="border-bottom: 3px double #000; padding-bottom: 6px; margin-bottom: 4px; text-align: center;">
+        <p style="margin: 0; font-size: 10pt; font-weight: bold; letter-spacing: 0.5px;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
+        <h2 style="margin: 2px 0; font-size: 14pt; font-weight: bold; letter-spacing: 0.8px;">SMK MUNA MUSTOFA</h2>
+        <p style="margin: 0; font-size: 9pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
+        <p style="margin: 2px 0 0 0; font-size: 8.5pt;">Alamat: Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+      </div>
+    `
 
   // Blok TTD Kepala Sekolah
   const renderTtdKepsekVisual = (leftStempel: string, leftTtd: string, heightBox: string) => {
@@ -562,8 +607,8 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
               ${kotaTtd}, Juli ${selectedTahunAjaran.split('/')[0]}<br/>
               <strong>Kepala ${namaSatuanTitle},</strong>
               ${renderTtdKepsekVisual('-10px', '10px', '68px')}
-              <u><strong>${namaKepsek}</strong></u><br/>
-              ${nipKepsek}
+              <u><strong>${finalNamaKepsek}</strong></u><br/>
+              ${finalNipKepsek}
             </td>
           </tr>
         </table>
@@ -808,8 +853,8 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
                 Mengetahui,<br/>
                 <strong>Kepala ${namaSatuanTitle}</strong><br/>
                 ${renderTtdKepsekVisual('41%', '46%', '68px')}
-                <u><strong>${namaKepsek}</strong></u><br/>
-                ${nipKepsek}
+                <u><strong>${finalNamaKepsek}</strong></u><br/>
+                ${finalNipKepsek}
               </td>
             </tr>
           </table>
