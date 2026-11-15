@@ -624,13 +624,30 @@ export default function LaporanPage() {
   }
 
   // PARSER NASKAH SOAL 2 KOLOM
+  // PARSER NASKAH SOAL 2 KOLOM (BERSIH DARI PETUNJUK GANDA, GARIS --- & MENDUKUNG A-E SMK)
   const formatNaskahSoalHematKertas = (rawText: string): string => {
     if (!rawText) return '<p><i>Isi naskah soal kosong di database.</i></p>'
 
+    // 1. Potong bagian Kunci Jawaban / Pedoman Penskoran / Lembar Pengesahan
     let cleanText = rawText
       .split(/\n\s*#{0,4}\s*(?:KUNCI\s*JAWABAN|PEDOMAN\s*PENSKORAN|LEMBAR\s*PENGESAHAN)/i)[0]
       .trim()
 
+    // 2. Buang blok "PETUNJUK UMUM / PETUNJUK PENGERJAAN" bawaan AI sebelum masuk ke bagian soal
+    const sectionHeaderMatch = cleanText.match(
+      /(?:^|\n)\s*#{0,4}\s*(?:[A-Z0-9I]+[\.\)]\s*)?(?:SOAL\s+)?(?:PILIHAN\s+GANDA|ISIAN|URAIAN|ESSAY)\b[^\n]*/i
+    )
+    if (sectionHeaderMatch && sectionHeaderMatch.index !== undefined) {
+      cleanText = cleanText.slice(sectionHeaderMatch.index + sectionHeaderMatch[0].length).trim()
+    } else {
+      // Jika tidak ada judul bagian, buang teks pengantar hingga kalimat perintah "Pilihlah satu jawaban..."
+      const pilihlahMatch = cleanText.match(/Pilihlah\s+(?:satu\s+)?jawaban[^\n]*\n/i)
+      if (pilihlahMatch && pilihlahMatch.index !== undefined) {
+        cleanText = cleanText.slice(pilihlahMatch.index + pilihlahMatch[0].length).trim()
+      }
+    }
+
+    // 3. Bersihkan pemformatan Markdown (**bold** & garis pemisah ---)
     cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
 
     const lines = cleanText.split('\n')
@@ -647,7 +664,13 @@ export default function LaporanPage() {
     let startedSoal = false
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim()
+      // Hapus garis pemisah --- atau ___ di awal/akhir baris
+      const line = lines[i]
+        .trim()
+        .replace(/^[-_*]{3,}\s*/, '')
+        .replace(/\s*[-_*]{3,}$/, '')
+        .trim()
+
       if (!line) continue
 
       const qMatch = line.match(/^(\d{1,2})[\.\)]\s+(.+)$/)
@@ -672,7 +695,8 @@ export default function LaporanPage() {
         continue
       }
 
-      const optMatch = line.match(/^([a-dA-D])[\.\)]\s*(.+)$/)
+      // Mendukung opsi A-D (SMP) maupun A-E (SMK)
+      const optMatch = line.match(/^([a-eA-E])[\.\)]\s*(.+)$/)
       if (optMatch && currentSoal) {
         currentSoal.options.push({
           letter: optMatch[1].toUpperCase(),
@@ -734,7 +758,7 @@ export default function LaporanPage() {
     }
 
     const cleanedLines = lines
-      .filter((l) => !/^#{1,4}\s*/.test(l.trim()))
+      .filter((l) => !/^#{1,4}\s*/.test(l.trim()) && !/^[-_*]{3,}$/.test(l.trim()))
       .map((l) => l.trim())
       .filter(Boolean)
     return cleanedLines.map((l) => `<p style="margin: 0 0 4px 0;">${l}</p>`).join('')
@@ -755,8 +779,7 @@ export default function LaporanPage() {
       return regexWord.test(fk) || fkNoSpace.includes(targetNoSpace)
     })
   }
-
-  const triggerDownloadWord = (filename: string, htmlBody: string) => {
+const triggerDownloadWord = (filename: string, htmlBody: string) => {
     const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
     const wordHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -873,6 +896,32 @@ export default function LaporanPage() {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
   }
+  // Helper Kop Surat Ujian dinamis SMP vs SMK (proporsional tanpa melebar)
+  const buildKopUjianWordHtml = (faseOrKelasStr: string, mapelStr: string, maxImgHeight: string) => {
+    const mapelObj = mapelList.find(
+      (m) => m.nama.trim().toLowerCase() === (mapelStr || '').trim().toLowerCase()
+    )
+    const isSmkSoal =
+      (mapelObj?.jenjang || '').toUpperCase() === 'SMK' ||
+      /\b(X|XI|XII|10|11|12|DKV|FASE\s*E|FASE\s*F)\b/i.test(faseOrKelasStr || '')
+
+    if (isSmkSoal) {
+      return `
+        <div style="border-bottom: 3px double #000; padding-bottom: 4px; margin-bottom: 4px; text-align: center;">
+          <p style="margin: 0; font-size: 9pt; font-weight: bold;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
+          <h2 style="margin: 1px 0; font-size: 13pt; font-weight: bold;">SMK MUNA MUSTOFA</h2>
+          <p style="margin: 0; font-size: 8.5pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
+          <p style="margin: 1px 0 0 0; font-size: 8pt;">Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+        </div>
+      `
+    }
+
+    return `
+      <div style="text-align: center; margin-bottom: 4px;">
+        <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; max-height: ${maxImgHeight}; object-fit: contain;" />
+      </div>
+    `
+  }
 
   const handlePrintBankSoal = async () => {
     let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
@@ -893,52 +942,55 @@ export default function LaporanPage() {
     }
 
     const htmlSections = soalData
-      .map(
-        (s, idx) => `
-        ${
-          idx > 0
-            ? '<br clear="all" style="page-break-before:always; mso-break-type:section-break" />'
-            : ''
-        }
-        <div class="WordSectionHeader">
-          <div style="text-align: center; margin-bottom: 4px;">
-            <img src="/kop-surat.png" alt="Kop Surat" width="680" style="width: 100%; max-height: 82px; object-fit: contain;" />
-          </div>
-          <div class="judul-ujian">
-            NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}
-          </div>
-          <table class="header-identitas">
-            <tr>
-              <td style="width: 15%;"><b>Mata Pelajaran</b></td>
-              <td style="width: 35%;">: ${s.mapel}</td>
-              <td style="width: 15%;"><b>Nama Siswa</b></td>
-              <td style="width: 35%;">: ........................................................</td>
-            </tr>
-            <tr>
-              <td><b>Kelas / Fase</b></td>
-              <td>: ${s.fase_kelas}</td>
-              <td><b>No. Peserta / NIS</b></td>
-              <td>: ........................................................</td>
-            </tr>
-            <tr>
-              <td><b>Waktu / Soal</b></td>
-              <td>: 90 Menit (${s.jumlah_soal} Butir ${s.bentuk_soal})</td>
-              <td><b>Hari / Tanggal</b></td>
-              <td>: ........................................................</td>
-            </tr>
-          </table>
-          <p class="petunjuk-singkat">
-            <b>Petunjuk:</b> Berdoalah sebelum mengerjakan. Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (X) pada huruf A, B, C, atau D pada lembar jawaban!
-          </p>
-        </div>
+      .map((s, idx) => {
+        const isSmkSoal = /\b(X|XI|XII|10|11|12|DKV|FASE\s*E|FASE\s*F)\b/i.test(
+          s.fase_kelas || ''
+        )
+        const opsiHurufLabel = isSmkSoal ? 'A, B, C, D, atau E' : 'A, B, C, atau D'
 
-        <br clear="all" style="mso-special-character:line-break; page-break-before:auto; mso-break-type:section-break" />
+        return `
+          ${
+            idx > 0
+              ? '<br clear="all" style="page-break-before:always; mso-break-type:section-break" />'
+              : ''
+          }
+          <div class="WordSectionHeader">
+            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel, '76px')}
+            <div class="judul-ujian">
+              NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}
+            </div>
+            <table class="header-identitas">
+              <tr>
+                <td style="width: 15%;"><b>Mata Pelajaran</b></td>
+                <td style="width: 35%;">: ${s.mapel}</td>
+                <td style="width: 15%;"><b>Nama Siswa</b></td>
+                <td style="width: 35%;">: ........................................................</td>
+              </tr>
+              <tr>
+                <td><b>Kelas / Fase</b></td>
+                <td>: ${s.fase_kelas}</td>
+                <td><b>No. Peserta / NIS</b></td>
+                <td>: ........................................................</td>
+              </tr>
+              <tr>
+                <td><b>Waktu / Soal</b></td>
+                <td>: 90 Menit (${s.jumlah_soal} Butir ${s.bentuk_soal})</td>
+                <td><b>Hari / Tanggal</b></td>
+                <td>: ........................................................</td>
+              </tr>
+            </table>
+            <p class="petunjuk-singkat">
+              <b>Petunjuk:</b> Berdoalah sebelum mengerjakan. Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (X) pada huruf ${opsiHurufLabel} pada lembar jawaban!
+            </p>
+          </div>
 
-        <div class="WordSectionSoal">
-          ${formatNaskahSoalHematKertas(s.isi_soal)}
-        </div>
-      `
-      )
+          <br clear="all" style="mso-special-character:line-break; page-break-before:auto; mso-break-type:section-break" />
+
+          <div class="WordSectionSoal">
+            ${formatNaskahSoalHematKertas(s.isi_soal)}
+          </div>
+        `
+      })
       .join('')
 
     const safeMapel = (filterMapelBankSoal || 'Semua_Mapel').replace(/[^a-zA-Z0-9]/g, '_')
@@ -967,21 +1019,73 @@ export default function LaporanPage() {
       targetPart = targetPart.split(/\n\s*#{0,4}\s*LEMBAR\s*PENGESAHAN/i)[0]
       return targetPart
         .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+        .replace(/^[-_*]{3,}$/gm, '')
         .trim()
         .replace(/\n/g, '<br/>')
     }
 
+    const firstSoal = soalData[0]
+    const isSmkSoal = /\b(X|XI|XII|10|11|12|DKV|FASE\s*E|FASE\s*F)\b/i.test(
+      firstSoal?.fase_kelas || filterKelasBankSoal || ''
+    )
+
     const guruPengampu = await resolvePenandatanganPDF({
       mode: 'mapel',
-      mapelNama: filterMapelBankSoal || soalData[0]?.mapel,
-      namaGuruFallback: soalData[0]?.nama_guru,
+      mapelNama: filterMapelBankSoal || firstSoal?.mapel,
+      namaGuruFallback: firstSoal?.nama_guru,
     })
+
+    // Tentukan Kepala Sekolah sesuai jenjang soal (SMK vs SMP)
+    let kepsekNamaDoc = namaKepsek
+    let kepsekNipDoc = nipKepsek
+    if (isSmkSoal) {
+      const { data: kepsekSmk } = await supabase
+        .from('guru')
+        .select('nama_lengkap, NUPTK')
+        .ilike('jabatan', '%Kepala Sekolah SMK%')
+        .maybeSingle()
+      kepsekNamaDoc = kepsekSmk?.nama_lengkap?.trim() || 'RIZIEQ NIZAR'
+      kepsekNipDoc = kepsekSmk?.NUPTK ? `NUPTK. ${kepsekSmk.NUPTK}` : 'NUPTK. -'
+    }
+
+    const footerTtdKunci = `
+      <div style="margin-top: 25px; font-family: 'Times New Roman', serif; font-size: 9.5pt; page-break-inside: avoid; color: #000;">
+        <table style="width: 100%; border: none;">
+          <tr>
+            <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+              ${kotaTtd}, ${currentDateStr}<br/>
+              <strong>${guruPengampu.jabatanLabel}</strong><br/><br/><br/><br/>
+              <u><strong>${guruPengampu.nama}</strong></u><br/>
+              NUPTK: ${guruPengampu.nuptk}
+            </td>
+            <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+              Mengetahui,<br/>
+              <strong>Kepala ${isSmkSoal ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'}</strong><br/>
+              <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
+                ${
+                  !isSmkSoal && pakaiTtdCapKepsek
+                    ? `
+                      <img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />
+                      <img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />
+                    `
+                    : '<br/><br/>'
+                }
+              </div>
+              <u><strong>${kepsekNamaDoc}</strong></u><br/>
+              ${kepsekNipDoc}
+            </td>
+          </tr>
+        </table>
+      </div>
+    `
 
     const htmlKunci = `
       <div class="WordSectionSingle" style="font-size: 10pt; line-height: 1.4;">
-        <div style="text-align: center; margin-bottom: 10px;">
-          <img src="/kop-surat.png" alt="Kop Surat" width="650" style="width: 100%; max-height: 120px; object-fit: contain;" />
-        </div>
+        ${buildKopUjianWordHtml(
+          firstSoal?.fase_kelas || filterKelasBankSoal,
+          firstSoal?.mapel || filterMapelBankSoal,
+          '110px'
+        )}
         <h2 style="text-align: center; text-transform: uppercase; font-size: 12pt; margin-bottom: 12px;">
           LEMBAR KUNCI JAWABAN &amp; PEDOMAN PENILAIAN GURU
         </h2>
@@ -1003,7 +1107,7 @@ export default function LaporanPage() {
             `
           )
           .join('')}
-        ${getFooterTtdHTML(guruPengampu)}
+        ${footerTtdKunci}
       </div>
     `
 
