@@ -3,7 +3,18 @@ import { NextResponse } from 'next/server'
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { tool, activeTool, selectedDoc, mapel, faseKelas, materiTopik, spesifikData, ...kbcData } = body
+    const {
+      tool,
+      activeTool,
+      selectedDoc,
+      jenjang,
+      jurusan,
+      mapel,
+      faseKelas,
+      materiTopik,
+      spesifikData,
+      ...kbcData
+    } = body
 
     // Membaca API Key dari .env.local
     const apiKey = process.env.MERCURY_API_KEY
@@ -18,11 +29,18 @@ export async function POST(req: Request) {
     // Pembersihan input
     const sanitize = (str: any) => (typeof str === 'string' && str.trim() !== '' ? str.trim() : null)
 
-    const namaSekolahResmi = sanitize(kbcData.satuanPendidikan) || 'SMP MUNA MUSTOFA'
+    const jenjangResmi = (sanitize(jenjang) || 'SMP').toUpperCase()
+    const isSmk = jenjangResmi === 'SMK'
+    const jurusanResmi = sanitize(jurusan) || (isSmk ? 'Desain Komunikasi Visual (DKV)' : null)
+
+    const namaSekolahResmi =
+      sanitize(kbcData.satuanPendidikan) || (isSmk ? 'SMK MUNA MUSTOFA' : 'SMP MUNA MUSTOFA')
     const namaGuruResmi = sanitize(kbcData.namaGuru) || 'Muzaini Al Kahfi'
     const nipGuruResmi = sanitize(kbcData.nipGuru) || '-'
-    const namaKepalaResmi = sanitize(kbcData.namaKepala) || 'SULASTRI, S.Pd., Gr.'
-    const nipKepalaResmi = sanitize(kbcData.nipKepala) || '6337763664131233'
+    const namaKepalaResmi =
+      sanitize(kbcData.namaKepala) || (isSmk ? 'Kepala Sekolah SMK' : 'SULASTRI, S.Pd., Gr.')
+    const nipKepalaResmi =
+      sanitize(kbcData.nipKepala) || (isSmk ? '-' : '6337763664131233')
     const kotaTtdResmi = sanitize(kbcData.kotaTtd) || 'Gisting'
 
     // Helper Pembersih Teks NUPTK agar tidak tercetak ganda
@@ -32,17 +50,22 @@ export async function POST(req: Request) {
       return `NUPTK: ${cleanNumber}`
     }
 
+    // Konteks Kurikulum SMP vs SMK DKV
+    const konteksJenjangPrompt = isSmk
+      ? `Jenjang: SMK (Sekolah Menengah Kejuruan) — Kompetensi Keahlian: ${jurusanResmi}. Gunakan pendekatan vokasi/industri kreatif, studi kasus proyek klien (client brief), standar teknis produksi media visual, tipografi, tata letak, fotografi/videografi, dan kesiapan kerja dunia industri (DUDI) sesuai Kurikulum Merdeka SMK Fase E/F.`
+      : `Jenjang: SMP (Sekolah Menengah Pertama) Kurikulum Merdeka Fase D.`
+
     let systemPrompt = ''
     let userPrompt = ''
 
     // 1. LOGIKA CHATBOT VS GENERATOR DOKUMEN RESMI
     if (activeTool === 'chatbot') {
-      systemPrompt = `Anda adalah Asisten Guru AI dan Konsultan Pedagogi Kurikulum Merdeka & KBC Kemenag RI yang ramah, komunikatif, solutif, dan praktis.`
+      systemPrompt = `Anda adalah Asisten Guru AI dan Konsultan Pedagogi Kurikulum Merdeka (SMP & SMK Kejuruan) serta KBC Kemenag RI yang ramah, komunikatif, solutif, dan praktis.`
 
       userPrompt = `Pertanyaan / Diskusi Guru:
 ${materiTopik}
 
-(Konteks Pembelajaran: Satuan Pendidikan: ${namaSekolahResmi}, Mapel: ${mapel || '-'}, Fase/Kelas: ${faseKelas || '-'})
+(Konteks Pembelajaran: Satuan Pendidikan: ${namaSekolahResmi}, ${konteksJenjangPrompt}, Mapel: ${mapel || '-'}, Fase/Kelas: ${faseKelas || '-'})
 
 Instruksi Penjawab Chatbot:
 1. Jawablah pertanyaan guru secara langsung pada inti masalah, lugas, dan praktis.
@@ -50,19 +73,20 @@ Instruksi Penjawab Chatbot:
 3. Gunakan format Markdown yang rapi (bullet points, bold, dan paragraf singkat) agar mudah dibaca.`
 
     } else {
-      systemPrompt = `Anda adalah Asisten Guru AI dan Pakar Pedagogi Kurikulum Merdeka & KBC Kemenag RI yang cerdas, terstruktur, mendalam, dan profesional.`
+      systemPrompt = `Anda adalah Asisten Guru AI dan Pakar Pedagogi Kurikulum Merdeka (SMP Fase D & SMK Kejuruan Fase E/F) serta KBC Kemenag RI yang cerdas, terstruktur, mendalam, dan profesional.`
 
       let detailInstruksi = ''
 
       switch (activeTool) {
         case 'kbc':
-          detailInstruksi = `Buatlah dokumen [${selectedDoc?.toUpperCase()}] untuk Perangkat Ajar Kurikulum Berbasis Cinta (KBC). Satuan Pendidikan: ${namaSekolahResmi}, Mapel: ${mapel}, Fase/Kelas: ${faseKelas}. Data: ${JSON.stringify(kbcData)}.`
+          detailInstruksi = `Buatlah dokumen [${selectedDoc?.toUpperCase()}] untuk Perangkat Ajar Kurikulum Berbasis Cinta (KBC). Satuan Pendidikan: ${namaSekolahResmi}, ${konteksJenjangPrompt}, Mapel: ${mapel}, Fase/Kelas: ${faseKelas}. Data: ${JSON.stringify(kbcData)}.`
           break
         case 'perangkat':
-          detailInstruksi = `Buat dokumen ${spesifikData?.jenisPerangkat || 'Perangkat Pembelajaran'}. Mapel: ${mapel}, Fase/Kelas: ${faseKelas}. Materi Pokok: ${materiTopik}.`
+          detailInstruksi = `Buat dokumen ${spesifikData?.jenisPerangkat || 'Perangkat Pembelajaran'}. ${konteksJenjangPrompt} Mapel: ${mapel}, Fase/Kelas: ${faseKelas}. Materi Pokok: ${materiTopik}.`
           break
         case 'deep-learning':
           detailInstruksi = `Susun Modul Ajar LENGKAP SIAP AKREDITASI dengan pendekatan Deep Learning. 
+${konteksJenjangPrompt}
 Fokus Pilar: ${spesifikData?.dlPilar}, Alokasi Waktu: ${spesifikData?.dlAlokasi}, Strategi: ${spesifikData?.dlStrategi}. 
 Materi Topik: ${materiTopik}. 
 WAJIB ikuti struktur berikut secara berurutan:
@@ -72,16 +96,23 @@ WAJIB ikuti struktur berikut secara berurutan:
 4. Lampiran (Rubrik Sikap, Rubrik Diskusi, dan Soal Evaluasi).`
           break
         case 'kokurikuler':
-          detailInstruksi = `Rancang Modul Projek Kokurikuler P5/PPRA. Tema Utama: ${spesifikData?.kokuTema}, Dimensi Profil: ${spesifikData?.kokuDimensi}. Topik Projek: ${materiTopik}. Sertakan Alur Aktivitas, Rubrik Penilaian, dan Lembar Asesmen.`
+          detailInstruksi = `Rancang Modul Projek Kokurikuler P5/PPRA. ${konteksJenjangPrompt} Tema Utama: ${spesifikData?.kokuTema}, Dimensi Profil: ${spesifikData?.kokuDimensi}. Topik Projek: ${materiTopik}. Sertakan Alur Aktivitas, Rubrik Penilaian, dan Lembar Asesmen.`
           break
         case 'lkpd':
-          detailInstruksi = `Buat Lembar Kerja Peserta Didik (LKPD). Jenis Aktivitas: ${spesifikData?.lkpdAktivitas}. Materi: ${materiTopik}. ${spesifikData?.lkpdHots ? 'Gunakan soal HOTS dan konteks kearifan lokal.' : ''}`
+          detailInstruksi = `Buat Lembar Kerja Peserta Didik (LKPD). ${konteksJenjangPrompt} Jenis Aktivitas: ${spesifikData?.lkpdAktivitas}. Materi: ${materiTopik}. ${spesifikData?.lkpdHots ? 'Gunakan soal HOTS dan konteks kearifan lokal / studi kasus industri.' : ''}`
           break
         case 'soal':
-          detailInstruksi = `Buat Paket Naskah Ujian. Jumlah Soal: ${spesifikData?.soalJumlah}, Bentuk: ${spesifikData?.soalTipe}, Tingkat Kesulitan: ${spesifikData?.soalLevel}. Topik: ${materiTopik}. ${spesifikData?.soalKunci ? 'Sertakan Kunci Jawaban di akhir.' : ''}`
+          detailInstruksi = `Buat Paket Naskah Ujian Resmi. ${konteksJenjangPrompt}
+- Jumlah Soal: ${spesifikData?.soalJumlah}
+- Bentuk Soal: ${spesifikData?.soalTipe}
+- Tingkat Kesulitan: ${spesifikData?.soalLevel}
+- Topik/Indikator Materi: ${materiTopik}
+${isSmk ? '- Khususan SMK DKV: Jika mata pelajaran termasuk produktif/kejuruan DKV, wajib gunakan studi kasus nyata (client brief, komposisi desain, manajemen warna RGB/CMYK, resolusi DPI/PPI, tipografi, atau alur produksi multimedia) serta tambahkan keterangan [Ilustrasi Visual: ...] pada soal yang membutuhkan stimulus gambar.' : ''}
+- DILARANG membuat tabel kisi-kisi soal.
+${spesifikData?.soalKunci ? '- Sertakan Kunci Jawaban lengkap beserta pembahasan singkat di bagian paling akhir.' : ''}`
           break
         case 'multi':
-          detailInstruksi = `Bantu saya membuat: ${spesifikData?.multiSubTool}. Catatan/Konteks: ${materiTopik}.`
+          detailInstruksi = `Bantu saya membuat: ${spesifikData?.multiSubTool}. ${konteksJenjangPrompt} Catatan/Konteks: ${materiTopik}.`
           break
         default:
           detailInstruksi = `Buat dokumen pedagogi untuk: ${materiTopik}`
@@ -91,6 +122,7 @@ WAJIB ikuti struktur berikut secara berurutan:
       userPrompt = `Tugas Utama Anda: Susunlah dokumen pedagogi guru secara LENGKAP, MENDALAM, dan TERSTRUKTUR.
 - Modul/Tool AI: ${tool || 'Generator Perangkat Ajar'}
 - Satuan Pendidikan: ${namaSekolahResmi} (DILARANG menggunakan kata 'Sekolah/Madrasah', wajib gunakan nama resmi ini)
+- Jenjang Pendidikan: ${jenjangResmi}${jurusanResmi ? ` (${jurusanResmi})` : ''}
 - Mata Pelajaran: ${mapel || '-'}
 - Fase/Kelas: ${faseKelas || '-'}
 - Instruksi Spesifik: ${detailInstruksi}
@@ -139,9 +171,9 @@ Instruksi Format WAJIB:
 
     const aiAnswer = data.choices?.[0]?.message?.content || 'Tidak ada respons yang dihasilkan oleh AI.'
 
-    // 3. LEMBAR PENGESAHAN HTML STATIS
+    // 3. LEMBAR PENGESAHAN HTML STATIS DINAMIS SESUAI JENJANG
     const lembarPengesahanHTML = `\n\n<br><hr><br>
-### VI. LEMBAR PENGESAHAN MODUL AJAR
+### LEMBAR PENGESAHAN
 Diverifikasi dan disahkan untuk digunakan dalam kegiatan pembelajaran Kurikulum Merdeka di **${namaSekolahResmi}**.
 
 <table class="ttd-table" style="width: 100%; border: none; margin-top: 30px; font-family: 'Times New Roman', serif;">
