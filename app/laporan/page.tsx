@@ -1,11 +1,20 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import {
+  buildRaporDocument,
+  detectUnitByKelas,
+  getKelasGradeWeight,
+  RaporGuruInfo,
+  RaporKelasItem,
+  RaporSiswaItem,
+} from '../utils/raporBuilder'
+import RaporPreviewModal, { RaporPreviewMeta } from '../components/RaporPreviewModal'
 
 const getSupabaseUrl = () =>
   (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
@@ -25,61 +34,9 @@ interface OptionItem {
   wali_kelas_id?: number | null
 }
 
-interface SiswaItem {
-  id: number
-  nama_lengkap: string
-  nis?: string
-  nisn?: string
-  jenis_kelamin?: string
-  tempat_lahir?: string
-  tanggal_lahir?: string
-  agama?: string
-  alamat?: string
-  sekolah_asal?: string
-  nama_ayah?: string
-  nama_ibu?: string
-  nama_wali?: string
-  kelas_id?: number
-  kelas?: any
-}
-
-interface GuruInfo {
-  nama: string
-  nuptk: string
-  jabatanLabel: string
-}
-
-// Helper menentukan bobot tingkat kelas kronologis 7 -> 12
-function getKelasGradeWeight(namaKelas: string, tingkatDb?: string | null): number {
-  const t = String(tingkatDb || '').trim()
-  if (['7', '8', '9', '10', '11', '12'].includes(t)) return Number(t)
-
-  const upper = (namaKelas || '').trim().toUpperCase()
-  if (/^(XII|12)\b/.test(upper)) return 12
-  if (/^(XI|11)\b/.test(upper)) return 11
-  if (/^(X|10)\b/.test(upper)) return 10
-  if (/^(IX|9)\b/.test(upper)) return 9
-  if (/^(VIII|8)\b/.test(upper)) return 8
-  if (/^(VII|7)\b/.test(upper)) return 7
-  return 99
-}
-
-// Helper menentukan apakah kelas masuk unit SMK atau SMP
-function detectUnitByKelas(namaKelas: string, jenjangDb?: string | null, tingkatDb?: string | null): 'SMP' | 'SMK' {
-  const j = String(jenjangDb || '').trim().toUpperCase()
-  if (j === 'SMK') return 'SMK'
-  if (j === 'SMP') return 'SMP'
-
-  const w = getKelasGradeWeight(namaKelas, tingkatDb)
-  if (w >= 10 && w <= 12) return 'SMK'
-  if ((namaKelas || '').toUpperCase().includes('DKV')) return 'SMK'
-  return 'SMP'
-}
-
 export default function LaporanPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
-  const raporPreviewRef = useRef<HTMLDivElement>(null)
 
   const [activeTab, setActiveTab] = useState<'pusat' | 'pengaturan'>('pusat')
   const [userDisplayName, setUserDisplayName] = useState('MEMUAT...')
@@ -102,7 +59,7 @@ export default function LaporanPage() {
   // Master Options
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
-  const [siswaList, setSiswaList] = useState<SiswaItem[]>([])
+  const [siswaList, setSiswaList] = useState<RaporSiswaItem[]>([])
 
   // Global Filter Periode Akademik
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
@@ -143,11 +100,7 @@ export default function LaporanPage() {
   const [selectedSiswaRapor, setSelectedSiswaRapor] = useState('')
   const [isRaporPreviewOpen, setIsRaporPreviewOpen] = useState(false)
   const [raporPreviewHtml, setRaporPreviewHtml] = useState('')
-  const [raporPreviewMeta, setRaporPreviewMeta] = useState<{
-    namaSiswa: string
-    kelasStr: string
-    unit: 'SMP' | 'SMK'
-  } | null>(null)
+  const [raporPreviewMeta, setRaporPreviewMeta] = useState<RaporPreviewMeta | null>(null)
   const [isBuildingRapor, setIsBuildingRapor] = useState(false)
 
   // Riwayat Presensi Detail BK & Riwayat Nilai
@@ -178,29 +131,6 @@ export default function LaporanPage() {
       .split(/\s+/)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       .join(' ')
-  }
-
-  // Helper Predikat & Capaian Kompetensi Rapor (KKM = 75)
-  const getPredikatRapor = (nilai: number, namaMapel: string) => {
-    if (nilai >= 86) {
-      return {
-        huruf: 'A',
-        keterangan: 'Sangat Baik',
-        deskripsi: `Menunjukkan penguasaan yang sangat baik dalam memahami seluruh materi dan kompetensi dasar pada mata pelajaran ${namaMapel}.`,
-      }
-    }
-    if (nilai >= 79) {
-      return {
-        huruf: 'B',
-        keterangan: 'Baik',
-        deskripsi: `Menunjukkan penguasaan yang baik dalam memahami sebagian besar materi dan kompetensi dasar pada mata pelajaran ${namaMapel}.`,
-      }
-    }
-    return {
-      huruf: 'C',
-      keterangan: 'Cukup Baik',
-      deskripsi: `Menunjukkan penguasaan yang cukup baik dalam memahami kompetensi dasar esensial pada mata pelajaran ${namaMapel}.`,
-    }
   }
 
   useEffect(() => {
@@ -414,7 +344,7 @@ export default function LaporanPage() {
     }
   }
 
-  // PENGELOMPOKAN DROPDOWN OPSI A (SMP 7-9 & SMK 10-12)
+  // PENGELOMPOKAN DROPDOWN (SMP 7-9 & SMK 10-12)
   const groupedKelasOptions = useMemo(() => {
     const smp = kelasList.filter(
       (k) => detectUnitByKelas(k.nama, k.jenjang, k.tingkat) === 'SMP'
@@ -435,7 +365,6 @@ export default function LaporanPage() {
     return { smp, smk }
   }, [mapelList])
 
-  // Helper Render `<optgroup>` Kelas Opsi A untuk dipakai ulang di seluruh 8 kartu
   const renderKelasOptGroups = (useNameAsValue = false) => (
     <>
       {groupedKelasOptions.smp.length > 0 && (
@@ -459,7 +388,6 @@ export default function LaporanPage() {
     </>
   )
 
-  // Helper Render `<optgroup>` Mapel Terkelompok SMP vs SMK
   const renderMapelOptGroups = (useNameAsValue = false) => (
     <>
       {groupedMapelOptions.smp.length > 0 && (
@@ -486,7 +414,7 @@ export default function LaporanPage() {
   // HELPER MENGAMBIL WALI KELAS
   const resolveWaliKelasByKelasId = async (
     kelasId: number | string | null
-  ): Promise<GuruInfo> => {
+  ): Promise<RaporGuruInfo> => {
     if (kelasId) {
       const kelasObj = kelasList.find((k) => Number(k.id) === Number(kelasId))
       let waliId = kelasObj?.wali_kelas_id
@@ -531,7 +459,7 @@ export default function LaporanPage() {
     kelasId?: number | string | null
     guruEmail?: string | null
     namaGuruFallback?: string | null
-  }): Promise<GuruInfo> => {
+  }): Promise<RaporGuruInfo> => {
     if (options.mode === 'wali') {
       return await resolveWaliKelasByKelasId(options.kelasId || waliKelasAssignedId || null)
     }
@@ -651,7 +579,7 @@ export default function LaporanPage() {
     </div>
   `
 
-  const getFooterTtdHTML = (guruInfo: GuruInfo) => `
+  const getFooterTtdHTML = (guruInfo: RaporGuruInfo) => `
     <div style="margin-top: 25px; font-family: 'Times New Roman', serif; font-size: 9.5pt; page-break-inside: avoid; color: #000;">
       <table style="width: 100%; border: none;">
         <tr>
@@ -1087,7 +1015,7 @@ export default function LaporanPage() {
   const handlePrintDocument = async (jenis: string) => {
     let judulDoc = 'LAPORAN AKADEMIK'
     let contentBody = ''
-    let guruCetak: GuruInfo = {
+    let guruCetak: RaporGuruInfo = {
       nama: namaGuru,
       nuptk: nuptkGuru,
       jabatanLabel: 'Guru Mata Pelajaran',
@@ -1118,9 +1046,7 @@ export default function LaporanPage() {
 
       const { data: absensiData } = await queryAbsensi
 
-      guruCetak = await resolvePenandatanganPDF({
-        mode: 'umum',
-      })
+      guruCetak = await resolvePenandatanganPDF({ mode: 'umum' })
 
       const rekapSiswa = (siswaData || []).map((siswa) => {
         const riwayatAll = (absensiData || []).filter(
@@ -1435,562 +1361,49 @@ export default function LaporanPage() {
   }
 
   // =========================================================================
-  // GENERATOR DOKUMEN RAPOR 3 HALAMAN (COVER + IDENTITAS SISWA + NILAI)
-  // ISOLASI KETAT MAPEL SMP vs SMK & MENYESUAIKAN FASE D/E/F + PKL
+  // WRAPPER RAPOR 3 HALAMAN MENGGUNAKAN MODUL raporBuilder.ts
   // =========================================================================
-  const buildRaporDocumentData = async () => {
+  const prepareRaporData = async () => {
     if (!selectedSiswaRapor) {
       alert('Pilih siswa terlebih dahulu untuk mencetak atau mengedit Lembar Rapor!')
       return null
     }
-
     const targetSiswa = siswaList.find((s) => s.id === Number(selectedSiswaRapor))
     if (!targetSiswa) return null
-
-    const kelasObj = kelasList.find((k) => Number(k.id) === Number(targetSiswa.kelas_id))
-    let namaKelasStr = kelasObj?.nama || '-'
-    let tingkatStr = kelasObj?.tingkat || ''
-    let jenjangKelas = kelasObj?.jenjang || null
-
-    if (targetSiswa.kelas_id && !kelasObj) {
-      const { data: kelasSiswa } = await supabase
-        .from('kelas')
-        .select('nama_kelas, tingkat, jenjang')
-        .eq('id', targetSiswa.kelas_id)
-        .maybeSingle()
-      if (kelasSiswa) {
-        namaKelasStr = kelasSiswa.nama_kelas
-        tingkatStr = kelasSiswa.tingkat || ''
-        jenjangKelas = kelasSiswa.jenjang || null
-      }
-    }
-
-    // Deteksi Otomatis Unit & Fase Siswa
-    const unitSiswa: 'SMP' | 'SMK' = detectUnitByKelas(namaKelasStr, jenjangKelas, tingkatStr)
-    const gradeWeight = getKelasGradeWeight(namaKelasStr, tingkatStr)
-    const faseKurikulum =
-      unitSiswa === 'SMP' ? 'D' : gradeWeight === 10 ? 'E' : 'F'
-    const namaSatuanPendidikan =
-      unitSiswa === 'SMP' ? 'SMP MUNA MUSTOFA' : 'SMK MUNA MUSTOFA'
-    const namaSatuanTitle =
-      unitSiswa === 'SMP' ? 'SMP Muna Mustofa' : 'SMK Muna Mustofa'
-    const sekolahAsalDefault =
-      targetSiswa.sekolah_asal ||
-      (unitSiswa === 'SMP' ? 'SD / MI ........................................' : 'SMP / MTs ........................................')
-
-    // Ambil Master Mapel dengan ISOLASI KETAT sesuai unitSiswa (Mencegah mapel SMK masuk ke rapor SMP)
-    const { data: allMapelDb } = await supabase
-      .from('mapel')
-      .select('id, nama_mapel, jenjang, urutan, tingkat')
-      .order('urutan', { ascending: true })
-      .order('nama_mapel', { ascending: true })
-
-    const filteredMapelUnit = (allMapelDb || [])
-      .filter((m: any) => {
-        const mJenjang = String(m.jenjang || 'SMP').trim().toUpperCase()
-        if (unitSiswa === 'SMP') {
-          return mJenjang !== 'SMK'
-        } else {
-          if (mJenjang !== 'SMK') return false
-          // Jika mapel SMK memiliki batas tingkat tertentu (misal 'X', 'XI', 'XII'), saring juga
-          const mTingkat = String(m.tingkat || '').trim().toUpperCase()
-          if (!mTingkat || mTingkat === 'SEMUA' || mTingkat === 'ALL') return true
-          if (gradeWeight === 10 && (mTingkat === 'X' || mTingkat === '10')) return true
-          if (gradeWeight === 11 && (mTingkat === 'XI' || mTingkat === '11')) return true
-          if (gradeWeight === 12 && (mTingkat === 'XII' || mTingkat === '12')) return true
-          return false
-        }
-      })
-      .map((m: any) => ({
-        id: m.id,
-        nama: m.nama_mapel,
-        urutan: m.urutan ?? 999,
-      }))
-      .sort((a, b) => {
-        if (a.urutan !== b.urutan) return a.urutan - b.urutan
-        return a.nama.localeCompare(b.nama)
-      })
-
-    const { data: nilaiSiswa } = await supabase
-      .from('nilai')
-      .select('*')
-      .eq('siswa_id', targetSiswa.id)
-      .eq('semester', selectedSemester)
-      .eq('tahun_ajaran', selectedTahunAjaran)
-
-    const { data: absensiSiswa } = await supabase
-      .from('absensi')
-      .select('tanggal, status, jam_ke')
-      .eq('siswa_id', targetSiswa.id)
-      .eq('semester', selectedSemester)
-      .eq('tahun_ajaran', selectedTahunAjaran)
 
     const waliKelasInfo = await resolveWaliKelasByKelasId(
       targetSiswa.kelas_id || filterKelasRapor
     )
-
-    const presensiHarianMap = new Map<string, string>()
-    ;(absensiSiswa || []).forEach((a) => {
-      const tgl = a.tanggal
-      const jamStr = a.jam_ke || ''
-      const isJam1 = jamStr.includes('Jam Ke-1') || jamStr.includes('Ke-1')
-
-      if (!presensiHarianMap.has(tgl) || isJam1) {
-        presensiHarianMap.set(tgl, a.status)
-      }
-    })
-
-    const statusList = Array.from(presensiHarianMap.values())
-    const sakit = statusList.filter((st) => st === 'SAKIT').length
-    const izin = statusList.filter((st) => st === 'IZIN').length
-    const alpa = statusList.filter((st) => st === 'ALPA').length
-
-    const mapelUtama = filteredMapelUnit.filter((m) => !/qiro|pramuka|ekstra/i.test(m.nama))
-    const mapelEkskul = filteredMapelUnit.filter((m) => /qiro|pramuka|ekstra/i.test(m.nama))
-
-    const rowQiroah = (nilaiSiswa || []).find((n) => /qiro/i.test(n.mata_pelajaran || ''))
-    const nilaiQiroahNum = rowQiroah
-      ? Math.round(
-          [rowQiroah.nilai_tugas, rowQiroah.nilai_uts, rowQiroah.nilai_uas]
-            .filter((v): v is number => typeof v === 'number' && v > 0)
-            .reduce((a, b, _, arr) => a + b / arr.length, 0)
-        ) || 85
-      : 85
-    const predikatQiroah = getPredikatRapor(nilaiQiroahNum, "Qiro'ah & Tahfidz")
-
-    // Keputusan Kenaikan / Kelulusan Sesuai Unit SMP (7-9) atau SMK (10-12)
-    let teksKeputusan = ''
-    if (selectedSemester === 'Genap') {
-      if (unitSiswa === 'SMP') {
-        if (gradeWeight === 7) teksKeputusan = 'NAIK KE KELAS VIII (DELAPAN)'
-        else if (gradeWeight === 8) teksKeputusan = 'NAIK KE KELAS IX (SEMBILAN)'
-        else teksKeputusan = `LULUS DARI SATUAN PENDIDIKAN ${namaSatuanPendidikan}`
-      } else {
-        if (gradeWeight === 10) teksKeputusan = 'NAIK KE KELAS XI (SEBELAS)'
-        else if (gradeWeight === 11) teksKeputusan = 'NAIK KE KELAS XII (DUA BELAS)'
-        else teksKeputusan = `LULUS DARI SATUAN PENDIDIKAN ${namaSatuanPendidikan}`
-      }
-    }
-
-    const ttlText =
-      targetSiswa.tempat_lahir || targetSiswa.tanggal_lahir
-        ? `${targetSiswa.tempat_lahir || '................'}, ${targetSiswa.tanggal_lahir || '................'}`
-        : '........................................................'
-
     const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
-    const htmlRaporLengkap = `
-      <!-- WATERMARK LOGO HALUS -->
-      <div class="watermark">
-        <img src="${originUrl}/logo-smp.jpg" alt="Watermark Sekolah" />
-      </div>
-
-      <!-- ==================== HALAMAN 1: COVER RAPOR ==================== -->
-      <div class="page-section cover-box">
-        <div style="text-align: center; margin-top: 24px;">
-          <img src="${originUrl}/logo-smp.jpg" alt="Logo Sekolah" style="width: 115px; height: 115px; object-fit: contain; margin: 0 auto;" />
-          <h2 style="margin: 18px 0 4px 0; font-size: 16pt; letter-spacing: 1px; text-transform: uppercase;">
-            LAPORAN HASIL BELAJAR
-          </h2>
-          <h3 style="margin: 0 0 6px 0; font-size: 14pt; letter-spacing: 0.8px; text-transform: uppercase;">
-            (RAPOR PESERTA DIDIK)
-          </h3>
-          <p style="margin: 0; font-size: 12pt; font-weight: bold; text-transform: uppercase;">
-            ${namaSatuanPendidikan}
-          </p>
-          ${
-            unitSiswa === 'SMK'
-              ? `<p style="margin: 4px 0 0 0; font-size: 10.5pt; font-weight: bold;">Program Keahlian: Desain Komunikasi Visual (DKV)</p>`
-              : ''
-          }
-        </div>
-
-        <div style="margin: 70px auto 60px auto; width: 82%; text-align: center;">
-          <p style="margin: 0 0 8px 0; font-size: 11pt; font-weight: bold;">NAMA PESERTA DIDIK :</p>
-          <div style="border: 2px solid #000; padding: 12px 16px; font-size: 14pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 24px;">
-            ${targetSiswa.nama_lengkap.toUpperCase()}
-          </div>
-
-          <p style="margin: 0 0 8px 0; font-size: 11pt; font-weight: bold;">NIS / NISN :</p>
-          <div style="border: 2px solid #000; padding: 10px 16px; font-size: 12.5pt; font-weight: bold; letter-spacing: 1px;">
-            ${targetSiswa.nis || '-'} / ${targetSiswa.nisn || '-'}
-          </div>
-        </div>
-
-        <div style="text-align: center; margin-top: 80px; font-size: 11pt; font-weight: bold; line-height: 1.5; text-transform: uppercase;">
-          <p style="margin: 0;">YAYASAN MUNA MUSTOFA</p>
-          <p style="margin: 0;">${namaSatuanPendidikan}</p>
-          <p style="margin: 4px 0 0 0; font-size: 9.5pt; font-weight: normal; text-transform: none;">
-            Kalidadi, Kec. Kalirejo, Kab. Lampung Tengah / Gisting, Lampung
-          </p>
-          <p style="margin: 14px 0 0 0; font-size: 10.5pt;">
-            KEMENTERIAN PENDIDIKAN DASAR DAN MENENGAH<br/>REPUBLIK INDONESIA
-          </p>
-        </div>
-      </div>
-
-      <div class="page-break"></div>
-
-      <!-- ==================== HALAMAN 2: IDENTITAS SEKOLAH & PESERTA DIDIK ==================== -->
-      <div class="page-section">
-        <div style="text-align: center; margin-bottom: 14px;">
-          <h3 style="margin: 0; font-size: 12.5pt; text-transform: uppercase; text-decoration: underline;">
-            IDENTITAS SATUAN PENDIDIKAN &amp; PESERTA DIDIK
-          </h3>
-        </div>
-
-        <h4 class="section-title">I. IDENTITAS SATUAN PENDIDIKAN</h4>
-        <table class="table-identitas" style="margin-bottom: 14px;">
-          <tr><td style="width: 34%;">1. Nama Satuan Pendidikan</td><td style="width: 3%;">:</td><td><b>${namaSatuanPendidikan}</b></td></tr>
-          <tr><td>2. NPSN / NSS</td><td>:</td><td>........................................................</td></tr>
-          <tr><td>3. Alamat Sekolah</td><td>:</td><td>Kalidadi, Kecamatan Kalirejo / Gisting, Provinsi Lampung</td></tr>
-          <tr><td>4. Kabupaten / Provinsi</td><td>:</td><td>Lampung Tengah / Lampung</td></tr>
-          ${
-            unitSiswa === 'SMK'
-              ? `<tr><td>5. Program / Konsentrasi Keahlian</td><td>:</td><td>Desain Komunikasi Visual (DKV)</td></tr>`
-              : ''
-          }
-        </table>
-
-        <h4 class="section-title">II. KETERANGAN TENTANG DIRI PESERTA DIDIK</h4>
-        <table class="table-identitas">
-          <tr><td style="width: 34%;">1. Nama Peserta Didik (Lengkap)</td><td style="width: 3%;">:</td><td><b>${targetSiswa.nama_lengkap.toUpperCase()}</b></td></tr>
-          <tr><td>2. Nomor Induk / NISN</td><td>:</td><td>${targetSiswa.nis || '-'} / ${targetSiswa.nisn || '-'}</td></tr>
-          <tr><td>3. Tempat, Tanggal Lahir</td><td>:</td><td>${ttlText}</td></tr>
-          <tr><td>4. Jenis Kelamin</td><td>:</td><td>${targetSiswa.jenis_kelamin || 'Laki-laki / Perempuan'}</td></tr>
-          <tr><td>5. Agama</td><td>:</td><td>${targetSiswa.agama || 'Islam'}</td></tr>
-          <tr><td>6. Status dalam Keluarga</td><td>:</td><td>Anak Kandung</td></tr>
-          <tr><td>7. Anak ke</td><td>:</td><td>........</td></tr>
-          <tr><td>8. Alamat Peserta Didik</td><td>:</td><td>${targetSiswa.alamat || '........................................................'}</td></tr>
-          <tr><td>9. Nomor Telepon Rumah / HP</td><td>:</td><td>........................................................</td></tr>
-          <tr><td>10. Sekolah Asal</td><td>:</td><td>${sekolahAsalDefault}</td></tr>
-          <tr><td>11. Diterima di Sekolah Ini</td><td></td><td></td></tr>
-          <tr><td style="padding-left: 16px;">a. Di Kelas</td><td>:</td><td><b>${namaKelasStr}</b></td></tr>
-          <tr><td style="padding-left: 16px;">b. Pada Tanggal</td><td>:</td><td>Juli ${selectedTahunAjaran.split('/')[0]}</td></tr>
-          <tr><td>12. Nama Orang Tua</td><td></td><td></td></tr>
-          <tr><td style="padding-left: 16px;">a. Ayah</td><td>:</td><td>${targetSiswa.nama_ayah || '........................................................'}</td></tr>
-          <tr><td style="padding-left: 16px;">b. Ibu</td><td>:</td><td>${targetSiswa.nama_ibu || '........................................................'}</td></tr>
-          <tr><td>13. Alamat Orang Tua</td><td>:</td><td>${targetSiswa.alamat || '........................................................'}</td></tr>
-          <tr><td>14. Pekerjaan Orang Tua (Ayah / Ibu)</td><td>:</td><td>.................................... / ....................................</td></tr>
-          <tr><td>15. Nama Wali Peserta Didik</td><td>:</td><td>${targetSiswa.nama_wali || '-'}</td></tr>
-          <tr><td>16. Pekerjaan Wali Peserta Didik</td><td>:</td><td>-</td></tr>
-        </table>
-
-        <!-- KOTAK PAS FOTO 3X4 & TTD KEPALA SEKOLAH -->
-        <table style="width: 100%; border: none; margin-top: 24px; font-size: 9.5pt;">
-          <tr>
-            <td style="width: 45%; border: none; text-align: center; vertical-align: middle;">
-              <div style="width: 85px; height: 112px; border: 1px solid #000; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 8.5pt; color: #555;">
-                Pas Foto<br/>3 x 4 cm
-              </div>
-            </td>
-            <td style="width: 55%; border: none; text-align: left; vertical-align: top; padding-left: 20px;">
-              ${kotaTtd}, Juli ${selectedTahunAjaran.split('/')[0]}<br/>
-              <strong>Kepala ${namaSatuanTitle},</strong>
-              <div style="position: relative; height: 68px; display: flex; align-items: center;">
-                ${
-                  pakaiTtdCapKepsek
-                    ? `
-                      <img src="${originUrl}/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: -10px; top: 0px; height: 72px; opacity: 0.9; z-index: 1;" />
-                      <img src="${originUrl}/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 10px; top: 4px; height: 58px; z-index: 2;" />
-                    `
-                    : ''
-                }
-              </div>
-              <u><strong>${namaKepsek}</strong></u><br/>
-              ${nipKepsek}
-            </td>
-          </tr>
-        </table>
-      </div>
-
-      <div class="page-break"></div>
-
-      <!-- ==================== HALAMAN 3: CAPAIAN HASIL BELAJAR (NILAI & DESKRIPSI) ==================== -->
-      <div class="page-section">
-        <div style="text-align: center; margin-bottom: 8px;">
-          <img src="${originUrl}/kop-surat.png" alt="Kop Surat" style="width: 100%; max-height: 110px; object-fit: contain;" />
-        </div>
-
-        <div style="text-align: center; margin-bottom: 10px;">
-          <h2 style="margin: 0; font-size: 12pt; letter-spacing: 0.6px; text-transform: uppercase;">
-            LAPORAN HASIL BELAJAR PESERTA DIDIK (${unitSiswa})
-          </h2>
-        </div>
-
-        <table class="table-identitas" style="margin-bottom: 10px; font-size: 9.5pt;">
-          <tr>
-            <td style="width: 18%;">Nama Peserta Didik</td>
-            <td style="width: 36%;">: <b>${targetSiswa.nama_lengkap.toUpperCase()}</b></td>
-            <td style="width: 18%;">Kelas / Fase</td>
-            <td style="width: 28%;">: <b>${namaKelasStr} / Fase ${faseKurikulum}</b></td>
-          </tr>
-          <tr>
-            <td>NIS / NISN</td>
-            <td>: ${targetSiswa.nis || '-'} / ${targetSiswa.nisn || '-'}</td>
-            <td>Semester</td>
-            <td>: ${selectedSemester}</td>
-          </tr>
-          <tr>
-            <td>Nama Sekolah</td>
-            <td>: ${namaSatuanTitle}</td>
-            <td>Tahun Pelajaran</td>
-            <td>: ${selectedTahunAjaran}</td>
-          </tr>
-        </table>
-
-        <h4 class="section-title">A. CAPAIAN KOMPETENSI AKADEMIK</h4>
-        <table class="table-data" style="margin-bottom: 12px;">
-          <thead>
-            <tr>
-              <th style="width: 5%; text-align: center;">No</th>
-              <th style="width: 26%; text-align: left;">Mata Pelajaran</th>
-              <th style="width: 7%; text-align: center;">KKM</th>
-              <th style="width: 10%; text-align: center;">Nilai Akhir</th>
-              <th style="width: 13%; text-align: center;">Predikat</th>
-              <th style="width: 39%; text-align: left;">Capaian Kompetensi</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              mapelUtama.length > 0
-                ? mapelUtama
-                    .map((mapel, idx) => {
-                      const rowN =
-                        (nilaiSiswa || []).find((n) => n.mata_pelajaran === mapel.nama) || {}
-                      const t = rowN.nilai_tugas ?? 0
-                      const u = rowN.nilai_uts ?? 0
-                      const a = rowN.nilai_uas ?? 0
-                      const komps = [t, u, a].filter((v) => v > 0)
-                      const hasNilai = komps.length > 0
-                      const avgNum = hasNilai
-                        ? Math.round(komps.reduce((x, y) => x + y, 0) / komps.length)
-                        : 0
-                      const predObj = hasNilai ? getPredikatRapor(avgNum, mapel.nama) : null
-
-                      return `
-                        <tr>
-                          <td style="text-align: center;">${idx + 1}</td>
-                          <td><b>${mapel.nama}</b></td>
-                          <td style="text-align: center;">75</td>
-                          <td style="text-align: center; font-weight: bold; font-size: 10pt;">${hasNilai ? avgNum : '-'}</td>
-                          <td style="text-align: center; font-weight: bold;">
-                            ${predObj ? `${predObj.huruf} (${predObj.keterangan})` : '-'}
-                          </td>
-                          <td style="font-size: 8.5pt; text-align: justify;">
-                            ${
-                              predObj
-                                ? predObj.deskripsi
-                                : `Capaian kompetensi mata pelajaran ${mapel.nama} sedang dalam proses penilaian semester.`
-                            }
-                          </td>
-                        </tr>
-                      `
-                    })
-                    .join('')
-                : `<tr><td colspan="6" style="text-align: center;">Belum ada mata pelajaran ${unitSiswa} terdaftar.</td></tr>`
-            }
-          </tbody>
-        </table>
-
-        <h4 class="section-title">B. PEMBIASAAN KEAGAMAAN &amp; QIRO&apos;AH</h4>
-        <table class="table-data" style="margin-bottom: 12px;">
-          <thead>
-            <tr>
-              <th style="width: 5%; text-align: center;">No</th>
-              <th style="width: 28%; text-align: left;">Aspek Pembiasaan</th>
-              <th style="width: 15%; text-align: center;">Predikat</th>
-              <th style="width: 52%; text-align: left;">Keterangan Capaian</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="text-align: center;">1</td>
-              <td><b>Qiro&apos;ah &amp; Tahsin Al-Qur&apos;an</b></td>
-              <td style="text-align: center; font-weight: bold;">${predikatQiroah.huruf} (${predikatQiroah.keterangan})</td>
-              <td style="font-size: 8.8pt;">Mampu membaca Al-Qur&apos;an sesuai kaidah tajwid dan makharijul huruf dengan ${predikatQiroah.keterangan.toLowerCase()}.</td>
-            </tr>
-            <tr>
-              <td style="text-align: center;">2</td>
-              <td><b>Shalat Berjamaah &amp; Adab Islami</b></td>
-              <td style="text-align: center; font-weight: bold;">A (Sangat Baik)</td>
-              <td style="font-size: 8.8pt;">Membiasakan shalat berjamaah di sekolah, berakhlak santun kepada guru, serta menghormati sesama teman.</td>
-            </tr>
-          </tbody>
-        </table>
-
-        ${
-          unitSiswa === 'SMK'
-            ? `
-              <h4 class="section-title">C. PRAKTIK KERJA LAPANGAN (PKL)</h4>
-              <table class="table-data" style="margin-bottom: 12px;">
-                <thead>
-                  <tr>
-                    <th style="width: 5%; text-align: center;">No</th>
-                    <th style="width: 30%; text-align: left;">Mitra DU/DI</th>
-                    <th style="width: 25%; text-align: left;">Lokasi</th>
-                    <th style="width: 15%; text-align: center;">Lamanya</th>
-                    <th style="width: 25%; text-align: left;">Keterangan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td style="text-align: center;">1</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td style="text-align: center;">-</td>
-                    <td>Belum melaksanakan PKL pada semester ini.</td>
-                  </tr>
-                </tbody>
-              </table>
-            `
-            : ''
-        }
-
-        <h4 class="section-title">${unitSiswa === 'SMK' ? 'D' : 'C'}. KEGIATAN EKSTRAKURIKULER</h4>
-        <table class="table-data" style="margin-bottom: 12px;">
-          <thead>
-            <tr>
-              <th style="width: 5%; text-align: center;">No</th>
-              <th style="width: 28%; text-align: left;">Kegiatan Ekstrakurikuler</th>
-              <th style="width: 15%; text-align: center;">Predikat</th>
-              <th style="width: 52%; text-align: left;">Keterangan</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              mapelEkskul.length > 0
-                ? mapelEkskul
-                    .map((m, idx) => {
-                      const rowN =
-                        (nilaiSiswa || []).find((n) => n.mata_pelajaran === m.nama) || {}
-                      const avg = rowN.nilai_uas ?? rowN.nilai_tugas ?? 85
-                      const predObj = getPredikatRapor(avg, m.nama)
-                      return `
-                      <tr>
-                        <td style="text-align: center;">${idx + 1}</td>
-                        <td><b>${m.nama}</b></td>
-                        <td style="text-align: center; font-weight: bold;">${predObj.huruf} (${predObj.keterangan})</td>
-                        <td style="font-size: 8.8pt;">Aktif dan disiplin mengikuti kegiatan ${m.nama} dengan capaian ${predObj.keterangan.toLowerCase()}.</td>
-                      </tr>
-                    `
-                    })
-                    .join('')
-                : `
-                  <tr>
-                    <td style="text-align: center;">1</td>
-                    <td><b>Pramuka</b></td>
-                    <td style="text-align: center; font-weight: bold;">B (Baik)</td>
-                    <td style="font-size: 8.8pt;">Aktif mengikuti kegiatan kepramukaan, kerja sama tim, dan kedisiplinan di sekolah.</td>
-                  </tr>
-                `
-            }
-          </tbody>
-        </table>
-
-        <!-- KETIDAKHADIRAN & CATATAN WALI KELAS -->
-        <table style="width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px;">
-          <tr>
-            <td style="width: 38%; vertical-align: top; padding-right: 12px; border: none;">
-              <h4 class="section-title">${unitSiswa === 'SMK' ? 'E' : 'D'}. KETIDAKHADIRAN</h4>
-              <table class="table-data">
-                <tr>
-                  <td style="width: 65%;">1. Sakit</td>
-                  <td style="width: 35%; text-align: center;"><b>${sakit}</b> hari</td>
-                </tr>
-                <tr>
-                  <td>2. Izin</td>
-                  <td style="text-align: center;"><b>${izin}</b> hari</td>
-                </tr>
-                <tr>
-                  <td>3. Tanpa Keterangan</td>
-                  <td style="text-align: center;"><b>${alpa}</b> hari</td>
-                </tr>
-              </table>
-            </td>
-            <td style="width: 62%; vertical-align: top; border: none;">
-              <h4 class="section-title">${unitSiswa === 'SMK' ? 'F' : 'E'}. CATATAN WALI KELAS</h4>
-              <div style="border: 1px solid #000; padding: 8px 10px; min-height: 72px; font-size: 9pt; font-style: italic; background-color: #fafafa;">
-                &ldquo;Pertahankan semangat belajar, kedisiplinan, dan akhlak mulia baik di lingkungan sekolah maupun di rumah. Terus tingkatkan prestasi pada semester berikutnya.&rdquo;
-              </div>
-            </td>
-          </tr>
-        </table>
-
-        ${
-          selectedSemester === 'Genap'
-            ? `
-              <div style="border: 1.5px solid #000; padding: 8px 12px; margin-bottom: 12px; background-color: #f8fafc;">
-                <p style="margin: 0; font-size: 9.5pt;">
-                  <b>KEPUTUSAN:</b> Berdasarkan pencapaian seluruh kompetensi pada Semester Ganjil dan Genap Tahun Pelajaran ${selectedTahunAjaran}, peserta didik dinyatakan:
-                </p>
-                <p style="margin: 4px 0 0 0; font-size: 10.5pt; font-weight: bold; text-align: center; letter-spacing: 0.5px;">
-                  ${teksKeputusan}
-                </p>
-              </div>
-            `
-            : ''
-        }
-
-        <!-- TANDA TANGAN 3 PIHAK -->
-        <div style="margin-top: 14px; page-break-inside: avoid;">
-          <table style="width: 100%; border: none; font-size: 9pt;">
-            <tr>
-              <td style="width: 45%; border: none; text-align: center; vertical-align: top;">
-                Mengetahui,<br/>
-                <strong>Orang Tua / Wali Peserta Didik</strong><br/><br/><br/><br/>
-                ( .................................................... )
-              </td>
-              <td style="width: 10%; border: none;"></td>
-              <td style="width: 45%; border: none; text-align: center; vertical-align: top;">
-                ${kotaTtd}, ${currentDateStr}<br/>
-                <strong>${waliKelasInfo.jabatanLabel}</strong><br/><br/><br/><br/>
-                <u><strong>${waliKelasInfo.nama}</strong></u><br/>
-                NUPTK: ${waliKelasInfo.nuptk}
-              </td>
-            </tr>
-            <tr>
-              <td colspan="3" style="border: none; text-align: center; padding-top: 10px; vertical-align: top;">
-                Mengetahui,<br/>
-                <strong>Kepala ${namaSatuanTitle}</strong><br/>
-                <div style="position: relative; height: 64px; display: flex; align-items: center; justify-content: center;">
-                  ${
-                    pakaiTtdCapKepsek
-                      ? `
-                        <img src="${originUrl}/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 41%; top: 0px; height: 68px; opacity: 0.9; z-index: 1;" />
-                        <img src="${originUrl}/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 46%; top: 4px; height: 55px; z-index: 2;" />
-                      `
-                      : '<br/><br/>'
-                  }
-                </div>
-                <u><strong>${namaKepsek}</strong></u><br/>
-                ${nipKepsek}
-              </td>
-            </tr>
-          </table>
-        </div>
-      </div>
-    `
-
-    return {
+    return await buildRaporDocument({
+      supabase,
       targetSiswa,
-      namaKelasStr,
-      unitSiswa,
-      htmlRaporLengkap,
-    }
+      kelasList: kelasList as RaporKelasItem[],
+      selectedSemester,
+      selectedTahunAjaran,
+      waliKelasInfo,
+      namaKepsek,
+      nipKepsek,
+      kotaTtd,
+      currentDateStr,
+      pakaiTtdCapKepsek,
+      originUrl,
+    })
   }
 
-  // BUKA MODAL LIVE PREVIEW & EDIT RAPOR (3 HALAMAN)
   const handleOpenRaporLivePreview = async () => {
     setIsBuildingRapor(true)
     try {
-      const docData = await buildRaporDocumentData()
+      const docData = await prepareRaporData()
       if (!docData) return
       setRaporPreviewHtml(docData.htmlRaporLengkap)
       setRaporPreviewMeta({
         namaSiswa: docData.targetSiswa.nama_lengkap,
         kelasStr: docData.namaKelasStr,
         unit: docData.unitSiswa,
+        faseKurikulum: docData.faseKurikulum,
+        mapelContexts: docData.mapelContexts,
       })
       setIsRaporPreviewOpen(true)
     } finally {
@@ -1998,7 +1411,6 @@ export default function LaporanPage() {
     }
   }
 
-  // HELPER CETAK HTML RAPOR (BAIK DARI LIVE EDITOR MAUPUN LANGSUNG)
   const openRaporPrintWindow = (titleText: string, innerHtml: string) => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
@@ -2010,16 +1422,19 @@ export default function LaporanPage() {
           <style>
             @page { margin: 1.2cm 1.4cm; size: A4 portrait; }
             body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.35; font-size: 10pt; margin: 0; padding: 0; }
-            .watermark {
-              position: fixed;
+            .page-section {
+              position: relative;
+            }
+            .page-watermark {
+              position: absolute;
               top: 50%;
               left: 50%;
               transform: translate(-50%, -50%);
-              opacity: 0.05;
-              z-index: -1;
+              opacity: 0.06;
+              z-index: 0;
               pointer-events: none;
             }
-            .watermark img { width: 420px; height: 420px; object-fit: contain; }
+            .page-watermark img { width: 380px; height: 380px; object-fit: contain; }
             .cover-box {
               border: 3px double #000;
               padding: 28px 24px;
@@ -2046,40 +1461,6 @@ export default function LaporanPage() {
     }, 500)
   }
 
-  // CETAK PDF LANGSUNG DARI LIVE EDITOR (TERMASUK SUNTINGAN MANUAL PENGGUNA)
-  const handlePrintFromLiveEditor = () => {
-    const editedHtml = raporPreviewRef.current
-      ? raporPreviewRef.current.innerHTML
-      : raporPreviewHtml
-    const titleText = raporPreviewMeta
-      ? `RAPOR_${raporPreviewMeta.unit}_${raporPreviewMeta.namaSiswa.toUpperCase()}`
-      : 'RAPOR_PESERTA_DIDIK'
-    openRaporPrintWindow(titleText, editedHtml)
-  }
-
-  // DOWNLOAD WORD DARI LIVE EDITOR (TERMASUK SUNTINGAN MANUAL PENGGUNA)
-  const handleDownloadWordFromLiveEditor = () => {
-    const editedHtml = raporPreviewRef.current
-      ? raporPreviewRef.current.innerHTML
-      : raporPreviewHtml
-    const safeName = (raporPreviewMeta?.namaSiswa || 'Siswa').replace(/[^a-zA-Z0-9]/g, '_')
-    const safeKelas = (raporPreviewMeta?.kelasStr || '').replace(/\s+/g, '')
-    downloadRaporWordBlob(
-      `Rapor_${raporPreviewMeta?.unit || 'SMP'}_${safeName}_${safeKelas}_${selectedSemester}`,
-      editedHtml
-    )
-  }
-
-  // CETAK PDF RAPOR LANGSUNG TANPA BUKA MODAL
-  const handlePrintRaporSiswa = async () => {
-    const docData = await buildRaporDocumentData()
-    if (!docData) return
-    openRaporPrintWindow(
-      `RAPOR ${docData.unitSiswa} - ${docData.targetSiswa.nama_lengkap.toUpperCase()} (${docData.namaKelasStr})`,
-      docData.htmlRaporLengkap
-    )
-  }
-
   const downloadRaporWordBlob = (filename: string, innerHtml: string) => {
     const wordHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -2093,7 +1474,7 @@ export default function LaporanPage() {
             }
             div.WordSection1 { page: WordSection1; }
             body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-height: 1.35; color: #000; }
-            .watermark { display: none; }
+            .page-watermark { display: none; }
             .cover-box { border: 3px double #000; padding: 24px; }
             .table-identitas { width: 100%; border: none; border-collapse: collapse; margin-bottom: 10px; font-size: 10pt; }
             .table-identitas td { border: none; padding: 2.5px 4px; vertical-align: top; }
@@ -2125,9 +1506,17 @@ export default function LaporanPage() {
     URL.revokeObjectURL(url)
   }
 
-  // DOWNLOAD WORD (.DOC) RAPOR SISWA LANGSUNG
+  const handlePrintRaporSiswa = async () => {
+    const docData = await prepareRaporData()
+    if (!docData) return
+    openRaporPrintWindow(
+      `RAPOR ${docData.unitSiswa} - ${docData.targetSiswa.nama_lengkap.toUpperCase()} (${docData.namaKelasStr})`,
+      docData.htmlRaporLengkap
+    )
+  }
+
   const handleDownloadRaporWord = async () => {
-    const docData = await buildRaporDocumentData()
+    const docData = await prepareRaporData()
     if (!docData) return
     const safeName = docData.targetSiswa.nama_lengkap.replace(/[^a-zA-Z0-9]/g, '_')
     downloadRaporWordBlob(
@@ -2205,9 +1594,7 @@ export default function LaporanPage() {
       selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
     }`
 
-    const guruCetak = await resolvePenandatanganPDF({
-      mode: 'umum',
-    })
+    const guruCetak = await resolvePenandatanganPDF({ mode: 'umum' })
 
     const matrixMap = new Map<
       string,
@@ -2389,7 +1776,7 @@ export default function LaporanPage() {
   const executePrint = (
     judulDoc: string,
     contentBody: string,
-    guruInfo: GuruInfo = {
+    guruInfo: RaporGuruInfo = {
       nama: namaGuru,
       nuptk: nuptkGuru,
       jabatanLabel: 'Guru Mata Pelajaran',
@@ -2432,14 +1819,12 @@ export default function LaporanPage() {
     alert('✅ Pengaturan profil kepsek & stempel cetakan berhasil disimpan secara permanen!')
   }
 
-  // Kelas yang tersedia di dropdown Rapor (urut 7-12)
   const kelasRaporOptions = isStrictOperatorRole
     ? kelasList
     : waliKelasAssignedId
     ? kelasList.filter((k) => Number(k.id) === Number(waliKelasAssignedId))
     : []
 
-  // Siswa di dropdown Rapor (urut abjad A-Z)
   const siswaRaporOptions = useMemo(() => {
     if (!filterKelasRapor) return []
     return siswaList
@@ -2447,7 +1832,6 @@ export default function LaporanPage() {
       .sort((a, b) => (a.nama_lengkap || '').localeCompare(b.nama_lengkap || '', 'id'))
   }, [siswaList, filterKelasRapor])
 
-  // Badge info otomatis unit kelas rapor terpilih
   const selectedKelasRaporInfo = useMemo(() => {
     if (!filterKelasRapor) return null
     const k = kelasList.find((item) => Number(item.id) === Number(filterKelasRapor))
@@ -2756,13 +2140,13 @@ export default function LaporanPage() {
                 </div>
               </div>
 
-              {/* 2. CETAK RAPOR INDIVIDU SISWA (3 HALAMAN: COVER + IDENTITAS + NILAI & LIVE EDITOR) */}
+              {/* 2. CETAK RAPOR INDIVIDU SISWA (3 HALAMAN + AI GENERATOR) */}
               <div className="md:col-span-2 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 text-white rounded-2xl p-4 shadow-md space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-extrabold text-sm">
                     <span>🎓</span>
                     <h3>
-                      Cetak Lembar Rapor Hasil Belajar Peserta Didik (Cover + Biodata + Nilai)
+                      Cetak Lembar Rapor Hasil Belajar Peserta Didik (Cover + Biodata + Nilai + AI)
                     </h3>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -2778,9 +2162,9 @@ export default function LaporanPage() {
                   </div>
                 </div>
                 <p className="text-xs text-emerald-100 font-medium">
-                  Format rapor resmi 3 halaman lengkap (Cover, Identitas Sekolah &amp; Siswa,
-                  Capaian Kompetensi, Ekskul, Absensi, &amp; TTD 3 Pihak). Otomatis memfilter mapel
-                  khusus SMP atau SMK sesuai kelas siswa dan dapat diedit langsung sebelum dicetak.
+                  Format rapor resmi 3 halaman (Cover, Identitas Sekolah &amp; Siswa, Pengelompokan
+                  Mapel Resmi, Qiro&apos;ah, Pramuka, Absensi, &amp; TTD 3 Pihak). Klik{' '}
+                  <b>Preview &amp; Edit Rapor</b> untuk mengisi Capaian Kompetensi otomatis memakai AI.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2842,7 +2226,7 @@ export default function LaporanPage() {
                     className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-400 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                   >
                     <span>👁️</span>{' '}
-                    {isBuildingRapor ? 'Menyiapkan...' : 'Preview & Edit Rapor (3 Hal)'}
+                    {isBuildingRapor ? 'Menyiapkan...' : 'Preview & Edit Rapor (AI)'}
                   </button>
 
                   <button
@@ -3574,132 +2958,17 @@ export default function LaporanPage() {
         </div>
       </div>
 
-      {/* =====================================================================
-          MODAL LIVE PREVIEW & EDITOR RAPOR (3 HALAMAN: COVER + BIO + NILAI)
-         ===================================================================== */}
-      {isRaporPreviewOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 print:hidden">
-          <div
-            className={`w-full max-w-5xl h-[92vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-              isDarkMode
-                ? 'bg-slate-900 border-slate-700 text-slate-100'
-                : 'bg-slate-100 border-slate-300 text-slate-900'
-            }`}
-          >
-            {/* Header Modal Editor */}
-            <div
-              className={`px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2 shrink-0 ${
-                isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-300'
-              }`}
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-black">
-                    LIVE EDITOR RAPOR ({raporPreviewMeta?.unit})
-                  </span>
-                  <h3 className="font-extrabold text-sm">
-                    {raporPreviewMeta?.namaSiswa.toUpperCase()} — Kelas {raporPreviewMeta?.kelasStr}
-                  </h3>
-                </div>
-                <p className="text-[11px] text-amber-500 font-bold mt-0.5">
-                  ✏️ Klik langsung pada teks mana saja di dalam kertas rapor di bawah untuk
-                  menyunting biodata, capaian kompetensi, atau catatan wali kelas sebelum mencetak!
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePrintFromLiveEditor}
-                  className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>🖨️</span> Cetak PDF (3 Halaman)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadWordFromLiveEditor}
-                  className="bg-sky-600 hover:bg-sky-700 text-white font-black px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>📝</span> Unduh Word
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsRaporPreviewOpen(false)}
-                  className="bg-rose-600 hover:bg-rose-700 text-white font-black px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
-                >
-                  ✕ Tutup
-                </button>
-              </div>
-            </div>
-
-            {/* Area Kertas A4 Editable */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-500/30">
-              <style>{`
-                .rapor-paper-canvas {
-                  font-family: 'Times New Roman', Times, serif;
-                  color: #000;
-                  line-height: 1.35;
-                  font-size: 10pt;
-                }
-                .rapor-paper-canvas .watermark { display: none; }
-                .rapor-paper-canvas .cover-box {
-                  border: 3px double #000;
-                  padding: 28px 24px;
-                  margin-bottom: 24px;
-                }
-                .rapor-paper-canvas .page-section {
-                  background: #fff;
-                  padding: 24px 28px;
-                  margin-bottom: 24px;
-                  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-                }
-                .rapor-paper-canvas .table-identitas {
-                  width: 100%;
-                  border: none;
-                  border-collapse: collapse;
-                  margin-bottom: 10px;
-                  font-size: 10pt;
-                }
-                .rapor-paper-canvas .table-identitas td {
-                  border: none;
-                  padding: 2.5px 4px;
-                  vertical-align: top;
-                }
-                .rapor-paper-canvas .section-title {
-                  margin: 0 0 5px 0;
-                  font-size: 9.8pt;
-                  text-transform: uppercase;
-                  letter-spacing: 0.3px;
-                }
-                .rapor-paper-canvas .table-data {
-                  width: 100%;
-                  border-collapse: collapse;
-                  font-size: 9.2pt;
-                }
-                .rapor-paper-canvas .table-data th {
-                  background-color: #f1f5f9;
-                  border: 1px solid #000;
-                  padding: 5px 6px;
-                  font-weight: bold;
-                }
-                .rapor-paper-canvas .table-data td {
-                  border: 1px solid #000;
-                  padding: 4.5px 6px;
-                  vertical-align: middle;
-                }
-              `}</style>
-
-              <div
-                ref={raporPreviewRef}
-                contentEditable={true}
-                suppressContentEditableWarning={true}
-                className="rapor-paper-canvas max-w-[21cm] mx-auto focus:outline-none"
-                dangerouslySetInnerHTML={{ __html: raporPreviewHtml }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL LIVE PREVIEW & EDITOR RAPOR (3 HALAMAN + AI GENERATOR) */}
+      <RaporPreviewModal
+        isOpen={isRaporPreviewOpen}
+        isDarkMode={isDarkMode}
+        htmlContent={raporPreviewHtml}
+        meta={raporPreviewMeta}
+        selectedSemester={selectedSemester}
+        onClose={() => setIsRaporPreviewOpen(false)}
+        onPrintHtml={openRaporPrintWindow}
+        onDownloadWordHtml={downloadRaporWordBlob}
+      />
 
       {/* FIXED BOTTOM NAVIGATION BAR */}
       <div

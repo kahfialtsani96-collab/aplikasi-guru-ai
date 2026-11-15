@@ -16,7 +16,6 @@ export async function POST(req: Request) {
       ...kbcData
     } = body
 
-    // Membaca API Key dari .env.local
     const apiKey = process.env.MERCURY_API_KEY
 
     if (!apiKey) {
@@ -26,7 +25,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Pembersihan input
     const sanitize = (str: any) => (typeof str === 'string' && str.trim() !== '' ? str.trim() : null)
 
     const jenjangResmi = (sanitize(jenjang) || 'SMP').toUpperCase()
@@ -43,14 +41,12 @@ export async function POST(req: Request) {
       sanitize(kbcData.nipKepala) || (isSmk ? '-' : '6337763664131233')
     const kotaTtdResmi = sanitize(kbcData.kotaTtd) || 'Gisting'
 
-    // Helper Pembersih Teks NUPTK agar tidak tercetak ganda
     const formatNuptk = (val: string) => {
       if (!val || val === '-' || val.trim() === '') return 'NUPTK: -'
       const cleanNumber = val.replace(/^(NIP\/NUPTK|NUPTK|NIP)\.?:?\s*/i, '').trim()
       return `NUPTK: ${cleanNumber}`
     }
 
-    // Konteks Kurikulum SMP vs SMK DKV
     const konteksJenjangPrompt = isSmk
       ? `Jenjang: SMK (Sekolah Menengah Kejuruan) — Kompetensi Keahlian: ${jurusanResmi}. Gunakan pendekatan vokasi/industri kreatif, studi kasus proyek klien (client brief), standar teknis produksi media visual, tipografi, tata letak, fotografi/videografi, dan kesiapan kerja dunia industri (DUDI) sesuai Kurikulum Merdeka SMK Fase E/F.`
       : `Jenjang: SMP (Sekolah Menengah Pertama) Kurikulum Merdeka Fase D.`
@@ -58,7 +54,99 @@ export async function POST(req: Request) {
     let systemPrompt = ''
     let userPrompt = ''
 
-    // 1. LOGIKA CHATBOT VS GENERATOR DOKUMEN RESMI
+    // =========================================================================
+    // KHUSUS GENERATOR DESKRIPSI CAPAIAN KOMPETENSI RAPOR (BATCH JSON)
+    // =========================================================================
+    if (activeTool === 'rapor-deskripsi') {
+      const daftarMapelNilai = Array.isArray(spesifikData?.daftarMapel)
+        ? spesifikData.daftarMapel
+        : []
+      const namaSiswa = sanitize(spesifikData?.namaSiswa) || 'Peserta Didik'
+      const batasKata = isSmk
+        ? 'maksimal 18-22 kata (1-2 kalimat singkat, padat, maksimal 145 karakter)'
+        : 'ekstra ringkas maksimal 12-15 kata (1 kalimat padat saja, maksimal 105 karakter)'
+
+      systemPrompt = `Anda adalah Asisten Wali Kelas Kurikulum Merdeka (${jenjangResmi}). Anda wajib membalas HANYA dengan objek JSON murni yang valid tanpa teks pengantar, tanpa blok markdown \`\`\`json, dan tanpa penutup.`
+
+      userPrompt = `Susun deskripsi Capaian Kompetensi Rapor untuk siswa bernama "${namaSiswa}" (${jenjangResmi}, ${faseKelas || '-'}).
+
+Daftar mata pelajaran, nilai akhir, dan ringkasan materi jurnal kelas:
+${JSON.stringify(daftarMapelNilai, null, 2)}
+
+Aturan Penulisan WAJIB:
+1. Untuk setiap item pada daftar di atas, buat narasi capaian kompetensi dalam Bahasa Indonesia baku rapor Kurikulum Merdeka.
+2. Panjang setiap deskripsi WAJIB ${batasKata} agar cetakan rapor tidak meluber halaman.
+3. Sesuaikan nada kalimat dengan nilai:
+   - Nilai >= 86: "Menunjukkan penguasaan yang sangat baik dalam..."
+   - Nilai 79-85: "Menunjukkan penguasaan yang baik dalam..."
+   - Nilai 75-78: "Menunjukkan penguasaan yang cukup baik dalam..."
+   - Nilai < 75 atau belum ada nilai ("-"): "Perlu bimbingan lebih lanjut dalam memahami..."
+4. Integrasikan topik materi dari kolom "materiJurnal" jika tersedia. Jika "materiJurnal" kosong, sebutkan kompetensi esensial mata pelajaran tersebut secara ringkas.
+5. Output WAJIB berupa JSON Object dengan format persis seperti ini:
+{
+  "descriptions": {
+    "<id_atau_nama_mapel>": "<teks_deskripsi_singkat>"
+  }
+}`
+
+      const response = await fetch('https://api.inceptionlabs.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'mercury-2.5',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 4096,
+          temperature: 0.4
+        })
+      })
+
+      const rawText = await response.text()
+      let data
+      try {
+        data = JSON.parse(rawText)
+      } catch {
+        return NextResponse.json(
+          { error: `Inception Labs merespons non-JSON: ${rawText.substring(0, 150)}` },
+          { status: 500 }
+        )
+      }
+
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: data.error?.message || data.message || 'Gagal menghasilkan deskripsi rapor AI' },
+          { status: response.status }
+        )
+      }
+
+      const aiContent = (data.choices?.[0]?.message?.content || '').trim()
+      const cleanedJsonStr = aiContent
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim()
+
+      try {
+        const parsedObj = JSON.parse(cleanedJsonStr)
+        return NextResponse.json({
+          descriptions: parsedObj.descriptions || parsedObj
+        })
+      } catch {
+        return NextResponse.json(
+          { error: 'Format respons AI untuk deskripsi rapor tidak valid', raw: cleanedJsonStr },
+          { status: 500 }
+        )
+      }
+    }
+
+    // =========================================================================
+    // LOGIKA CHATBOT VS GENERATOR DOKUMEN RESMI (AI TOOLS)
+    // =========================================================================
     if (activeTool === 'chatbot') {
       systemPrompt = `Anda adalah Asisten Guru AI dan Konsultan Pedagogi Kurikulum Merdeka (SMP & SMK Kejuruan) serta KBC Kemenag RI yang ramah, komunikatif, solutif, dan praktis.`
 
@@ -133,8 +221,7 @@ Instruksi Format WAJIB:
 3. DILARANG KERAS membuat teks tanda tangan, penutup 'Disetujui Oleh', 'Penyusun', atau blok pengesahan di akhir teks, karena Lembar Pengesahan resmi akan diinjeksi secara otomatis oleh sistem.`
     }
 
-    // 2. PEMANGGILAN INCEPTION LABS MERCURY AI
-    const response = await fetch('https://api.inceptionlabs.ai/v1/chat/completions', {
+    const response = await fetch('[https://api.inceptionlabs.ai/v1/chat/completions](https://api.inceptionlabs.ai/v1/chat/completions)', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -171,7 +258,6 @@ Instruksi Format WAJIB:
 
     const aiAnswer = data.choices?.[0]?.message?.content || 'Tidak ada respons yang dihasilkan oleh AI.'
 
-    // 3. LEMBAR PENGESAHAN HTML STATIS DINAMIS SESUAI JENJANG
     const lembarPengesahanHTML = `\n\n<br><hr><br>
 ### LEMBAR PENGESAHAN
 Diverifikasi dan disahkan untuk digunakan dalam kegiatan pembelajaran Kurikulum Merdeka di **${namaSekolahResmi}**.
