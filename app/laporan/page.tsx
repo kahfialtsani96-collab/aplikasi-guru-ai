@@ -69,8 +69,9 @@ export default function LaporanPage() {
   const [nipKepsek, setNipKepsek] = useState('NUPTK. 6337763664131233')
   const [kotaTtd, setKotaTtd] = useState('Gisting')
 
-  // Ceklis TTD & Stempel Kepsek
-  const [pakaiTtdCapKepsek, setPakaiTtdCapKepsek] = useState<boolean>(true)
+  // Ceklis TTD & Stempel Kepsek (dipisah, masing-masing punya centang sendiri)
+  const [pakaiTtdKepsek, setPakaiTtdKepsek] = useState<boolean>(true)
+  const [pakaiCapKepsek, setPakaiCapKepsek] = useState<boolean>(true)
 
   // Filter Cetak Laporan (Semua 8 Kartu)
   const [filterKelasAbsensi, setFilterKelasAbsensi] = useState('')
@@ -146,8 +147,13 @@ export default function LaporanPage() {
         if (parsed.namaKepsek) setNamaKepsek(parsed.namaKepsek)
         if (parsed.nipKepsek) setNipKepsek(parsed.nipKepsek)
         if (parsed.kotaTtd) setKotaTtd(parsed.kotaTtd)
-        if (typeof parsed.pakaiTtdCapKepsek === 'boolean')
-          setPakaiTtdCapKepsek(parsed.pakaiTtdCapKepsek)
+        // Kompatibilitas dengan pengaturan lama (gabungan) + dua field baru yang terpisah
+        if (typeof parsed.pakaiTtdCapKepsek === 'boolean' && typeof parsed.pakaiTtdKepsek !== 'boolean') {
+          setPakaiTtdKepsek(parsed.pakaiTtdCapKepsek)
+          setPakaiCapKepsek(parsed.pakaiTtdCapKepsek)
+        }
+        if (typeof parsed.pakaiTtdKepsek === 'boolean') setPakaiTtdKepsek(parsed.pakaiTtdKepsek)
+        if (typeof parsed.pakaiCapKepsek === 'boolean') setPakaiCapKepsek(parsed.pakaiCapKepsek)
       } catch (e) {
         console.error('Error parsing local storage settings:', e)
       }
@@ -589,13 +595,16 @@ export default function LaporanPage() {
             <strong>Kepala Sekolah</strong><br/>
             <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
               ${
-                pakaiTtdCapKepsek
-                  ? `
-                    <img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />
-                    <img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />
-                  `
-                  : '<br/><br/>'
+                pakaiCapKepsek
+                  ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
+                  : ''
               }
+              ${
+                pakaiTtdKepsek
+                  ? '<img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />'
+                  : ''
+              }
+              ${!pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
             </div>
             <u><strong>${namaKepsek}</strong></u><br/>
             ${nipKepsek}
@@ -1124,13 +1133,16 @@ export default function LaporanPage() {
               <strong>Kepala ${isSmkSoal ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'}</strong><br/>
               <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
                 ${
-                  !isSmkSoal && pakaiTtdCapKepsek
-                    ? `
-                      <img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />
-                      <img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />
-                    `
-                    : '<br/><br/>'
+                  !isSmkSoal && pakaiCapKepsek
+                    ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
+                    : ''
                 }
+                ${
+                  !isSmkSoal && pakaiTtdKepsek
+                    ? '<img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />'
+                    : ''
+                }
+                ${!isSmkSoal && !pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
               </div>
               <u><strong>${kepsekNamaDoc}</strong></u><br/>
               ${kepsekNipDoc}
@@ -1176,6 +1188,207 @@ export default function LaporanPage() {
     const safeKelas = (filterKelasBankSoal || 'Semua_Kelas').replace(/[^a-zA-Z0-9]/g, '_')
     triggerDownloadWord(`Kunci_Jawaban_${safeMapel}_${safeKelas}`, htmlKunci)
   }
+
+  const handlePrintBankSoalPdf = async () => {
+    let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
+    if (filterMapelBankSoal) {
+      query = query.eq('mapel', filterMapelBankSoal)
+    }
+
+    const { data: rawSoalData } = await query
+    const soalData = filterSoalByKelasExact(rawSoalData || [], filterKelasBankSoal)
+
+    if (!soalData || soalData.length === 0) {
+      alert(
+        `Tidak ada data bank soal untuk dicetak PDF${
+          filterMapelBankSoal ? ` (${filterMapelBankSoal})` : ''
+        }${filterKelasBankSoal ? ` kelas ${filterKelasBankSoal}` : ''}.`
+      )
+      return
+    }
+
+    const htmlSections = soalData
+      .map((s, idx) => {
+        const isSmkSoal = detectIsSmkSoal(s.fase_kelas, s.mapel)
+        const opsiHurufLabel = isSmkSoal ? 'A, B, C, D, atau E' : 'A, B, C, atau D'
+        const estimasiMenit = Number(s.jumlah_soal) > 30 ? 90 : 60
+
+        return `
+          ${idx > 0 ? '<div class="soal-page-break"></div>' : ''}
+          <div class="kop-ujian">
+            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel, '105px')}
+            <div class="judul-ujian">
+              NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}
+            </div>
+            <table class="header-identitas">
+              <tr>
+                <td style="width: 15%;"><b>Mata Pelajaran</b></td>
+                <td style="width: 35%;">: ${s.mapel}</td>
+                <td style="width: 15%;"><b>Nama Siswa</b></td>
+                <td style="width: 35%;">: ........................................................</td>
+              </tr>
+              <tr>
+                <td><b>Kelas / Fase</b></td>
+                <td>: ${s.fase_kelas}</td>
+                <td><b>No. Peserta / NIS</b></td>
+                <td>: ........................................................</td>
+              </tr>
+              <tr>
+                <td><b>Waktu / Soal</b></td>
+                <td>: ${estimasiMenit} Menit (${s.jumlah_soal} Butir ${s.bentuk_soal})</td>
+                <td><b>Hari / Tanggal</b></td>
+                <td>: ........................................................</td>
+              </tr>
+            </table>
+            <p class="petunjuk-singkat">
+              <b>Petunjuk:</b> Berdoalah sebelum mengerjakan. Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (X) pada huruf ${opsiHurufLabel} pada lembar jawaban!
+            </p>
+          </div>
+
+          <div class="kolom-soal">
+            ${formatNaskahSoalHematKertas(s.isi_soal)}
+          </div>
+        `
+      })
+      .join('')
+
+    const guruPengampu = await resolvePenandatanganPDF({
+      mode: 'mapel',
+      mapelNama: filterMapelBankSoal || soalData[0]?.mapel,
+    })
+
+    // Tentukan Kepala Sekolah sesuai jenjang soal (SMK vs SMP)
+    let kepsekNamaDoc = namaKepsek
+    let kepsekNipDoc = nipKepsek
+    const isSmkSoal = detectIsSmkSoal(soalData[0].fase_kelas, soalData[0].mapel)
+    if (isSmkSoal) {
+      const { data: kepsekSmk } = await supabase
+        .from('guru')
+        .select('nama_lengkap, NUPTK')
+        .ilike('jabatan', '%Kepala Sekolah SMK%')
+        .maybeSingle()
+      kepsekNamaDoc = kepsekSmk?.nama_lengkap?.trim() || 'RIZIEQ NIZAR'
+      kepsekNipDoc = kepsekSmk?.NUPTK ? `NUPTK. ${kepsekSmk.NUPTK}` : 'NUPTK. -'
+    }
+
+    const footerTtdPdf = `
+      <div style="margin-top: 25px; font-family: 'Times New Roman', serif; font-size: 9.5pt; page-break-inside: avoid; color: #000;">
+        <table style="width: 100%; border: none;">
+          <tr>
+            <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+              ${kotaTtd}, ${currentDateStr}<br/>
+              <strong>${guruPengampu.jabatanLabel}</strong><br/><br/><br/><br/>
+              <u><strong>${guruPengampu.nama}</strong></u><br/>
+              NUPTK: ${guruPengampu.nuptk}
+            </td>
+            <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+              Mengetahui,<br/>
+              <strong>Kepala ${isSmkSoal ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'}</strong><br/>
+              <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
+                ${
+                  !isSmkSoal && pakaiCapKepsek
+                    ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
+                    : ''
+                }
+                ${
+                  !isSmkSoal && pakaiTtdKepsek
+                    ? '<img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />'
+                    : ''
+                }
+                ${!isSmkSoal && !pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
+              </div>
+              <u><strong>${kepsekNamaDoc}</strong></u><br/>
+              ${kepsekNipDoc}
+            </td>
+          </tr>
+        </table>
+      </div>
+    `
+
+    const safeMapel = (filterMapelBankSoal || 'Semua_Mapel').replace(/[^a-zA-Z0-9]/g, '_')
+    const safeKelas = (filterKelasBankSoal || 'Semua_Kelas').replace(/[^a-zA-Z0-9]/g, '_')
+    const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Naskah Soal ${safeMapel} - ${safeKelas}</title>
+            <style>
+              @page { size: A4 portrait; margin: 12mm 14mm 12mm 14mm; }
+              body {
+                font-family: 'Times New Roman', Times, serif;
+                color: #000;
+                line-height: 1.3;
+                font-size: 10pt;
+                margin: 0;
+                padding: 0;
+              }
+              .soal-page-break { page-break-before: always; }
+              .judul-ujian {
+                text-align: center;
+                text-transform: uppercase;
+                margin: 4px 0 6px 0;
+                font-size: 10.5pt;
+                font-weight: bold;
+              }
+              .header-identitas {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+                font-size: 9pt;
+              }
+              .header-identitas td {
+                border: 1px solid #000;
+                padding: 3px 6px;
+              }
+              .petunjuk-singkat {
+                font-size: 8.5pt;
+                font-style: italic;
+                margin: 0 0 8px 0;
+                border-bottom: 1.5pt solid #000;
+                padding-bottom: 4px;
+              }
+              .kolom-soal {
+                column-count: 2;
+                column-gap: 20px;
+                column-rule: 0.5pt solid #888;
+              }
+              .soal-item {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                margin-bottom: 8pt;
+              }
+              .soal-q { margin-bottom: 2.5pt; text-align: justify; }
+              .soal-num { font-weight: bold; }
+              .opt-list { padding-left: 14pt; }
+              .opt-row { margin-bottom: 1.5pt; }
+              .opt-grid {
+                width: 94%;
+                margin-left: 14pt;
+                border-collapse: collapse;
+                font-size: 9.5pt;
+              }
+              .opt-grid td {
+                width: 50%;
+                padding: 1pt 4pt 1pt 0;
+                border: none;
+                vertical-align: top;
+              }
+            </style>
+          </head>
+          <body>
+            ${htmlSections.replace(/src="\//g, `src="${originUrl}/`)}
+            ${footerTtdPdf.replace(/src="\//g, `src="${originUrl}/`)}
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+      setTimeout(() => printWindow.print(), 500)
+    }
+  }
+
 
   const handlePrintDocument = async (jenis: string) => {
     let judulDoc = 'LAPORAN AKADEMIK'
@@ -1552,7 +1765,8 @@ export default function LaporanPage() {
       nipKepsek,
       kotaTtd,
       currentDateStr,
-      pakaiTtdCapKepsek,
+      pakaiTtdKepsek,
+      pakaiCapKepsek,
       originUrl,
     })
   }
@@ -1978,7 +2192,8 @@ export default function LaporanPage() {
       namaKepsek,
       nipKepsek,
       kotaTtd,
-      pakaiTtdCapKepsek,
+      pakaiTtdKepsek,
+      pakaiCapKepsek,
     }
     localStorage.setItem('pengaturan_laporan', JSON.stringify(dataToSave))
     alert('✅ Pengaturan profil kepsek & stempel cetakan berhasil disimpan secara permanen!')
@@ -2221,15 +2436,26 @@ export default function LaporanPage() {
               </button>
             </div>
 
-            <label className="flex items-center gap-2 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs">
-              <input
-                type="checkbox"
-                checked={pakaiTtdCapKepsek}
-                onChange={(e) => setPakaiTtdCapKepsek(e.target.checked)}
-                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-              />
-              <span>🔏 Sertakan TTD &amp; Stempel Resmi Kepsek pada Cetakan</span>
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs">
+                <input
+                  type="checkbox"
+                  checked={pakaiTtdKepsek}
+                  onChange={(e) => setPakaiTtdKepsek(e.target.checked)}
+                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span>✍️ TTD Kepsek</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs">
+                <input
+                  type="checkbox"
+                  checked={pakaiCapKepsek}
+                  onChange={(e) => setPakaiCapKepsek(e.target.checked)}
+                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span>🖇️ Cap Sekolah</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -2238,22 +2464,17 @@ export default function LaporanPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
               {/* 1. DOWNLOAD WORD NASKAH SOAL & KUNCI JAWABAN */}
               <div className="md:col-span-2 bg-gradient-to-r from-amber-700 via-orange-800 to-amber-950 text-white rounded-2xl p-4 shadow-md space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-extrabold text-sm">
                     <span>📝</span>
-                    <h3>Download Naskah Soal Ulangan (.DOC Word — 2 Kolom Standar Ujian)</h3>
+                    <h3>Download Naskah Soal Ulangan</h3>
                   </div>
                   <span className="text-[10px] bg-amber-950/80 border border-amber-400/40 px-2.5 py-0.5 rounded-full font-bold text-amber-200">
-                    Format Word (.doc) Siap Edit • Tanpa Kunci Jawaban
+                    Unduh Word &amp; Cetak PDF
                   </span>
                 </div>
-                <p className="text-xs text-amber-100 font-medium">
-                  Naskah otomatis diunduh dalam format Microsoft Word (.doc) 2 kolom standar ujian
-                  (font 10pt nyaman dibaca, 30–40+ soal otomatis tersusun rapi hingga 4 lembar A4)
-                  tanpa kunci jawaban sehingga guru bebas mengedit teks sebelum dicetak.
-                </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase mb-1 text-amber-200">
                       1. MAPEL
@@ -2273,7 +2494,7 @@ export default function LaporanPage() {
 
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase mb-1 text-amber-200">
-                      2. FILTER KELAS (7–12)
+                      2. FILTER KELAS
                     </label>
                     <select
                       value={filterKelasBankSoal}
@@ -2284,24 +2505,27 @@ export default function LaporanPage() {
                       {renderKelasOptGroups(true)}
                     </select>
                   </div>
+                </div>
 
-                  <div className="flex items-end">
-                    <button
-                      onClick={handlePrintBankSoal}
-                      className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black py-1.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <span>📝</span> Word Naskah Soal
-                    </button>
-                  </div>
-
-                  <div className="flex items-end">
-                    <button
-                      onClick={handlePrintKunciJawaban}
-                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-1.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <span>🔑</span> Word Kunci Jawaban
-                    </button>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    onClick={handlePrintBankSoal}
+                    className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>📝</span> Word Naskah Soal
+                  </button>
+                  <button
+                    onClick={handlePrintBankSoalPdf}
+                    className="w-full bg-white hover:bg-amber-100 text-amber-900 font-black py-2 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>🖨️</span> Cetak PDF Naskah Soal
+                  </button>
+                  <button
+                    onClick={handlePrintKunciJawaban}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>🔑</span> Word Kunci Jawaban
+                  </button>
                 </div>
               </div>
 
@@ -2327,9 +2551,7 @@ export default function LaporanPage() {
                   </div>
                 </div>
                 <p className="text-xs text-emerald-100 font-medium">
-                  Format rapor resmi 3 halaman (Cover, Identitas Sekolah &amp; Siswa, Pengelompokan
-                  Mapel Resmi, Qiro&apos;ah, Pramuka, Absensi, &amp; TTD 3 Pihak). Klik{' '}
-                  <b>Preview &amp; Edit Rapor</b> untuk mengisi Capaian Kompetensi otomatis memakai AI.
+                  Format resmi 3 halaman — siap cetak per kelas.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2430,7 +2652,7 @@ export default function LaporanPage() {
                     <h3>Cetak PDF Rekap Presensi Harian</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Laporan rekapitulasi presensi siswa per kelas (dihitung per hari dari jam 1).
+                    Rekap presensi harian per kelas.
                   </p>
                 </div>
 
@@ -2503,7 +2725,7 @@ export default function LaporanPage() {
                     <h3>Cetak PDF Leger Nilai Akademik</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Leger nilai akumulasi Tugas, UTS, UAS &amp; Rata-Rata per Mapel.
+                    Leger nilai per mapel (Tugas, UTS, UAS).
                   </p>
                 </div>
 
@@ -2591,7 +2813,7 @@ export default function LaporanPage() {
                     <h3>Jurnal Agenda Mengajar Harian / Bulanan</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Dokumen resmi jurnal mengajar harian/bulanan guru pengampu.
+                    Jurnal mengajar harian/bulanan.
                   </p>
                 </div>
 
@@ -2691,7 +2913,7 @@ export default function LaporanPage() {
                     <h3>Catatan Bimbingan Guru Wali</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Laporan penanganan siswa perwalian untuk arsip sekolah.
+                    Catatan bimbingan wali kelas.
                   </p>
                 </div>
 
@@ -2765,7 +2987,7 @@ export default function LaporanPage() {
                     <h3>Laporan Detail Presensi BK (Jam Ke-1 s/d 8)</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Matriks presensi jam ke-1 hingga ke-8 untuk mendeteksi siswa bolos KBM.
+                    Matriks presensi jam 1–8.
                   </p>
                 </div>
 
@@ -2857,7 +3079,7 @@ export default function LaporanPage() {
                     <h3>Laporan Riwayat Input Nilai</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Daftar entri nilai Tugas, UTS, dan UAS per mata pelajaran.
+                    Riwayat input nilai per mapel.
                   </p>
                 </div>
 
