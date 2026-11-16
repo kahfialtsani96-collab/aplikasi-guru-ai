@@ -19,10 +19,18 @@ import {
   ArrowUp,
 } from 'lucide-react'
 import KineticMorphLoader from '../components/KineticMorphLoader'
+import { useDarkMode } from '@/hooks/useDarkMode'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
+const getSupabaseUrl = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+    .replace(/['"]/g, '')
+    .trim()
+const getSupabaseAnonKey = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder')
+    .replace(/['"]/g, '')
+    .trim()
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 export default function LoginPage() {
   const router = useRouter()
@@ -36,7 +44,7 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const isRedirectingRef = useRef(false)
 
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const { isDarkMode, setIsDarkMode } = useDarkMode()
 
   useEffect(() => {
     // Pastikan setiap kali halaman /login dibuka (termasuk setelah Logout), state animasi bersih

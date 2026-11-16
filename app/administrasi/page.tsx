@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
-import { useAuthRole } from '@/hooks/useAuthRole'
+import { useRequireOperator } from '@/hooks/useRequireOperator'
+import { useDarkMode } from '@/hooks/useDarkMode'
 
 const getSupabaseUrl = () => (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co').replace(/['"]/g, '').trim()
 const getSupabaseAnonKey = () => (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder').replace(/['"]/g, '').trim()
@@ -46,18 +46,12 @@ const KODE_SURAT_MAP: Record<string, string> = {
 }
 
 export default function AdministrasiTUPage() {
-  const router = useRouter()
-  const { isOperator, loading: loadingRole } = useAuthRole()
+  const { isOperator, loading: loadingRole } = useRequireOperator()
   const previewRef = useRef<HTMLDivElement>(null)
 
   const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
   const [suratList, setSuratList] = useState<SuratAdministrasi[]>([])
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') setIsDarkMode(true)
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
@@ -102,9 +96,7 @@ export default function AdministrasiTUPage() {
   const [guruOptions, setGuruOptions] = useState<OptionItem[]>([])
   const [selectedEntityId, setSelectedEntityId] = useState('')
 
-  useEffect(() => {
-    if (!loadingRole && !isOperator) router.push('/')
-  }, [loadingRole, isOperator, router])
+
 
   useEffect(() => {
     async function getUserData() {

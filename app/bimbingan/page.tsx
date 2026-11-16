@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
+import { getKelasGradeWeight, sortKelas } from '@/lib/utils'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -47,29 +49,6 @@ interface BimbinganRecord {
   is_penanganan_selesai?: boolean
 }
 
-// Helper untuk mengekstrak tingkat kelas (7 - 12) baik format angka (7, 10) maupun Romawi (VII, X, XII)
-function getGradeOrder(namaKelas: string): number {
-  const clean = (namaKelas || '').trim().toUpperCase()
-  const numMatch = clean.match(/^(1[0-2]|[7-9])\b/)
-  if (numMatch) {
-    return parseInt(numMatch[1], 10)
-  }
-  if (/^XII\b/.test(clean) || clean.startsWith('XII ') || clean.startsWith('XII-')) return 12
-  if (/^XI\b/.test(clean) || clean.startsWith('XI ') || clean.startsWith('XI-')) return 11
-  if (/^X\b/.test(clean) || clean.startsWith('X ') || clean.startsWith('X-')) return 10
-  if (/^IX\b/.test(clean) || clean.startsWith('IX ') || clean.startsWith('IX-')) return 9
-  if (/^VIII\b/.test(clean) || clean.startsWith('VIII ') || clean.startsWith('VIII-')) return 8
-  if (/^VII\b/.test(clean) || clean.startsWith('VII ') || clean.startsWith('VII-')) return 7
-  return 99
-}
-
-function sortKelas7to12(a: OptionItem, b: OptionItem): number {
-  const gradeA = getGradeOrder(a.nama)
-  const gradeB = getGradeOrder(b.nama)
-  if (gradeA !== gradeB) return gradeA - gradeB
-  return a.nama.localeCompare(b.nama, 'id', { numeric: true, sensitivity: 'base' })
-}
-
 export default function BimbinganWaliPage() {
   const router = useRouter()
   const dropdownContainerRef = useRef<HTMLDivElement>(null)
@@ -97,14 +76,7 @@ export default function BimbinganWaliPage() {
     return str
   }
 
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   // Tutup popover siswa saat klik di luar area
   useEffect(() => {
@@ -211,9 +183,8 @@ export default function BimbinganWaliPage() {
           nama: k.nama_kelas,
           jenjang: (k.jenjang || 'SMP').toUpperCase(),
         }))
-        // Urutkan otomatis dari kelas 7 hingga kelas 12
-        mappedKelas.sort(sortKelas7to12)
-        setKelasList(mappedKelas)
+        // Urutkan otomatis dari kelas 7 hingga kelas 12 (helper terpusat)
+        setKelasList(sortKelas(mappedKelas))
       }
 
       fetchAllSiswa()
@@ -257,7 +228,7 @@ export default function BimbinganWaliPage() {
     if (matched) {
       return matched.jenjang === 'SMK' ? 'SMK' : 'SMP'
     }
-    const grade = getGradeOrder(namaKelas)
+    const grade = getKelasGradeWeight(namaKelas)
     if (grade >= 10 && grade <= 12) return 'SMK'
     if (clean.includes('smk') || clean.includes('dkv')) return 'SMK'
     return 'SMP'
@@ -268,7 +239,7 @@ export default function BimbinganWaliPage() {
       selectedJenjangInput === 'ALL'
         ? kelasList
         : kelasList.filter((k) => k.jenjang === selectedJenjangInput)
-    return [...filtered].sort(sortKelas7to12)
+    return sortKelas(filtered)
   }, [kelasList, selectedJenjangInput])
 
   const filteredSiswaOptions = useMemo(() => {
@@ -1201,9 +1172,9 @@ export default function BimbinganWaliPage() {
                   }`}
                 >
                   <option value="">Kelas (7–12)</option>
-                  {[...kelasList]
-                    .filter((k) => filterJenjangRekap === 'ALL' || k.jenjang === filterJenjangRekap)
-                    .sort(sortKelas7to12)
+                  {sortKelas(
+                    kelasList.filter((k) => filterJenjangRekap === 'ALL' || k.jenjang === filterJenjangRekap)
+                  )
                     .map((k) => (
                       <option key={k.id} value={k.id}>
                         {k.nama}

@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
+import { sortKelas } from '@/lib/utils'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -184,14 +186,7 @@ export default function JadwalMengajarPage() {
     return str
   }
 
-  // DETEKSI OTOMATIS TEMA DARK MODE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   // Master Data SMP
   const [mapelList, setMapelList] = useState<MapelItem[]>([])
@@ -447,7 +442,7 @@ export default function JadwalMengajarPage() {
     ])
 
     if (resMapel.data) setMapelList(resMapel.data)
-    if (resKelas.data) setKelasList(resKelas.data)
+    if (resKelas.data) setKelasList(sortKelas(resKelas.data))
     if (resGuru.data) {
       const smpTeachers = resGuru.data.filter(
         (g) => (g.unit_mengajar || 'SMP').toUpperCase() !== 'SMK'

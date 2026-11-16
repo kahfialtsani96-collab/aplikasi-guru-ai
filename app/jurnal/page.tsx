@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
+import { sortKelas } from '@/lib/utils'
 
 // Helper instansiasi Supabase aman untuk SSG Vercel
 const getSupabaseUrl = () => {
@@ -80,14 +82,7 @@ export default function AgendaMengajarPage() {
   }
 
   // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   // Master Data Options (Khusus SMP)
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
@@ -225,7 +220,7 @@ export default function AgendaMengajarPage() {
           .or('jenjang.eq.SMP,jenjang.is.null')
           .order('nama_mapel', { ascending: true })
 
-        if (dataKelas) setKelasList(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
+        if (dataKelas) setKelasList(sortKelas(dataKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas }))))
         if (dataMapel) setMapelList(dataMapel.map((m: any) => ({ id: m.id, nama: m.nama_mapel })))
         return
       }
@@ -256,7 +251,7 @@ export default function AgendaMengajarPage() {
           }
         })
 
-        setKelasList(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama })))
+        setKelasList(sortKelas(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama }))))
         setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
       }
     } catch (err) {

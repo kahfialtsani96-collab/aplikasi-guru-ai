@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { getKelasGradeWeight } from '@/lib/utils'
 
 export interface RaporKelasItem {
   id: number
@@ -64,20 +65,8 @@ export interface BuildRaporParams {
   aiDescriptions?: Record<string, string>
 }
 
-// Bobot tingkat kelas kronologis 7 -> 12
-export function getKelasGradeWeight(namaKelas: string, tingkatDb?: string | null): number {
-  const t = String(tingkatDb || '').trim()
-  if (['7', '8', '9', '10', '11', '12'].includes(t)) return Number(t)
-
-  const upper = (namaKelas || '').trim().toUpperCase()
-  if (/^(XII|12)\b/.test(upper)) return 12
-  if (/^(XI|11)\b/.test(upper)) return 11
-  if (/^(X|10)\b/.test(upper)) return 10
-  if (/^(IX|9)\b/.test(upper)) return 9
-  if (/^(VIII|8)\b/.test(upper)) return 8
-  if (/^(VII|7)\b/.test(upper)) return 7
-  return 99
-}
+// getKelasGradeWeight kini diimpor dari @/lib/utils (sumber tunggal).
+export { getKelasGradeWeight }
 
 // Deteksi unit SMP vs SMK
 export function detectUnitByKelas(

@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
-import { useAuthRole } from '@/hooks/useAuthRole'
+import { useRequireOperator } from '@/hooks/useRequireOperator'
+import { useDarkMode } from '@/hooks/useDarkMode'
+import { sortKelas } from '@/lib/utils'
 
 // Inisialisasi Supabase Client yang aman dari Prerender/SSG Vercel
 const getSupabaseUrl = () => {
@@ -37,7 +39,7 @@ interface Siswa {
 
 export default function MasterSiswaPage() {
   const router = useRouter()
-  const { isOperator, loading: loadingRole } = useAuthRole()
+  const { isOperator, loading: loadingRole } = useRequireOperator()
 
   const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
   const [kelasList, setKelasList] = useState<KelasOption[]>([])
@@ -56,22 +58,9 @@ export default function MasterSiswaPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const { isDarkMode } = useDarkMode()
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
 
-  // Guard Akses Operator
-  useEffect(() => {
-    if (!loadingRole && !isOperator) {
-      router.push('/')
-    }
-  }, [loadingRole, isOperator, router])
 
   useEffect(() => {
     async function getUserData() {
@@ -96,7 +85,7 @@ export default function MasterSiswaPage() {
 
     const kelasMap = new Map<number, string>()
     if (dataKelas) {
-      setKelasList(dataKelas)
+      setKelasList(sortKelas(dataKelas))
       dataKelas.forEach((k) => kelasMap.set(k.id, k.nama_kelas))
     }
 

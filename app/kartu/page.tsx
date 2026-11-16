@@ -6,16 +6,26 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
+import { sortKelas } from '@/lib/utils'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
+const getSupabaseUrl = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+    .replace(/['"]/g, '')
+    .trim()
+const getSupabaseAnonKey = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder')
+    .replace(/['"]/g, '')
+    .trim()
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 type JenisKartu = 'pelajar' | 'ujian' | 'guru'
 
 interface KelasOption {
   id: number
   nama_kelas: string
+  jenjang?: string
 }
 
 interface ItemKartu {
@@ -35,25 +45,40 @@ export default function CetakKartuPage() {
   const [userDisplayName, setUserDisplayName] = useState('GURU')
   const { isOperator } = useAuthRole()
 
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   // STATE JENIS KARTU & UJIAN
   const [jenisKartu, setJenisKartu] = useState<JenisKartu>('pelajar')
   const [namaUjian, setNamaUjian] = useState('ASESMEN SUMATIF AKHIR SEMESTER (SAS)')
   const [prefixNoUjian, setPrefixNoUjian] = useState('2627-07-')
 
-  // DATA KEPALA SEKOLAH DARI DATABASE SUPABASE
-  const [kepsekInfo, setKepsekInfo] = useState({
+  // DATA KEPALA SEKOLAH DARI DATABASE SUPABASE (dipisah per jenjang SMP/SMK)
+  const [kepsekSmp, setKepsekSmp] = useState({
     nama: 'SULASTRI, S.Pd., Gr.',
     nuptk: '6337763664131233'
   })
+  const [kepsekSmk, setKepsekSmk] = useState({
+    nama: 'RIZIEQ NIZAR',
+    nuptk: '-'
+  })
+
+  // JENJANG KELAS TERPILIH (menentukan kepala sekolah yang tepat pada kartu)
+  const [selectedKelasJenjang, setSelectedKelasJenjang] = useState<'SMP' | 'SMK'>('SMP')
+
+  // Helper: deteksi jenjang satu kartu (siswa mengikuti jenjang kelas; guru ditebak dari jabatan)
+  const satuanUnitFor = (item?: ItemKartu): 'SMP' | 'SMK' => {
+    if (jenisKartu === 'guru' && item) {
+      const info = `${item.subInfo || ''} ${item.nama || ''}`.toUpperCase()
+      if (info.includes('SMK')) return 'SMK'
+    }
+    return selectedKelasJenjang
+  }
+
+  const kepsekFor = (item?: ItemKartu) =>
+    satuanUnitFor(item) === 'SMK' ? kepsekSmk : kepsekSmp
+
+  const kepsekJabatanLabel = (item?: ItemKartu) =>
+    satuanUnitFor(item) === 'SMK' ? 'Kepala SMK Muna Mustofa' : 'Kepala SMP Muna Mustofa'
 
   // OPSI PENGATURAN CETAK
   const [includeBackSide, setIncludeBackSide] = useState(true)
@@ -92,26 +117,47 @@ export default function CetakKartuPage() {
     checkAuthAndUser()
   }, [router])
 
-  // FETCH DATA KEPALA SEKOLAH DARI DATABASE SUPABASE
+  // FETCH DATA KEPALA SEKOLAH DARI DATABASE SUPABASE (SMP & SMK terpisah)
   useEffect(() => {
     async function fetchKepsekFromDB() {
       try {
-        const { data, error } = await supabase
+        // KEPALA SEKOLAH SMP (jabatan "Kepala Sekolah" tanpa kata SMK)
+        const { data: smpData } = await supabase
           .from('guru')
           .select('*')
-          .limit(10)
+          .ilike('jabatan', '%Kepala Sekolah%')
+          .limit(20)
 
-        if (!error && data && data.length > 0) {
-          const kepsekObj = data.find((g: any) => 
-            (g.jabatan && g.jabatan.toLowerCase().includes('kepala sekolah')) ||
-            (g.nama_lengkap && g.nama_lengkap.toLowerCase().includes('sulastri'))
-          ) || data[0]
+        if (smpData && smpData.length > 0) {
+          const smpKepsek =
+            smpData.find((g: any) => {
+              const jab = String(g.jabatan || '').toLowerCase()
+              return jab.includes('kepala sekolah') && !jab.includes('smk')
+            }) || smpData.find((g: any) => String(g.nama_lengkap || '').toLowerCase().includes('sulastri')) || smpData[0]
 
-          const rawNuptk = kepsekObj.NUPTK || kepsekObj.nuptk || kepsekObj.nip
+          const rawNuptk = smpKepsek.NUPTK || smpKepsek.nuptk || smpKepsek.nip
           const cleanNuptk = rawNuptk && rawNuptk !== 'EMPTY' && rawNuptk !== 'NULL' ? rawNuptk : '6337763664131233'
-          setKepsekInfo({
-            nama: (kepsekObj.nama_lengkap || kepsekObj.nama || 'SULASTRI, S.Pd., Gr.').toUpperCase(),
+          setKepsekSmp({
+            nama: (smpKepsek.nama_lengkap || smpKepsek.nama || 'SULASTRI, S.Pd., Gr.').toUpperCase(),
             nuptk: cleanNuptk
+          })
+        }
+
+        // KEPALA SEKOLAH SMK (jabatan mengandung kata "SMK")
+        const { data: smkData } = await supabase
+          .from('guru')
+          .select('*')
+          .ilike('jabatan', '%Kepala Sekolah SMK%')
+          .maybeSingle()
+
+        if (smkData?.nama_lengkap) {
+          const nuptkRaw = String(smkData.NUPTK || smkData.nip || '').trim()
+          setKepsekSmk({
+            nama: smkData.nama_lengkap.trim().toUpperCase(),
+            nuptk:
+              nuptkRaw && nuptkRaw.toUpperCase() !== 'NULL' && nuptkRaw.toUpperCase() !== 'EMPTY'
+                ? nuptkRaw
+                : '-'
           })
         }
       } catch (err) {
@@ -128,11 +174,11 @@ export default function CetakKartuPage() {
       try {
         const { data, error } = await supabase
           .from('kelas')
-          .select('id, nama_kelas')
+          .select('id, nama_kelas, jenjang')
           .order('id', { ascending: true })
 
         if (!error && data) {
-          setDaftarKelas(data)
+          setDaftarKelas(sortKelas(data))
         }
       } catch (err) {
         console.error('Error fetching kelas:', err)
@@ -224,12 +270,17 @@ export default function CetakKartuPage() {
     if (!val) {
       setSelectedKelasId('')
       setSelectedKelasNama('')
+      setSelectedKelasJenjang('SMP')
       return
     }
     const classId = Number(val)
     setSelectedKelasId(classId)
     const foundKelas = daftarKelas.find((k) => k.id === classId)
-    if (foundKelas) setSelectedKelasNama(foundKelas.nama_kelas)
+    if (foundKelas) {
+      setSelectedKelasNama(foundKelas.nama_kelas)
+      const j = String(foundKelas.jenjang || '').trim().toUpperCase()
+      setSelectedKelasJenjang(j === 'SMK' ? 'SMK' : 'SMP')
+    }
   }
 
   // HANDLER EDIT & TAMBAH KARTU
@@ -316,8 +367,8 @@ export default function CetakKartuPage() {
                         </td>
                         <td style="width: 55%; text-align: right; vertical-align: bottom; font-size: 4.5pt; color: #0f172a;">
                           Kepala Sekolah,<br/><br/>
-                          <b><u>${kepsekInfo.nama}</u></b><br/>
-                          NUPTK. ${kepsekInfo.nuptk}
+                          <b><u>${kepsekFor(item).nama}</u></b><br/>
+                          NUPTK. ${kepsekFor(item).nuptk}
                         </td>
                       </tr>
                     </table>
@@ -416,8 +467,8 @@ export default function CetakKartuPage() {
                   ${includeStamp ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img-ujian" />` : ''}
                   ${includeDigitalSignature ? `<img src="/ttd-kepsek.png" alt="TTD" class="signature-img-ujian" />` : ''}
                 </div>
-                <p class="sign-name"><b><u>${kepsekInfo.nama}</u></b></p>
-                <p class="sign-nip">NUPTK. ${kepsekInfo.nuptk}</p>
+                <p class="sign-name"><b><u>${kepsekFor(item).nama}</u></b></p>
+                <p class="sign-nip">NUPTK. ${kepsekFor(item).nuptk}</p>
               </div>
             </div>
           </div>
@@ -489,15 +540,15 @@ export default function CetakKartuPage() {
       if (includeBackSide && jenisKartu !== 'ujian') {
         const penandatanganJabatan = item.isKepalaSekolah 
           ? 'Ketua Yayasan PPTQ Muna Mustofa' 
-          : 'Kepala SMP Muna Mustofa'
+          : kepsekJabatanLabel(item)
         
         const penandatanganNama = item.isKepalaSekolah 
           ? 'PENGURUS YAYASAN' 
-          : kepsekInfo.nama
+          : kepsekFor(item).nama
 
         const penandatanganNip = item.isKepalaSekolah 
           ? 'Yayasan Muna Mustofa Lampung' 
-          : `NUPTK. ${kepsekInfo.nuptk}`
+          : `NUPTK. ${kepsekFor(item).nuptk}`
 
         const rulesContent = jenisKartu === 'guru' ? `
           <ol class="rules-list">
@@ -967,8 +1018,8 @@ export default function CetakKartuPage() {
                           </div>
                           <div className="text-right">
                             <p className="font-bold text-slate-300">Kepala Sekolah</p>
-                            <p className="font-extrabold text-slate-100 underline leading-tight">{kepsekInfo.nama}</p>
-                            <p className="text-[8px] text-slate-400 font-mono">NUPTK. {kepsekInfo.nuptk}</p>
+                            <p className="font-extrabold text-slate-100 underline leading-tight">{kepsekFor(item).nama}</p>
+                            <p className="text-[8px] text-slate-400 font-mono">NUPTK. {kepsekFor(item).nuptk}</p>
                           </div>
                         </div>
                       ) : (
@@ -1235,8 +1286,8 @@ export default function CetakKartuPage() {
 
                       <div className="text-right">
                         <p className={`text-[10px] font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Kepala Sekolah,</p>
-                        <p className={`font-black text-xs underline ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{kepsekInfo.nama}</p>
-                        <p className={`text-[9px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK. {kepsekInfo.nuptk}</p>
+                        <p className={`font-black text-xs underline ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{kepsekFor(selectedModalItem).nama}</p>
+                        <p className={`text-[9px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK. {kepsekFor(selectedModalItem).nuptk}</p>
                       </div>
                     </div>
                   ) : (
@@ -1283,7 +1334,7 @@ export default function CetakKartuPage() {
                       Gisting, {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
                     </p>
                     <p className={`font-bold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                      {selectedModalItem.isKepalaSekolah ? 'Ketua Yayasan PPTQ Muna Mustofa,' : 'Kepala SMP Muna Mustofa,'}
+                      {selectedModalItem.isKepalaSekolah ? 'Ketua Yayasan PPTQ Muna Mustofa,' : kepsekJabatanLabel(selectedModalItem)}
                     </p>
 
                     <div className="h-12 relative flex items-center justify-end my-1">
@@ -1296,10 +1347,10 @@ export default function CetakKartuPage() {
                     </div>
 
                     <p className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                      <u>{selectedModalItem.isKepalaSekolah ? 'PENGURUS YAYASAN' : kepsekInfo.nama}</u>
+                      <u>{selectedModalItem.isKepalaSekolah ? 'PENGURUS YAYASAN' : kepsekFor(selectedModalItem).nama}</u>
                     </p>
                     <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                      {selectedModalItem.isKepalaSekolah ? 'Yayasan Muna Mustofa' : `NUPTK. ${kepsekInfo.nuptk}`}
+                      {selectedModalItem.isKepalaSekolah ? 'Yayasan Muna Mustofa' : `NUPTK. ${kepsekFor(selectedModalItem).nuptk}`}
                     </p>
                   </div>
                 </div>

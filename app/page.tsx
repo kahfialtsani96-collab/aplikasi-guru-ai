@@ -6,11 +6,19 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
+const getSupabaseUrl = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+    .replace(/['"]/g, '')
+    .trim()
+const getSupabaseAnonKey = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder')
+    .replace(/['"]/g, '')
+    .trim()
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -31,7 +39,7 @@ export default function DashboardPage() {
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false)
 
   // STATE DARK MODE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const { isDarkMode, setIsDarkMode } = useDarkMode()
 
   // Helper format NUPTK agar bersih (jika kosong/null/EMPTY menjadi '-')
   const formatNuptk = (val: unknown): string => {
@@ -50,10 +58,6 @@ export default function DashboardPage() {
 
   // 1. BACA TEMA TERAKHIR & MATIKAN LAMPU SMK SAAT MASUK DASHBOARD SMP
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
     sessionStorage.removeItem('smk_lamp_on')
   }, [])
 

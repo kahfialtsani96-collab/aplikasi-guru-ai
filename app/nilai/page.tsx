@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
+import { sortKelas } from '@/lib/utils'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -85,15 +87,7 @@ export default function PenilaianPage() {
     return str
   }
 
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   // Global Filter Periode Akademik
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
@@ -197,7 +191,7 @@ export default function PenilaianPage() {
           .or('jenjang.eq.SMP,jenjang.is.null')
           .order('nama_mapel', { ascending: true })
 
-        if (dataKelas) setKelasList(dataKelas.map((k: Record<string, any>) => ({ id: Number(k.id), nama: String(k.nama_kelas) })))
+        if (dataKelas) setKelasList(sortKelas(dataKelas.map((k: Record<string, any>) => ({ id: Number(k.id), nama: String(k.nama_kelas) }))))
         if (dataMapel) setMapelList(dataMapel.map((m: Record<string, any>) => ({ id: Number(m.id), nama: String(m.nama_mapel) })))
       } else {
         const { data, error } = await supabase
@@ -226,7 +220,7 @@ export default function PenilaianPage() {
             }
           })
 
-          setKelasList(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama })))
+          setKelasList(sortKelas(Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama }))))
           setMapelList(Array.from(uniqueMapelMap.entries()).map(([id, nama]) => ({ id, nama })))
         }
       }

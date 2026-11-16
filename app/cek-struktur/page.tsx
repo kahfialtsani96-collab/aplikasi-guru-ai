@@ -3,9 +3,16 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
+const getSupabaseUrl = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+    .replace(/['"]/g, '')
+    .trim()
+const getSupabaseAnonKey = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder')
+    .replace(/['"]/g, '')
+    .trim()
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 // Daftar seluruh tabel di Supabase Anda
 const ALL_TABLES = [

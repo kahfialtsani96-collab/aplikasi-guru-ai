@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
+import { sortKelas } from '@/lib/utils'
 
 // Helper Instansiasi Aman Supabase Client untuk Vercel SSG Build
 const getSupabaseClient = () => {
@@ -93,15 +95,7 @@ export default function AbsensiPage() {
     return str
   }
 
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
   const [subTabAbsen, setSubTabAbsen] = useState<'belum' | 'sudah'>('belum')
@@ -194,7 +188,7 @@ export default function AbsensiPage() {
                 (k.jenjang || 'SMP').toUpperCase() !== 'SMK' &&
                 !(k.nama_kelas || '').toUpperCase().includes('DKV')
             )
-            setKelasList(smpKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas })))
+            setKelasList(sortKelas(smpKelas.map((k: any) => ({ id: k.id, nama: k.nama_kelas }))))
           }
           if (resMapel.data) {
             const smpMapel = resMapel.data.filter(
@@ -241,9 +235,9 @@ export default function AbsensiPage() {
           })
 
           setKelasList(
-            Array.from(uniqueKelasMap.entries())
-              .map(([id, nama]) => ({ id, nama }))
-              .sort((a, b) => a.nama.localeCompare(b.nama))
+            sortKelas(
+              Array.from(uniqueKelasMap.entries()).map(([id, nama]) => ({ id, nama }))
+            )
           )
           setMapelList(
             Array.from(uniqueMapelMap.entries())

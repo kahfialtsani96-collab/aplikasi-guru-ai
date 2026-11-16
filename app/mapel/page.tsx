@@ -5,11 +5,19 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
-import { useAuthRole } from '@/hooks/useAuthRole'
+import { useRequireOperator } from '@/hooks/useRequireOperator'
+import { useDarkMode } from '@/hooks/useDarkMode'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
+const getSupabaseUrl = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+    .replace(/['"]/g, '')
+    .trim()
+const getSupabaseAnonKey = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder')
+    .replace(/['"]/g, '')
+    .trim()
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface Mapel {
   id?: string | number
@@ -25,7 +33,7 @@ interface Mapel {
 
 export default function KelolaMapelPage() {
   const router = useRouter()
-  const { isOperator, loading: loadingRole } = useAuthRole()
+  const { isOperator, loading: loadingRole } = useRequireOperator()
 
   const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
   
@@ -45,21 +53,9 @@ export default function KelolaMapelPage() {
   const [searchQuery, setSearchQuery] = useState('')
 
   // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const { isDarkMode } = useDarkMode()
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
 
-  // Guard Akses Operator
-  useEffect(() => {
-    if (!loadingRole && !isOperator) {
-      router.push('/')
-    }
-  }, [loadingRole, isOperator, router])
 
   useEffect(() => {
     async function getUserData() {

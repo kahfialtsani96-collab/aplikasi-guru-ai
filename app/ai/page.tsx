@@ -9,13 +9,18 @@ import rehypeRaw from 'rehype-raw'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabase = createClient(
-  supabaseUrl.replace(/['"]/g, '').trim(),
-  supabaseAnonKey.replace(/['"]/g, '').trim()
-)
+// Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
+const getSupabaseUrl = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+    .replace(/['"]/g, '')
+    .trim()
+const getSupabaseAnonKey = () =>
+  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder')
+    .replace(/['"]/g, '')
+    .trim()
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 interface MapelItem {
   id: number
@@ -93,7 +98,7 @@ export default function AiToolsPage() {
   const [activeTabSection, setActiveTabSection] = useState<'admin' | 'modul'>('admin')
   const [selectedDoc, setSelectedDoc] = useState('cp')
 
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const { isDarkMode } = useDarkMode()
   const [isSavingSoal, setIsSavingSoal] = useState(false)
 
   // State untuk Visual Preview & Direct Click-to-Edit
@@ -108,12 +113,7 @@ export default function AiToolsPage() {
   const [saveTargetKelas, setSaveTargetKelas] = useState('')
   const [saveNamaGuru, setSaveNamaGuru] = useState('')
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+
 
   const [mapelList, setMapelList] = useState<MapelItem[]>([])
   const [kelasList, setKelasList] = useState<KelasItem[]>([])

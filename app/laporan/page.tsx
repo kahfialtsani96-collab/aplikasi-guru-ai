@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
 import {
   buildRaporDocument,
   detectUnitByKelas,
@@ -48,13 +49,7 @@ export default function LaporanPage() {
   const [currentDateStr, setCurrentDateStr] = useState('')
 
   // DETEKSI OTOMATIS TEMA DARK MODE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   // Master Options
   const [kelasList, setKelasList] = useState<OptionItem[]>([])

@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
-import { useAuthRole } from '@/hooks/useAuthRole'
+import { useRequireOperator } from '@/hooks/useRequireOperator'
+import { useDarkMode } from '@/hooks/useDarkMode'
 
 // Helper Inisialisasi Supabase Client yang aman dari error Prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -21,15 +21,7 @@ const getSupabaseAnonKey = () => {
 const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
 export default function DataGuruPage() {
-  const router = useRouter()
-  const { isOperator, loading: loadingRole } = useAuthRole()
-
-  // Guard Akses Khusus Operator
-  useEffect(() => {
-    if (!loadingRole && !isOperator) {
-      router.push('/')
-    }
-  }, [loadingRole, isOperator, router])
+  const { isOperator, loading: loadingRole } = useRequireOperator()
 
   const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
   const [guruList, setGuruList] = useState<any[]>([])
@@ -41,15 +33,7 @@ export default function DataGuruPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // DETEKSI OTOMATIS TEMA DARK MODE DARI LOCAL STORAGE
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-    }
-  }, [])
+  const { isDarkMode } = useDarkMode()
 
   useEffect(() => {
     async function getUserData() {
