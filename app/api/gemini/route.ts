@@ -16,11 +16,11 @@ export async function POST(req: Request) {
       ...kbcData
     } = body
 
-    const apiKey = process.env.MERCURY_API_KEY
+    const apiKey = (process.env.MERCURY_API_KEY || '').replace(/['"]/g, '').trim()
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API Key Mercury tidak terkonfigurasi di backend (.env.local)' },
+        { error: 'API Key Mercury (MERCURY_API_KEY) tidak terkonfigurasi di backend (.env.local / Vercel)' },
         { status: 400 }
       )
     }
@@ -50,6 +50,64 @@ export async function POST(req: Request) {
     const konteksJenjangPrompt = isSmk
       ? `Jenjang: SMK (Sekolah Menengah Kejuruan) — Kompetensi Keahlian: ${jurusanResmi}. Gunakan pendekatan vokasi/industri kreatif, studi kasus proyek klien (client brief), standar teknis produksi media visual, tipografi, tata letak, fotografi/videografi, dan kesiapan kerja dunia industri (DUDI) sesuai Kurikulum Merdeka SMK Fase E/F.`
       : `Jenjang: SMP (Sekolah Menengah Pertama) Kurikulum Merdeka Fase D.`
+
+    // Helper pemanggil API Inception Labs Mercury (URL bersih tanpa format Markdown)
+    const callMercuryAPI = async (
+      systemPrompt: string,
+      userPrompt: string,
+      maxTokens: number,
+      temperature: number
+    ) => {
+      const endpointUrl = 'https://api.inceptionlabs.ai/v1/chat/completions'
+      const modelsToTry = ['mercury-2', 'mercury-coder-small']
+      let lastErrorMsg = 'Gagal menghubungi server Inception Labs AI'
+      let lastStatus = 500
+
+      for (const modelName of modelsToTry) {
+        const res = await fetch(endpointUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            max_tokens: maxTokens,
+            temperature,
+          }),
+        })
+
+        const rawText = await res.text()
+        let parsed: any = null
+        try {
+          parsed = JSON.parse(rawText)
+        } catch {
+          lastErrorMsg = `Inception Labs merespons non-JSON (${res.status}):${rawText.substring(0, 150)}`
+          lastStatus = res.status || 500
+          continue
+        }
+
+        if (res.ok) {
+          return { ok: true, data: parsed }
+        }
+
+        lastStatus = res.status
+        lastErrorMsg =
+          parsed?.error?.message ||
+          parsed?.message ||
+          `HTTP ${res.status} pada model ${modelName}`
+
+        if (res.status === 401 || res.status === 403 || res.status === 429) {
+          break
+        }
+      }
+
+      return { ok: false, status: lastStatus, error: lastErrorMsg }
+    }
 
     let systemPrompt = ''
     let userPrompt = ''
@@ -89,42 +147,12 @@ Aturan Penulisan WAJIB:
   }
 }`
 
-      const response = await fetch('https://api.inceptionlabs.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'mercury-2.5',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          max_tokens: 4096,
-          temperature: 0.4
-        })
-      })
-
-      const rawText = await response.text()
-      let data
-      try {
-        data = JSON.parse(rawText)
-      } catch {
-        return NextResponse.json(
-          { error: `Inception Labs merespons non-JSON: ${rawText.substring(0, 150)}` },
-          { status: 500 }
-        )
+      const apiRes = await callMercuryAPI(systemPrompt, userPrompt, 4096, 0.4)
+      if (!apiRes.ok) {
+        return NextResponse.json({ error: apiRes.error }, { status: apiRes.status || 500 })
       }
 
-      if (!response.ok) {
-        return NextResponse.json(
-          { error: data.error?.message || data.message || 'Gagal menghasilkan deskripsi rapor AI' },
-          { status: response.status }
-        )
-      }
-
-      const aiContent = (data.choices?.[0]?.message?.content || '').trim()
+      const aiContent = (apiRes.data.choices?.[0]?.message?.content || '').trim()
       const cleanedJsonStr = aiContent
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
@@ -134,7 +162,7 @@ Aturan Penulisan WAJIB:
       try {
         const parsedObj = JSON.parse(cleanedJsonStr)
         return NextResponse.json({
-          descriptions: parsedObj.descriptions || parsedObj
+          descriptions: parsedObj.descriptions || parsedObj,
         })
       } catch {
         return NextResponse.json(
@@ -159,7 +187,6 @@ Instruksi Penjawab Chatbot:
 1. Jawablah pertanyaan guru secara langsung pada inti masalah, lugas, dan praktis.
 2. DILARANG MEMBUAT struktur dokumen formal seperti "1. Identitas Dokumen", "2. Latar Belakang", atau bagian tanda tangan di akhir.
 3. Gunakan format Markdown yang rapi (bullet points, bold, dan paragraf singkat) agar mudah dibaca.`
-
     } else {
       systemPrompt = `Anda adalah Asisten Guru AI dan Pakar Pedagogi Kurikulum Merdeka (SMP Fase D & SMK Kejuruan Fase E/F) serta KBC Kemenag RI yang cerdas, terstruktur, mendalam, dan profesional.`
 
@@ -221,42 +248,17 @@ Instruksi Format WAJIB:
 3. DILARANG KERAS membuat teks tanda tangan, penutup 'Disetujui Oleh', 'Penyusun', atau blok pengesahan di akhir teks, karena Lembar Pengesahan resmi akan diinjeksi secara otomatis oleh sistem.`
     }
 
-    const response = await fetch('[https://api.inceptionlabs.ai/v1/chat/completions](https://api.inceptionlabs.ai/v1/chat/completions)', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'mercury-2.5',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 8192,
-        temperature: 0.7
-      })
-    })
+    const apiRes = await callMercuryAPI(systemPrompt, userPrompt, 8192, 0.7)
 
-    const rawText = await response.text()
-    let data
-    try {
-      data = JSON.parse(rawText)
-    } catch {
+    if (!apiRes.ok) {
       return NextResponse.json(
-        { error: `Inception Labs merespons non-JSON: ${rawText.substring(0, 150)}` },
-        { status: 500 }
+        { error: apiRes.error || 'Gagal memproses permintaan ke Mercury AI' },
+        { status: apiRes.status || 500 }
       )
     }
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: data.error?.message || data.message || 'Gagal memproses permintaan ke Mercury AI' },
-        { status: response.status }
-      )
-    }
-
-    const aiAnswer = data.choices?.[0]?.message?.content || 'Tidak ada respons yang dihasilkan oleh AI.'
+    const aiAnswer =
+      apiRes.data.choices?.[0]?.message?.content || 'Tidak ada respons yang dihasilkan oleh AI.'
 
     const lembarPengesahanHTML = `\n\n<br><hr><br>
 ### LEMBAR PENGESAHAN
@@ -284,8 +286,8 @@ Diverifikasi dan disahkan untuk digunakan dalam kegiatan pembelajaran Kurikulum 
     const finalResult = activeTool !== 'chatbot' ? aiAnswer + lembarPengesahanHTML : aiAnswer
 
     return NextResponse.json({ result: finalResult })
-
   } catch (err: any) {
+    console.error('Error /api/gemini:', err)
     return NextResponse.json(
       { error: err.message || 'Terjadi kesalahan internal pada backend route' },
       { status: 500 }
