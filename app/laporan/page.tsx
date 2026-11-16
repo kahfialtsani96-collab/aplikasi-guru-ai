@@ -623,7 +623,6 @@ export default function LaporanPage() {
     document.body.removeChild(link)
   }
 
-  // PARSER NASKAH SOAL 2 KOLOM
   // PARSER NASKAH SOAL 2 KOLOM (BERSIH DARI PETUNJUK GANDA, GARIS --- & MENDUKUNG A-E SMK)
   const formatNaskahSoalHematKertas = (rawText: string): string => {
     if (!rawText) return '<p><i>Isi naskah soal kosong di database.</i></p>'
@@ -640,7 +639,6 @@ export default function LaporanPage() {
     if (sectionHeaderMatch && sectionHeaderMatch.index !== undefined) {
       cleanText = cleanText.slice(sectionHeaderMatch.index + sectionHeaderMatch[0].length).trim()
     } else {
-      // Jika tidak ada judul bagian, buang teks pengantar hingga kalimat perintah "Pilihlah satu jawaban..."
       const pilihlahMatch = cleanText.match(/Pilihlah\s+(?:satu\s+)?jawaban[^\n]*\n/i)
       if (pilihlahMatch && pilihlahMatch.index !== undefined) {
         cleanText = cleanText.slice(pilihlahMatch.index + pilihlahMatch[0].length).trim()
@@ -664,7 +662,6 @@ export default function LaporanPage() {
     let startedSoal = false
 
     for (let i = 0; i < lines.length; i++) {
-      // Hapus garis pemisah --- atau ___ di awal/akhir baris
       const line = lines[i]
         .trim()
         .replace(/^[-_*]{3,}\s*/, '')
@@ -761,7 +758,7 @@ export default function LaporanPage() {
       .filter((l) => !/^#{1,4}\s*/.test(l.trim()) && !/^[-_*]{3,}$/.test(l.trim()))
       .map((l) => l.trim())
       .filter(Boolean)
-    return cleanedLines.map((l) => `<p style="margin: 0 0 4px 0;">${l}</p>`).join('')
+    return cleanedLines.map((l) => `<p style="margin: 0 0 6px 0;">${l}</p>`).join('')
   }
 
   const filterSoalByKelasExact = (soalList: any[], selectedKelasNama: string) => {
@@ -779,7 +776,9 @@ export default function LaporanPage() {
       return regexWord.test(fk) || fkNoSpace.includes(targetNoSpace)
     })
   }
-const triggerDownloadWord = (filename: string, htmlBody: string) => {
+
+  // DOWNLOAD WORD STANDAR UJIAN (FONT 10PT LEGA UNTUK 30-40+ SOAL HINGGA ±4 HALAMAN A4)
+  const triggerDownloadWord = (filename: string, htmlBody: string) => {
     const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
     const wordHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -798,14 +797,14 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
           <style>
             @page WordSectionHeader {
               size: 21cm 29.7cm;
-              margin: 0.7cm 0.9cm 0.7cm 0.9cm;
+              margin: 1.0cm 1.2cm 1.0cm 1.2cm;
               mso-header-margin: 0.5cm;
               mso-footer-margin: 0.5cm;
             }
             @page WordSectionSoal {
               size: 21cm 29.7cm;
-              margin: 0.7cm 0.9cm 0.7cm 0.9cm;
-              mso-columns: 2 even 0.4cm;
+              margin: 1.0cm 1.2cm 1.0cm 1.2cm;
+              mso-columns: 2 even 0.6cm;
               mso-column-separator: single;
             }
             @page WordSectionSingle {
@@ -816,63 +815,63 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
             div.WordSectionSoal {
               page: WordSectionSoal;
               column-count: 2;
-              column-gap: 14px;
+              column-gap: 18px;
               column-rule: 0.5pt solid #888;
             }
             div.WordSectionSingle { page: WordSectionSingle; }
             body {
               font-family: 'Times New Roman', Times, serif;
               color: #000;
-              line-height: 1.15;
-              font-size: 8.5pt;
+              line-height: 1.3;
+              font-size: 10pt;
               margin: 0;
               padding: 0;
             }
             .judul-ujian {
               text-align: center;
               text-transform: uppercase;
-              margin: 2px 0 4px 0;
-              font-size: 9.5pt;
+              margin: 4px 0 6px 0;
+              font-size: 10.5pt;
               font-weight: bold;
             }
             .header-identitas {
               width: 100%;
               border-collapse: collapse;
-              margin-bottom: 4px;
-              font-size: 8pt;
+              margin-bottom: 6px;
+              font-size: 9pt;
             }
             .header-identitas td {
               border: 1px solid #000;
-              padding: 2px 5px;
+              padding: 3px 6px;
             }
             .petunjuk-singkat {
-              font-size: 7.8pt;
+              font-size: 8.5pt;
               font-style: italic;
-              margin: 0 0 6px 0;
+              margin: 0 0 8px 0;
               border-bottom: 1.5pt solid #000;
-              padding-bottom: 3px;
+              padding-bottom: 4px;
             }
             .soal-item {
               break-inside: avoid;
               page-break-inside: avoid;
-              margin-bottom: 4.5pt;
+              margin-bottom: 8pt;
             }
             .soal-q {
-              margin-bottom: 1pt;
+              margin-bottom: 2.5pt;
               text-align: justify;
             }
             .soal-num { font-weight: bold; }
             .opt-list { padding-left: 14pt; }
-            .opt-row { margin-bottom: 0.5pt; }
+            .opt-row { margin-bottom: 1.5pt; }
             .opt-grid {
               width: 94%;
               margin-left: 14pt;
               border-collapse: collapse;
-              font-size: 8.3pt;
+              font-size: 9.5pt;
             }
             .opt-grid td {
               width: 50%;
-              padding: 0 4pt 0 0;
+              padding: 1pt 4pt 1pt 0;
               border: none;
               vertical-align: top;
             }
@@ -896,7 +895,8 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
   }
-  // Helper Kop Surat Ujian dinamis SMP vs SMK (proporsional tanpa melebar)
+
+  // Helper Kop Surat Ujian dinamis SMP vs SMK
   const buildKopUjianWordHtml = (faseOrKelasStr: string, mapelStr: string, maxImgHeight: string) => {
     const mapelObj = mapelList.find(
       (m) => m.nama.trim().toLowerCase() === (mapelStr || '').trim().toLowerCase()
@@ -908,10 +908,10 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
     if (isSmkSoal) {
       return `
         <div style="border-bottom: 3px double #000; padding-bottom: 4px; margin-bottom: 4px; text-align: center;">
-          <p style="margin: 0; font-size: 9pt; font-weight: bold;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
-          <h2 style="margin: 1px 0; font-size: 13pt; font-weight: bold;">SMK MUNA MUSTOFA</h2>
-          <p style="margin: 0; font-size: 8.5pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
-          <p style="margin: 1px 0 0 0; font-size: 8pt;">Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+          <p style="margin: 0; font-size: 9.5pt; font-weight: bold;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
+          <h2 style="margin: 1px 0; font-size: 13.5pt; font-weight: bold;">SMK MUNA MUSTOFA</h2>
+          <p style="margin: 0; font-size: 9pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
+          <p style="margin: 1px 0 0 0; font-size: 8.5pt;">Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
         </div>
       `
     }
@@ -947,6 +947,7 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
           s.fase_kelas || ''
         )
         const opsiHurufLabel = isSmkSoal ? 'A, B, C, D, atau E' : 'A, B, C, atau D'
+        const estimasiMenit = Number(s.jumlah_soal) > 30 ? 90 : 60
 
         return `
           ${
@@ -955,7 +956,7 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
               : ''
           }
           <div class="WordSectionHeader">
-            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel, '76px')}
+            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel, '88px')}
             <div class="judul-ujian">
               NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}
             </div>
@@ -974,7 +975,7 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
               </tr>
               <tr>
                 <td><b>Waktu / Soal</b></td>
-                <td>: 90 Menit (${s.jumlah_soal} Butir ${s.bentuk_soal})</td>
+                <td>: ${estimasiMenit} Menit (${s.jumlah_soal} Butir ${s.bentuk_soal})</td>
                 <td><b>Hari / Tanggal</b></td>
                 <td>: ........................................................</td>
               </tr>
@@ -2180,16 +2181,16 @@ const triggerDownloadWord = (filename: string, htmlBody: string) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 font-extrabold text-sm">
                     <span>📝</span>
-                    <h3>Download Naskah Soal Ulangan (.DOC Word — 2 Kolom Hemat Kertas)</h3>
+                    <h3>Download Naskah Soal Ulangan (.DOC Word — 2 Kolom Standar Ujian)</h3>
                   </div>
                   <span className="text-[10px] bg-amber-950/80 border border-amber-400/40 px-2.5 py-0.5 rounded-full font-bold text-amber-200">
                     Format Word (.doc) Siap Edit • Tanpa Kunci Jawaban
                   </span>
                 </div>
                 <p className="text-xs text-amber-100 font-medium">
-                  Naskah otomatis diunduh dalam format Microsoft Word (.doc) 2 kolom koran
-                  (maksimal 2 lembar A4) tanpa kunci jawaban sehingga guru bebas mengedit teks
-                  sebelum dicetak.
+                  Naskah otomatis diunduh dalam format Microsoft Word (.doc) 2 kolom standar ujian
+                  (font 10pt nyaman dibaca, 30–40+ soal otomatis tersusun rapi hingga 4 lembar A4)
+                  tanpa kunci jawaban sehingga guru bebas mengedit teks sebelum dicetak.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
