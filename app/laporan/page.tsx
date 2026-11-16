@@ -623,7 +623,35 @@ export default function LaporanPage() {
     document.body.removeChild(link)
   }
 
-  // PARSER NASKAH SOAL 2 KOLOM (BERSIH DARI PETUNJUK GANDA, GARIS --- & MENDUKUNG A-E SMK)
+  // Helper escape karakter HTML (<, >, &) & bersihkan simbol LaTeX mentah agar teks seperti <html> tampil utuh di Word
+  const escapeHtmlAndCleanLatex = (str: string): string => {
+    if (!str) return ''
+    let cleaned = str
+      // Konversi simbol panah & matematika LaTeX umum
+      .replace(/\\rightarrow/g, '→')
+      .replace(/\\leftarrow/g, '←')
+      .replace(/\\leftrightarrow/g, '↔')
+      .replace(/\\geq/g, '≥')
+      .replace(/\\leq/g, '≤')
+      .replace(/\\neq/g, '≠')
+      .replace(/\\times/g, '×')
+      .replace(/\\div/g, '÷')
+      // Hilangkan pembungkus $...$ pada rumus inline
+      .replace(/\$([^$]+)\$/g, '$1')
+
+    // Escape tag HTML (< dan >) menjadi entitas aman agar tulisan seperti <html> tidak dianggap tag HTML kosong
+    cleaned = cleaned
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+
+    // Kembalikan tag bold internal hasil konversi Markdown (**teks** -> <b>teks</b>)
+    cleaned = cleaned.replace(/&lt;b&gt;(.*?)&lt;\/b&gt;/g, '<b>$1</b>')
+
+    return cleaned
+  }
+
+  // PARSER NASKAH SOAL 2 KOLOM (NOMOR URUT OTOMATIS, OPSI VERTIKAL RAPI, & PROTEKSI TAG HTML)
   const formatNaskahSoalHematKertas = (rawText: string): string => {
     if (!rawText) return '<p><i>Isi naskah soal kosong di database.</i></p>'
 
@@ -645,7 +673,10 @@ export default function LaporanPage() {
       }
     }
 
-    // 3. Bersihkan pemformatan Markdown (**bold** & garis pemisah ---)
+    // 3. Paksa opsi A., B., C., D., E. yang menempel di satu baris agar pecah menjadi baris baru
+    cleanText = cleanText.replace(/([^\n])\s+([A-E][\.\)]\s+)/g, '$1\n$2')
+
+    // 4. Konversi Markdown **bold** menjadi <b>...</b>
     cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
 
     const lines = cleanText.split('\n')
@@ -659,7 +690,7 @@ export default function LaporanPage() {
       question: string
       options: { letter: string; text: string }[]
     } | null = null
-    let startedSoal = false
+    let autoCounter = 1
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
@@ -670,45 +701,56 @@ export default function LaporanPage() {
 
       if (!line) continue
 
-      const qMatch = line.match(/^(\d{1,2})[\.\)]\s+(.+)$/)
+      if (
+        /^#{1,4}\s*/.test(line) ||
+        /^[A-Z]\.\s*TOPIK\b/i.test(line) ||
+        /^TOPIK\s*\d+/i.test(line) ||
+        /^PETUNJUK\b/i.test(line)
+      ) {
+        continue
+      }
+
+      // Cek apakah baris diawali nomor soal eksplisit (misal: "1. ..." atau "1) ...")
+      const qMatch = line.match(/^(\d{1,3})[\.\)]\s+(.+)$/)
       if (qMatch) {
-        startedSoal = true
         if (currentSoal) soalItems.push(currentSoal)
         currentSoal = {
           num: qMatch[1],
           question: qMatch[2].trim(),
           options: [],
         }
+        autoCounter = parseInt(qMatch[1], 10) + 1
         continue
       }
 
-      if (!startedSoal) continue
-
-      if (
-        /^#{1,4}\s*/.test(line) ||
-        /^[A-Z]\.\s*TOPIK\b/i.test(line) ||
-        /^TOPIK\s*\d+/i.test(line)
-      ) {
-        continue
-      }
-
-      // Mendukung opsi A-D (SMP) maupun A-E (SMK)
-      const optMatch = line.match(/^([a-eA-E])[\.\)]\s*(.+)$/)
+      // Cek apakah baris adalah opsi jawaban A-E (mendukung "A. teks" maupun opsi kosong hasil edit "C.")
+      const optMatch = line.match(/^([a-eA-E])[\.\)]\s*(.*)$/)
       if (optMatch && currentSoal) {
         currentSoal.options.push({
           letter: optMatch[1].toUpperCase(),
-          text: optMatch[2].trim(),
+          text: (optMatch[2] || '').trim(),
         })
         continue
       }
 
-      if (currentSoal) {
-        if (currentSoal.options.length > 0) {
-          const lastOpt = currentSoal.options[currentSoal.options.length - 1]
-          lastOpt.text += ' ' + line
-        } else {
-          currentSoal.question += ' ' + line
+      // Jika belum ada nomor eksplisit (misal dari hasil Edit Visual lama yang kehilangan <ol> nomor),
+      // otomatis mulai soal baru jika sebelumnya belum ada soal atau soal sebelumnya sudah memiliki opsi jawaban
+      if (!currentSoal || currentSoal.options.length >= 2) {
+        if (currentSoal) soalItems.push(currentSoal)
+        currentSoal = {
+          num: String(autoCounter++),
+          question: line,
+          options: [],
         }
+        continue
+      }
+
+      // Lanjutan teks dari pertanyaan atau opsi terakhir
+      if (currentSoal.options.length > 0) {
+        const lastOpt = currentSoal.options[currentSoal.options.length - 1]
+        lastOpt.text = lastOpt.text ? `${lastOpt.text} ${line}` : line
+      } else {
+        currentSoal.question += ' ' + line
       }
     }
 
@@ -716,36 +758,48 @@ export default function LaporanPage() {
 
     if (soalItems.length > 0) {
       return soalItems
-        .map((item) => {
-          const isShortOptions =
-            item.options.length === 4 && item.options.every((o) => o.text.length <= 22)
+        .map((item, idx) => {
+          const displayNum = item.num || String(idx + 1)
+          const safeQuestion = escapeHtmlAndCleanLatex(item.question)
 
-          const optionsHtml = isShortOptions
-            ? `
-              <table class="opt-grid">
-                <tr>
-                  <td><b>${item.options[0].letter}.</b> ${item.options[0].text}</td>
-                  <td><b>${item.options[2].letter}.</b> ${item.options[2].text}</td>
-                </tr>
-                <tr>
-                  <td><b>${item.options[1].letter}.</b> ${item.options[1].text}</td>
-                  <td><b>${item.options[3].letter}.</b> ${item.options[3].text}</td>
-                </tr>
-              </table>
-            `
-            : `
-              <div class="opt-list">
-                ${item.options
-                  .map((o) => `<div class="opt-row"><b>${o.letter}.</b> ${o.text}</div>`)
-                  .join('')}
-              </div>
-            `
+          const isShortOptions =
+            item.options.length === 4 &&
+            item.options.every((o) => o.text.length > 0 && o.text.length <= 20)
+
+          const optionsHtml =
+            item.options.length === 0
+              ? ''
+              : isShortOptions
+              ? `
+                <table class="opt-grid">
+                  <tr>
+                    <td><b>${item.options[0].letter}.</b> ${escapeHtmlAndCleanLatex(item.options[0].text)}</td>
+                    <td><b>${item.options[2].letter}.</b> ${escapeHtmlAndCleanLatex(item.options[2].text)}</td>
+                  </tr>
+                  <tr>
+                    <td><b>${item.options[1].letter}.</b> ${escapeHtmlAndCleanLatex(item.options[1].text)}</td>
+                    <td><b>${item.options[3].letter}.</b> ${escapeHtmlAndCleanLatex(item.options[3].text)}</td>
+                  </tr>
+                </table>
+              `
+              : `
+                <div class="opt-list">
+                  ${item.options
+                    .map(
+                      (o) =>
+                        `<div class="opt-row"><b>${o.letter}.</b> ${
+                          o.text ? escapeHtmlAndCleanLatex(o.text) : '<i>(Opsi kosong)</i>'
+                        }</div>`
+                    )
+                    .join('')}
+                </div>
+              `
 
           return `
             <div class="soal-item">
               <div class="soal-q">
-                <span class="soal-num">${item.num}.</span>
-                <span class="soal-text">${item.question}</span>
+                <span class="soal-num">${displayNum}.</span>
+                <span class="soal-text">${safeQuestion}</span>
               </div>
               ${optionsHtml}
             </div>
@@ -758,7 +812,9 @@ export default function LaporanPage() {
       .filter((l) => !/^#{1,4}\s*/.test(l.trim()) && !/^[-_*]{3,}$/.test(l.trim()))
       .map((l) => l.trim())
       .filter(Boolean)
-    return cleanedLines.map((l) => `<p style="margin: 0 0 6px 0;">${l}</p>`).join('')
+    return cleanedLines
+      .map((l) => `<p style="margin: 0 0 6px 0;">${escapeHtmlAndCleanLatex(l)}</p>`)
+      .join('')
   }
 
   const filterSoalByKelasExact = (soalList: any[], selectedKelasNama: string) => {
@@ -896,14 +952,24 @@ export default function LaporanPage() {
     URL.revokeObjectURL(url)
   }
 
-  // Helper Kop Surat Ujian dinamis SMP vs SMK
-  const buildKopUjianWordHtml = (faseOrKelasStr: string, mapelStr: string, maxImgHeight: string) => {
+  // Deteksi jenjang soal (prioritas dari Fase/Kelas terlebih dahulu agar mapel lintas jenjang seperti Informatika tidak tertukar)
+  const detectIsSmkSoal = (faseOrKelasStr: string, mapelStr: string): boolean => {
+    const cleanFase = (faseOrKelasStr || '').trim()
+    if (/\b(VII|VIII|IX|7|8|9|FASE\s*D)\b/i.test(cleanFase)) {
+      return false
+    }
+    if (/\b(X|XI|XII|10|11|12|DKV|FASE\s*E|FASE\s*F)\b/i.test(cleanFase)) {
+      return true
+    }
     const mapelObj = mapelList.find(
       (m) => m.nama.trim().toLowerCase() === (mapelStr || '').trim().toLowerCase()
     )
-    const isSmkSoal =
-      (mapelObj?.jenjang || '').toUpperCase() === 'SMK' ||
-      /\b(X|XI|XII|10|11|12|DKV|FASE\s*E|FASE\s*F)\b/i.test(faseOrKelasStr || '')
+    return (mapelObj?.jenjang || '').toUpperCase() === 'SMK'
+  }
+
+  // Helper Kop Surat Ujian dinamis SMP vs SMK
+  const buildKopUjianWordHtml = (faseOrKelasStr: string, mapelStr: string, maxImgHeight: string) => {
+    const isSmkSoal = detectIsSmkSoal(faseOrKelasStr, mapelStr)
 
     if (isSmkSoal) {
       return `
@@ -943,9 +1009,7 @@ export default function LaporanPage() {
 
     const htmlSections = soalData
       .map((s, idx) => {
-        const isSmkSoal = /\b(X|XI|XII|10|11|12|DKV|FASE\s*E|FASE\s*F)\b/i.test(
-          s.fase_kelas || ''
-        )
+        const isSmkSoal = detectIsSmkSoal(s.fase_kelas, s.mapel)
         const opsiHurufLabel = isSmkSoal ? 'A, B, C, D, atau E' : 'A, B, C, atau D'
         const estimasiMenit = Number(s.jumlah_soal) > 30 ? 90 : 60
 
@@ -1018,16 +1082,17 @@ export default function LaporanPage() {
       const parts = rawText.split(/\n\s*#{0,4}\s*KUNCI\s*JAWABAN/i)
       let targetPart = parts.length > 1 ? parts[1] : rawText
       targetPart = targetPart.split(/\n\s*#{0,4}\s*LEMBAR\s*PENGESAHAN/i)[0]
-      return targetPart
+      const cleaned = targetPart
         .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
         .replace(/^[-_*]{3,}$/gm, '')
         .trim()
-        .replace(/\n/g, '<br/>')
+      return escapeHtmlAndCleanLatex(cleaned).replace(/\n/g, '<br/>')
     }
 
     const firstSoal = soalData[0]
-    const isSmkSoal = /\b(X|XI|XII|10|11|12|DKV|FASE\s*E|FASE\s*F)\b/i.test(
-      firstSoal?.fase_kelas || filterKelasBankSoal || ''
+    const isSmkSoal = detectIsSmkSoal(
+      firstSoal?.fase_kelas || filterKelasBankSoal || '',
+      firstSoal?.mapel || filterMapelBankSoal || ''
     )
 
     const guruPengampu = await resolvePenandatanganPDF({

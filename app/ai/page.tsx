@@ -485,6 +485,38 @@ export default function AiToolsPage() {
 
   const currentResultKey = activeTool === 'kbc' ? `kbc_${selectedDoc}` : activeTool
 
+  // Serializer DOM Visual Editor agar nomor urut <ol><li> (1., 2., dst.) dan baris opsi A-E tetap utuh
+  const serializeVisualEditorToPlainText = (container: HTMLElement): string => {
+    const clone = container.cloneNode(true) as HTMLElement
+
+    // Konversi setiap <ol> menjadi bernomor eksplisit (1., 2., dst.)
+    const orderedLists = clone.querySelectorAll('ol')
+    orderedLists.forEach((ol) => {
+      const startAttr = parseInt(ol.getAttribute('start') || '1', 10)
+      let counter = isNaN(startAttr) ? 1 : startAttr
+
+      Array.from(ol.children).forEach((child) => {
+        if (child.tagName === 'LI') {
+          const li = child as HTMLElement
+          const rawLiText = (li.innerText || li.textContent || '').trim()
+          const hasExplicitNum = /^\d{1,3}[\.\)]\s+/.test(rawLiText)
+          const formattedLi = hasExplicitNum ? rawLiText : `${counter}. ${rawLiText}`
+          const p = document.createElement('p')
+          p.textContent = formattedLi
+          li.replaceWith(p)
+          counter++
+        }
+      })
+    })
+
+    let extracted = (clone.innerText || clone.textContent || '').trim()
+
+    // Pastikan setiap opsi A., B., C., D., E. dipisah ke baris baru agar parser Laporan selalu akurat
+    extracted = extracted.replace(/([^\n])\s+([A-E][\.\)]\s+)/g, '$1\n$2')
+
+    return extracted
+  }
+
   // Sinkronisasi teks dari Visual Preview Editor sebelum disimpan / pindah tab
   const syncVisualEditsToState = (): string => {
     const rawFallback = generatedResults[currentResultKey] || ''
@@ -493,7 +525,7 @@ export default function AiToolsPage() {
     }
 
     const updatedHtml = visualEditorRef.current.innerHTML
-    const updatedText = visualEditorRef.current.innerText || ''
+    const updatedText = serializeVisualEditorToPlainText(visualEditorRef.current)
 
     setEditedHtmlMap((prev) => ({ ...prev, [currentResultKey]: updatedHtml }))
     setEditedPlainTextMap((prev) => ({ ...prev, [currentResultKey]: updatedText }))
@@ -575,6 +607,11 @@ export default function AiToolsPage() {
 
       const finalFaseKelas = getFaseLabel(saveTargetJenjang, saveTargetKelas)
 
+      // Pastikan setiap opsi A-E tetap terpisah baris baru saat masuk database
+      const normalizedSoalText = hasilSoal
+        .replace('[[KUNCI_JAWABAN_START]]', '\n\n---\n')
+        .replace(/([^\n])\s+([A-E][\.\)]\s+)/g, '$1\n$2')
+
       const payload = {
         nama_guru: finalNamaGuru,
         jenjang: saveTargetJenjang,
@@ -584,7 +621,7 @@ export default function AiToolsPage() {
         bentuk_soal: formData.soalTipe,
         jumlah_soal: parseInt(formData.soalJumlah) || 10,
         tingkat_kesulitan: formData.soalLevel,
-        isi_soal: hasilSoal.replace('[[KUNCI_JAWABAN_START]]', '\n\n---\n'),
+        isi_soal: normalizedSoalText,
         user_id: user?.id || null,
       }
 
@@ -722,6 +759,15 @@ export default function AiToolsPage() {
       .replace(/Dokumen ini dibuat secara otomatis menggunakan Aplikasi Guru AI[\s\S]*/gi, '')
       .replace(/Created & Developed by Muzaini Al Kahfi[\s\S]*/gi, '')
       .replace(/([^\n])\s+([A-E]\.\s+)/g, '$1\n$2')
+  }
+
+  // Lindungi tag kode HTML seperti <html>, <head>, <body>, <save> pada Markdown agar tidak tertelan rehypeRaw
+  const escapeCodeTagsForMarkdown = (md: string) => {
+    if (!md) return ''
+    return md.replace(
+      /<(\/?(?:html|head|body|title|meta|link|script|style|div|span|p|a|img|table|tr|td|th|ul|ol|li|form|input|button|br|hr|h[1-6]|save|load)[a-zA-Z0-9\s="'-]*)>/gi,
+      '&lt;$1&gt;'
+    )
   }
 
   const getActiveKopSuratHTML = () => {
@@ -1141,7 +1187,8 @@ export default function AiToolsPage() {
 
   const displayPreviewMarkdown = useMemo(() => {
     const raw = generatedResults[currentResultKey] || ''
-    return raw.replace('[[KUNCI_JAWABAN_START]]', '\n\n---\n\n')
+    const withSeparator = raw.replace('[[KUNCI_JAWABAN_START]]', '\n\n---\n\n')
+    return escapeCodeTagsForMarkdown(withSeparator)
   }, [generatedResults, currentResultKey])
 
   return (
