@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, type ClipboardEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
@@ -36,6 +36,21 @@ interface KelasItem {
   tingkat?: number | string | null
   jenjang?: string | null
   jurusan?: string | null
+}
+
+interface BankSoalItem {
+  id: number
+  nama_guru?: string | null
+  jenjang?: string | null
+  mapel?: string | null
+  fase_kelas?: string | null
+  topik_materi?: string | null
+  bentuk_soal?: string | null
+  jumlah_soal?: number | null
+  tingkat_kesulitan?: string | null
+  isi_soal?: string | null
+  user_id?: string | null
+  created_at?: string | null
 }
 
 interface KepalaInfo {
@@ -112,6 +127,15 @@ export default function AiToolsPage() {
   const [saveTargetMapel, setSaveTargetMapel] = useState('')
   const [saveTargetKelas, setSaveTargetKelas] = useState('')
   const [saveNamaGuru, setSaveNamaGuru] = useState('')
+
+  // ====== PERSISTENSI BANK SOAL (Muat Lagi Setelah Refresh / Logout) ======
+  const [savedBankSoal, setSavedBankSoal] = useState<BankSoalItem[]>([])
+  const [editingBankSoalId, setEditingBankSoalId] = useState<number | null>(null)
+  const [saveMode, setSaveMode] = useState<'create' | 'update'>('create')
+  const [showBankList, setShowBankList] = useState(false)
+  const [bankSoalLoading, setBankSoalLoading] = useState(false)
+  const [bankFilterMapel, setBankFilterMapel] = useState('all')
+  const [bankFilterKelas, setBankFilterKelas] = useState('all')
 
 
 
@@ -308,7 +332,11 @@ export default function AiToolsPage() {
             cleanNuptk = formatNuptk(dataGuru.NUPTK)
             const isUserStrictOperator = (dataGuru.role || '').toLowerCase() === 'operator'
 
-            if ((dataGuru.unit_mengajar || '').toUpperCase().trim() === 'SMK') {
+            const unitMengajarUpper = (dataGuru.unit_mengajar || '').toUpperCase().trim()
+            // Guru mengajar SMK SAJA dibuka langsung di mode SMK; guru dua-duanya
+            // (SMP & SMK) tetap dibuka di SMP, namun paket SMKnya tetap termuat
+            // (lihat fetchSavedBankSoal) dan bisa dilihat lewat toggle jenjang.
+            if (unitMengajarUpper === 'SMK') {
               defaultUnitFromGuru = 'SMK'
             }
 
@@ -561,6 +589,7 @@ export default function AiToolsPage() {
       alert('Belum ada paket soal yang dihasilkan!')
       return
     }
+    setSaveMode(editingBankSoalId ? 'update' : 'create')
     setSaveTargetJenjang(selectedJenjang)
     setSaveTargetMapel(formData.mapel)
     const parts = formData.faseKelas.split('/')
@@ -625,22 +654,192 @@ export default function AiToolsPage() {
         user_id: user?.id || null,
       }
 
-      const { error } = await supabase.from('bank_soal').insert([payload])
+      if (editingBankSoalId && saveMode === 'update') {
+        const { error } = await supabase
+          .from('bank_soal')
+          .update(payload)
+          .eq('id', editingBankSoalId)
 
-      if (error) {
-        throw error
+        if (error) throw error
+
+        alert(
+          `✅ Perubahan disimpan! Paket Soal [${saveTargetJenjang}] ${saveTargetMapel} Kelas ${saveTargetKelas} telah diperbarui atas nama Guru: ${finalNamaGuru}`
+        )
+        setEditingBankSoalId(null)
+        setSaveMode('create')
+      } else {
+        const { error } = await supabase.from('bank_soal').insert([payload])
+
+        if (error) throw error
+
+        alert(
+          `✅ Berhasil! Paket Soal baru [${saveTargetJenjang}] ${saveTargetMapel} Kelas ${saveTargetKelas} tersimpan atas nama Guru: ${finalNamaGuru}`
+        )
       }
-
-      alert(
-        `✅ Berhasil! Paket Soal [${saveTargetJenjang}] ${saveTargetMapel} Kelas ${saveTargetKelas} tersimpan atas nama Guru: ${finalNamaGuru}`
-      )
       setShowSaveModal(false)
+      fetchSavedBankSoal()
     } catch (err: any) {
       console.error('Error saving bank soal:', err)
       alert(`Gagal menyimpan soal: ${err.message || 'Terjadi kesalahan'}`)
     } finally {
       setIsSavingSoal(false)
     }
+  }
+
+  // =====================================================================
+  // BANK SOAL SAYA — PERSISTENSI KE DATABASE (Muat Lagi Setelah Refresh)
+  // =====================================================================
+  const fetchSavedBankSoal = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      setBankSoalLoading(true)
+
+      const cleanEmail = (user.email || '').trim().toLowerCase()
+      const mapById = new Map<number, BankSoalItem>()
+      const addRows = (rows: BankSoalItem[]) => {
+        rows.forEach((r) => {
+          if (r.id != null) mapById.set(r.id, r)
+        })
+      }
+
+      // 1) Cocokkan via user_id (baris baru yang tersimpan saat login) — selalu dijalankan
+      if (user.id) {
+        const { data, error } = await supabase
+          .from('bank_soal')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+        if (!error) addRows((data || []) as BankSoalItem[])
+      }
+
+      // 2) Cocokkan via nama_guru (baris lama sebelum kolom user_id terisi) — SELALU dijalankan,
+      //    tidak lagi bergantung pada hasil query #1 agar paket SMK ikut termuat.
+      if (cleanEmail) {
+        const { data: dbGuru } = await supabase
+          .from('guru')
+          .select('nama_lengkap')
+          .ilike('email', cleanEmail)
+          .maybeSingle()
+        if (dbGuru?.nama_lengkap) {
+          const { data } = await supabase
+            .from('bank_soal')
+            .select('*')
+            .ilike('nama_guru', `${dbGuru.nama_lengkap}%`)
+            .order('created_at', { ascending: false })
+          addRows((data || []) as BankSoalItem[])
+        }
+      }
+
+      const fetched = Array.from(mapById.values())
+      setSavedBankSoal(fetched)
+    } catch (err: any) {
+      console.error('Gagal memuat bank soal:', err)
+    } finally {
+      setBankSoalLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchSavedBankSoal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const bankMapelOptions = useMemo(() => {
+    const set = new Set<string>()
+    savedBankSoal.forEach((s) => {
+      const j = (s.jenjang || '').toUpperCase().trim()
+      if ((!j || j === selectedJenjang.toUpperCase()) && s.mapel) set.add(s.mapel)
+    })
+    return Array.from(set).sort()
+  }, [savedBankSoal, selectedJenjang])
+
+  const bankKelasOptions = useMemo(() => {
+    const set = new Set<string>()
+    savedBankSoal.forEach((s) => {
+      const j = (s.jenjang || '').toUpperCase().trim()
+      if ((!j || j === selectedJenjang.toUpperCase()) && s.fase_kelas) set.add(s.fase_kelas)
+    })
+    return Array.from(set).sort()
+  }, [savedBankSoal, selectedJenjang])
+
+  const filteredSavedBankSoal = useMemo(() => {
+    return savedBankSoal.filter((s) => {
+      const j = (s.jenjang || '').toUpperCase().trim()
+      if (j && j !== selectedJenjang.toUpperCase()) return false
+      if (bankFilterMapel !== 'all' && s.mapel !== bankFilterMapel) return false
+      if (bankFilterKelas !== 'all' && s.fase_kelas !== bankFilterKelas) return false
+      return true
+    })
+  }, [savedBankSoal, selectedJenjang, bankFilterMapel, bankFilterKelas])
+
+  const formatTanggal = (t?: string | null): string => {
+    if (!t) return ''
+    const d = new Date(t)
+    if (Number.isNaN(d.getTime())) return String(t).slice(0, 10)
+    return d.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })
+  }
+
+  const handleLoadSavedSoal = (row: BankSoalItem) => {
+    const content = row.isi_soal || ''
+    const targetJenjang: 'SMP' | 'SMK' =
+      (row.jenjang || '').toUpperCase() === 'SMK' ? 'SMK' : 'SMP'
+
+    setSelectedJenjang(targetJenjang)
+    setActiveTool('soal')
+    setGeneratedResults((prev) => ({ ...prev, soal: content }))
+    setEditedPlainTextMap((prev) => ({ ...prev, soal: content }))
+    setEditedHtmlMap((prev) => {
+      const copy = { ...prev }
+      delete copy.soal
+      return copy
+    })
+    setEditingBankSoalId(row.id ?? null)
+    setSaveMode('update')
+
+    if (row.mapel) {
+      setFormData((prev) => ({ ...prev, mapel: row.mapel as string }))
+      setSaveTargetMapel(row.mapel)
+    }
+    if (row.fase_kelas) {
+      setFormData((prev) => ({ ...prev, faseKelas: row.fase_kelas as string }))
+      const parts = row.fase_kelas.split('/')
+      if (parts.length > 1) setSaveTargetKelas(parts[1].trim())
+    }
+    setSaveTargetJenjang(targetJenjang)
+
+    setTimeout(() => {
+      document
+        .getElementById('ai-document-result')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 80)
+  }
+
+  const handleDeleteSavedSoal = async (row: BankSoalItem) => {
+    if (!window.confirm('Hapus paket bank soal ini dari database?')) return
+    const { error } = await supabase.from('bank_soal').delete().eq('id', row.id)
+    if (error) {
+      alert(`Gagal menghapus: ${error.message}`)
+      return
+    }
+    setSavedBankSoal((prev) => prev.filter((x) => x.id !== row.id))
+    if (editingBankSoalId === row.id) {
+      setEditingBankSoalId(null)
+      setSaveMode('create')
+    }
+  }
+
+  const handleEditorPaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    // Tempel sebagai teks polos agar markup Word (MSO) tidak mengotori dokumen
+    e.preventDefault()
+    const text = e.clipboardData.getData('text/plain')
+    document.execCommand('insertText', false, text)
   }
 
   const aiToolsConfig: Record<
@@ -2508,6 +2707,149 @@ export default function AiToolsPage() {
             )}
           </div>
 
+          {/* BANK SOAL SAYA — MUAT & LANJUTKAN EDIT */}
+          {activeTool === 'soal' && (
+            <div
+              className={`backdrop-blur-md border rounded-xl p-3 sm:p-4 shadow-xs ${
+                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={() => setShowBankList(!showBankList)}
+                  className="flex items-center gap-1.5 text-left cursor-pointer"
+                >
+                  <span>🗂️</span>
+                  <span
+                    className={`font-black text-xs uppercase ${
+                      isDarkMode ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    Bank Soal Saya
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    ({filteredSavedBankSoal.length})
+                  </span>
+                </button>
+                <button
+                  onClick={fetchSavedBankSoal}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-lg border cursor-pointer ${
+                    isDarkMode
+                      ? 'bg-slate-800 border-slate-700 text-indigo-300'
+                      : 'bg-slate-50 border-slate-300 text-indigo-950'
+                  }`}
+                >
+                  ⟳ Muat Ulang
+                </button>
+              </div>
+
+              {showBankList && (
+                <div className="mt-2 space-y-2">
+                  {bankSoalLoading ? (
+                    <p className="text-[11px] text-slate-400 animate-pulse">
+                      Memuat daftar paket soal...
+                    </p>
+                  ) : filteredSavedBankSoal.length === 0 ? (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] text-slate-400">
+                        Belum ada paket soal{' '}
+                        {selectedJenjang === 'SMK' ? 'SMK' : 'SMP'} tersimpan atas nama akun Anda.
+                        Hasil generate yang Anda simpan akan muncul di sini sehingga bisa dimuat
+                        kembali &amp; diedit.
+                      </p>
+                      {(savedBankSoal.some((s) => s.jenjang?.toUpperCase() === 'SMK') &&
+                        selectedJenjang !== 'SMK') ||
+                      (savedBankSoal.some((s) => s.jenjang?.toUpperCase() !== 'SMK') &&
+                        selectedJenjang === 'SMK') ? (
+                        <p className="text-[10px] font-bold text-amber-500">
+                          💡 Anda punya paket{' '}
+                          {selectedJenjang === 'SMK' ? 'SMP (klik 🏫 SMP)' : 'SMK (klik 🎨 SMK DKV)'}{' '}
+                          — gunakan toggle jenjang di atas untuk menampilkannya.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <select
+                          value={bankFilterMapel}
+                          onChange={(e) => setBankFilterMapel(e.target.value)}
+                          className={`w-full border rounded-lg px-1.5 py-1 text-[10px] font-bold cursor-pointer ${
+                            isDarkMode
+                              ? 'bg-slate-800 border-slate-700 text-white'
+                              : 'bg-slate-50 border-slate-300 text-slate-900'
+                          }`}
+                        >
+                          <option value="all">Semua Mapel</option>
+                          {bankMapelOptions.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={bankFilterKelas}
+                          onChange={(e) => setBankFilterKelas(e.target.value)}
+                          className={`w-full border rounded-lg px-1.5 py-1 text-[10px] font-bold cursor-pointer ${
+                            isDarkMode
+                              ? 'bg-slate-800 border-slate-700 text-white'
+                              : 'bg-slate-50 border-slate-300 text-slate-900'
+                          }`}
+                        >
+                          <option value="all">Semua Kelas</option>
+                          {bankKelasOptions.map((k) => (
+                            <option key={k} value={k}>
+                              {k}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {filteredSavedBankSoal.map((s) => (
+                          <div
+                            key={s.id}
+                            className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border text-xs ${
+                              editingBankSoalId === s.id
+                                ? 'border-emerald-500 bg-emerald-500/10'
+                                : isDarkMode
+                                  ? 'border-slate-700 bg-slate-800/60'
+                                  : 'border-slate-200 bg-slate-50'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-extrabold truncate">
+                                {s.mapel} — {s.fase_kelas}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {s.jumlah_soal} butir {s.bentuk_soal} •{' '}
+                                {formatTanggal(s.created_at)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => handleLoadSavedSoal(s)}
+                                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                              >
+                                {editingBankSoalId === s.id ? '✓ Dimuat' : 'Muat & Edit'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSavedSoal(s)}
+                                title="Hapus paket"
+                                className="text-[10px] font-bold px-2 py-1 rounded-lg border hover:bg-rose-500 hover:text-white cursor-pointer"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* HASIL OUTPUT AI DENGAN LIVE VISUAL PREVIEW & DIRECT CLICK-TO-EDIT */}
           <div
             className={`backdrop-blur-md border rounded-xl p-2.5 sm:p-4 space-y-3 min-h-[260px] shadow-xs ${
@@ -2701,6 +3043,7 @@ export default function AiToolsPage() {
                     ref={visualEditorRef}
                     contentEditable={isEditingVisual}
                     suppressContentEditableWarning={true}
+                    onPaste={handleEditorPaste}
                     onBlur={() => {
                       if (isEditingVisual) {
                         syncVisualEditsToState()
@@ -2894,7 +3237,7 @@ export default function AiToolsPage() {
                 disabled={isSavingSoal}
                 className="px-4 py-1.5 rounded-lg text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50"
               >
-                {isSavingSoal ? 'Menyimpan...' : 'Simpan'}
+                {isSavingSoal ? 'Menyimpan...' : saveMode === 'update' ? 'Perbarui' : 'Simpan'}
               </button>
             </div>
           </div>
