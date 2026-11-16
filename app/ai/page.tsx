@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
@@ -95,6 +95,12 @@ export default function AiToolsPage() {
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
   const [isSavingSoal, setIsSavingSoal] = useState(false)
+
+  // State untuk Visual Preview & Direct Click-to-Edit
+  const [isEditingVisual, setIsEditingVisual] = useState(false)
+  const [editedHtmlMap, setEditedHtmlMap] = useState<Record<string, string>>({})
+  const [editedPlainTextMap, setEditedPlainTextMap] = useState<Record<string, string>>({})
+  const visualEditorRef = useRef<HTMLDivElement | null>(null)
 
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saveTargetJenjang, setSaveTargetJenjang] = useState<'SMP' | 'SMK'>('SMP')
@@ -477,9 +483,49 @@ export default function AiToolsPage() {
     }
   }
 
+  const currentResultKey = activeTool === 'kbc' ? `kbc_${selectedDoc}` : activeTool
+
+  // Sinkronisasi teks dari Visual Preview Editor sebelum disimpan / pindah tab
+  const syncVisualEditsToState = (): string => {
+    const rawFallback = generatedResults[currentResultKey] || ''
+    if (!visualEditorRef.current) {
+      return editedPlainTextMap[currentResultKey] || rawFallback
+    }
+
+    const updatedHtml = visualEditorRef.current.innerHTML
+    const updatedText = visualEditorRef.current.innerText || ''
+
+    setEditedHtmlMap((prev) => ({ ...prev, [currentResultKey]: updatedHtml }))
+    setEditedPlainTextMap((prev) => ({ ...prev, [currentResultKey]: updatedText }))
+    return updatedText
+  }
+
+  const handleToggleVisualEdit = () => {
+    if (isEditingVisual) {
+      syncVisualEditsToState()
+      setIsEditingVisual(false)
+    } else {
+      setIsEditingVisual(true)
+    }
+  }
+
+  const applyExecCommand = (command: string) => {
+    if (typeof document !== 'undefined') {
+      document.execCommand(command, false)
+      visualEditorRef.current?.focus()
+    }
+  }
+
   const handleOpenSaveModal = () => {
-    const hasilSoal = generatedResults['soal']
-    if (!hasilSoal) {
+    let finalText = generatedResults['soal']
+    if (isEditingVisual && activeTool === 'soal') {
+      finalText = syncVisualEditsToState()
+      setIsEditingVisual(false)
+    } else if (editedPlainTextMap['soal']) {
+      finalText = editedPlainTextMap['soal']
+    }
+
+    if (!finalText) {
       alert('Belum ada paket soal yang dihasilkan!')
       return
     }
@@ -505,7 +551,7 @@ export default function AiToolsPage() {
   }
 
   const handleConfirmSaveBankSoal = async () => {
-    const hasilSoal = generatedResults['soal']
+    const hasilSoal = editedPlainTextMap['soal'] || generatedResults['soal']
     if (!hasilSoal) return
 
     setIsSavingSoal(true)
@@ -666,8 +712,6 @@ export default function AiToolsPage() {
     'Draf Narasi Catatan Rapor Siswa',
   ]
 
-  const currentResultKey = activeTool === 'kbc' ? `kbc_${selectedDoc}` : activeTool
-
   const formatAndCleanDocument = (text: string) => {
     if (!text) return ''
     return text
@@ -677,7 +721,7 @@ export default function AiToolsPage() {
       .replace(/#+\s*.*Kisi-Kisi[\s\S]*?(?=#+\s*|\n\n\d+\.|\n\nKunci|$)/gi, '')
       .replace(/Dokumen ini dibuat secara otomatis menggunakan Aplikasi Guru AI[\s\S]*/gi, '')
       .replace(/Created & Developed by Muzaini Al Kahfi[\s\S]*/gi, '')
-      .replace(/([^\n])\s+([A-D]\.\s+)/g, '$1\n$2')
+      .replace(/([^\n])\s+([A-E]\.\s+)/g, '$1\n$2')
   }
 
   const getActiveKopSuratHTML = () => {
@@ -724,6 +768,10 @@ export default function AiToolsPage() {
     const jumlahSoal = parseInt(formData.soalJumlah) || 40
     const estimasiMenit = jumlahSoal >= 35 ? 90 : jumlahSoal >= 20 ? 60 : 45
     const tahunPelajaran = adminForm.tahunPelajaran || '2026/2027'
+    const opsiHuruf =
+      selectedJenjang === 'SMK'
+        ? '<strong>A, B, C, D,</strong> atau <strong>E</strong>'
+        : '<strong>A, B, C,</strong> atau <strong>D</strong>'
 
     return `
       <div style="font-family: 'Times New Roman', serif; color: #000; margin-bottom: 10px;">
@@ -757,7 +805,7 @@ export default function AiToolsPage() {
           <ol style="margin: 2px 0 2px 18px; padding: 0;">
             <li>Berdoalah sebelum mengerjakan soal dan tulislah identitas pada lembar jawaban yang tersedia.</li>
             <li>Periksalah kelengkapan naskah soal sebelum mulai mengerjakan serta dahulukan soal yang dianggap paling mudah.</li>
-            <li>Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (<strong>X</strong>) pada huruf <strong>A, B, C,</strong> atau <strong>D</strong> pada lembar jawaban.</li>
+            <li>Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (<strong>X</strong>) pada huruf ${opsiHuruf} pada lembar jawaban.</li>
           </ol>
         </div>
       </div>
@@ -774,6 +822,7 @@ export default function AiToolsPage() {
 
   const handleStartGenerate = async () => {
     setIsGenerating(true)
+    setIsEditingVisual(false)
     try {
       const currentConfig = aiToolsConfig[activeTool]
       const activeSatuan = selectedJenjang === 'SMK' ? 'SMK MUNA MUSTOFA' : kopSekolah.namaSekolah
@@ -824,7 +873,18 @@ export default function AiToolsPage() {
 
           if (data.result) {
             const cleanedText = formatAndCleanDocument(data.result)
-            setGeneratedResults((prev) => ({ ...prev, [`kbc_${doc.id}`]: cleanedText }))
+            const key = `kbc_${doc.id}`
+            setGeneratedResults((prev) => ({ ...prev, [key]: cleanedText }))
+            setEditedHtmlMap((prev) => {
+              const copy = { ...prev }
+              delete copy[key]
+              return copy
+            })
+            setEditedPlainTextMap((prev) => {
+              const copy = { ...prev }
+              delete copy[key]
+              return copy
+            })
           }
 
           await delay(1500)
@@ -864,6 +924,16 @@ export default function AiToolsPage() {
         if (data.result) {
           const cleanedText = formatAndCleanDocument(data.result)
           setGeneratedResults((prev) => ({ ...prev, [activeTool]: cleanedText }))
+          setEditedHtmlMap((prev) => {
+            const copy = { ...prev }
+            delete copy[activeTool]
+            return copy
+          })
+          setEditedPlainTextMap((prev) => {
+            const copy = { ...prev }
+            delete copy[activeTool]
+            return copy
+          })
         } else {
           alert('Gagal: Respon dari Mercury AI kosong.')
         }
@@ -890,7 +960,7 @@ export default function AiToolsPage() {
       soalPart = splitArr[0]
       kunciPart = splitArr.slice(1).join('')
     } else {
-      const kunciRegex = /(<h[1-4][^>]*>[\s\S]*?KUNCI JAWABAN[\s\S]*)/i
+      const kunciRegex = /(<(?:h[1-4]|hr|p|strong|b)[^>]*>[\s\S]*?KUNCI JAWABAN[\s\S]*)/i
       const match = rawInnerHtml.match(kunciRegex)
       if (match && match.index !== undefined) {
         soalPart = rawInnerHtml.slice(0, match.index)
@@ -914,6 +984,11 @@ export default function AiToolsPage() {
   }
 
   const handlePrintPDF = () => {
+    if (isEditingVisual) {
+      syncVisualEditsToState()
+      setIsEditingVisual(false)
+    }
+
     const resultElement = document.getElementById('ai-document-result')
     if (!resultElement) return
 
@@ -1036,6 +1111,11 @@ export default function AiToolsPage() {
   }
 
   const handleDownloadWord = () => {
+    if (isEditingVisual) {
+      syncVisualEditsToState()
+      setIsEditingVisual(false)
+    }
+
     const resultElement = document.getElementById('ai-document-result')
     if (!resultElement) return
 
@@ -1044,7 +1124,7 @@ export default function AiToolsPage() {
     const kopHTML = pakaiKop ? getActiveKopSuratHTML() : ''
 
     const header =
-      "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export Word</title><style>body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; } p { margin-bottom: 6pt; } .exam-two-columns { column-count: 2; column-gap: 18pt; column-rule: 1pt solid #999; font-size: 10pt; } .kunci-page-break { page-break-before: always; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 4pt; } table.ttd-table, table.ttd-table td { border: none !important; }</style></head><body>"
+      "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export Word</title><style>body { font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.25; } p { margin-bottom: 3pt; } .exam-two-columns { column-count: 2; column-gap: 16pt; column-rule: 1pt solid #999; font-size: 10pt; line-height: 1.2; } .kunci-page-break { page-break-before: always; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 3pt; } table.ttd-table, table.ttd-table td { border: none !important; }</style></head><body>"
     const footer = copyrightFooterHTML + '</body></html>'
     const sourceHTML = header + kopHTML + formattedContents + footer
 
@@ -1222,7 +1302,13 @@ export default function AiToolsPage() {
             {aiToolsNav.map((tool) => (
               <button
                 key={tool.id}
-                onClick={() => setActiveTool(tool.id)}
+                onClick={() => {
+                  if (isEditingVisual) {
+                    syncVisualEditsToState()
+                    setIsEditingVisual(false)
+                  }
+                  setActiveTool(tool.id)
+                }}
                 className={`px-2 py-0.5 rounded transition flex items-center gap-1 border cursor-pointer ${
                   activeTool === tool.id
                     ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs font-extrabold'
@@ -1871,7 +1957,13 @@ export default function AiToolsPage() {
                     {kbcDocsList.map((doc) => (
                       <button
                         key={doc.id}
-                        onClick={() => setSelectedDoc(doc.id)}
+                        onClick={() => {
+                          if (isEditingVisual) {
+                            syncVisualEditsToState()
+                            setIsEditingVisual(false)
+                          }
+                          setSelectedDoc(doc.id)
+                        }}
                         className={`p-1.5 rounded-lg border text-[10px] flex flex-col items-center gap-0.5 cursor-pointer ${
                           selectedDoc === doc.id
                             ? 'bg-indigo-600 text-white font-bold border-indigo-700 shadow-xs'
@@ -2287,6 +2379,7 @@ export default function AiToolsPage() {
                     >
                       <option>HOTS (C4-C6)</option>
                       <option>MOTS (C2-C3)</option>
+                      <option>Campuran (LOTS, MOTS, HOTS)</option>
                     </select>
                   </div>
                 </div>
@@ -2368,7 +2461,7 @@ export default function AiToolsPage() {
             )}
           </div>
 
-          {/* HASIL OUTPUT AI COMPACT */}
+          {/* HASIL OUTPUT AI DENGAN LIVE VISUAL PREVIEW & DIRECT CLICK-TO-EDIT */}
           <div
             className={`backdrop-blur-md border rounded-xl p-2.5 sm:p-4 space-y-3 min-h-[260px] shadow-xs ${
               isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
@@ -2388,6 +2481,11 @@ export default function AiToolsPage() {
                 >
                   Hasil - {currentToolData.title} ({selectedJenjang})
                 </h4>
+                {editedPlainTextMap[currentResultKey] && !isEditingVisual && (
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
+                    ✓ Diedit
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
@@ -2407,6 +2505,21 @@ export default function AiToolsPage() {
                     />
                     <span>Kop {selectedJenjang}</span>
                   </label>
+                )}
+
+                {generatedResults[currentResultKey] && (
+                  <button
+                    onClick={handleToggleVisualEdit}
+                    className={`flex-1 sm:flex-none px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition shadow-xs flex items-center justify-center gap-1 cursor-pointer border ${
+                      isEditingVisual
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
+                        : isDarkMode
+                        ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                        : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                    }`}
+                  >
+                    {isEditingVisual ? '✅ Selesai Edit' : '✏️ Edit Visual'}
+                  </button>
                 )}
 
                 {activeTool === 'soal' && generatedResults['soal'] && (
@@ -2436,6 +2549,67 @@ export default function AiToolsPage() {
               </div>
             </div>
 
+            {/* FLOATING TOOLBAR SAAT MODE EDIT VISUAL AKTIF */}
+            {isEditingVisual && generatedResults[currentResultKey] && (
+              <div
+                className={`sticky top-11 z-30 flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg border shadow-md ${
+                  isDarkMode
+                    ? 'bg-slate-800 border-amber-500/50 text-slate-100'
+                    : 'bg-amber-50 border-amber-300 text-slate-900'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 text-[11px] font-bold">
+                  <span>✍️</span>
+                  <span>
+                    Mode Edit Langsung di Kertas Aktif — Klik langsung pada teks soal atau opsi
+                    untuk mengubahnya:
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => applyExecCommand('bold')}
+                    title="Tebal (Bold)"
+                    className="px-2 py-0.5 rounded text-xs font-black border bg-white text-slate-900 hover:bg-slate-100 cursor-pointer"
+                  >
+                    B
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyExecCommand('italic')}
+                    title="Miring (Italic)"
+                    className="px-2 py-0.5 rounded text-xs italic font-serif border bg-white text-slate-900 hover:bg-slate-100 cursor-pointer"
+                  >
+                    I
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyExecCommand('underline')}
+                    title="Garis Bawah (Underline)"
+                    className="px-2 py-0.5 rounded text-xs underline border bg-white text-slate-900 hover:bg-slate-100 cursor-pointer"
+                  >
+                    U
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyExecCommand('subscript')}
+                    title="Subscript (Contoh: H₂O)"
+                    className="px-2 py-0.5 rounded text-[10px] font-bold border bg-white text-slate-900 hover:bg-slate-100 cursor-pointer"
+                  >
+                    X₂
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyExecCommand('superscript')}
+                    title="Superscript (Contoh: m²)"
+                    className="px-2 py-0.5 rounded text-[10px] font-bold border bg-white text-slate-900 hover:bg-slate-100 cursor-pointer"
+                  >
+                    X²
+                  </button>
+                </div>
+              </div>
+            )}
+
             {isGenerating ? (
               <div className="py-12 flex flex-col items-center justify-center text-center space-y-2.5">
                 <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
@@ -2448,17 +2622,64 @@ export default function AiToolsPage() {
                 </p>
               </div>
             ) : generatedResults[currentResultKey] ? (
-              <div
-                id="ai-document-result"
-                className={`border rounded-lg p-3 sm:p-5 text-xs sm:text-sm leading-relaxed font-sans prose max-w-none shadow-xs overflow-x-auto ${
-                  isDarkMode
-                    ? 'bg-slate-950/60 border-slate-800 text-slate-100 prose-headings:text-indigo-300 prose-a:text-indigo-400 prose-strong:text-white'
-                    : 'bg-slate-50 border-slate-300 text-slate-900 prose-headings:text-indigo-900 prose-a:text-indigo-700'
-                }`}
-              >
-                <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>
-                  {displayPreviewMarkdown}
-                </ReactMarkdown>
+              <div className="bg-slate-300/70 dark:bg-slate-950/90 p-2 sm:p-5 rounded-xl border border-slate-300 dark:border-slate-800 overflow-x-auto">
+                {/* SIMULASI LEMBAR KERTAS A4 VISUAL PREVIEW */}
+                <div
+                  className={`mx-auto max-w-[820px] bg-white text-slate-950 shadow-xl rounded-sm p-5 sm:p-9 transition-all ${
+                    isEditingVisual
+                      ? 'ring-2 ring-amber-400 cursor-text'
+                      : 'ring-1 ring-slate-300'
+                  }`}
+                  style={{ fontFamily: "'Times New Roman', Times, serif" }}
+                >
+                  {/* HEADER KOP SURAT VISUAL DI PRATINJAU KERTAS */}
+                  {activeTool !== 'chatbot' && pakaiKop && (
+                    <div
+                      className="select-none pointer-events-none"
+                      dangerouslySetInnerHTML={{ __html: getActiveKopSuratHTML() }}
+                    />
+                  )}
+
+                  {/* KOTAK IDENTITAS NASKAH UJIAN VISUAL KHUSUS BANK SOAL */}
+                  {activeTool === 'soal' && (
+                    <div
+                      className="select-none pointer-events-none"
+                      dangerouslySetInnerHTML={{ __html: getExamHeaderBoxHTML() }}
+                    />
+                  )}
+
+                  {/* ISI DOKUMEN / SOAL (BISA DIKLIK & DIEDIT LANGSUNG) */}
+                  <div
+                    id="ai-document-result"
+                    ref={visualEditorRef}
+                    contentEditable={isEditingVisual}
+                    suppressContentEditableWarning={true}
+                    onBlur={() => {
+                      if (isEditingVisual) {
+                        syncVisualEditsToState()
+                      }
+                    }}
+                    className={`prose prose-sm max-w-none text-slate-950 prose-headings:text-slate-950 prose-strong:text-slate-950 focus:outline-none ${
+                      activeTool === 'soal'
+                        ? 'md:columns-2 md:gap-7 md:[column-rule:1px_solid_#cbd5e1] text-[13px] leading-snug'
+                        : 'text-sm leading-relaxed'
+                    } ${
+                      isEditingVisual
+                        ? '[&_p:hover]:bg-amber-50/90 [&_li:hover]:bg-amber-50/90 [&_td:hover]:bg-amber-50/90 [&_p]:rounded [&_li]:rounded'
+                        : ''
+                    }`}
+                  >
+                    {editedHtmlMap[currentResultKey] ? (
+                      <div
+                        dangerouslySetInnerHTML={{ __html: editedHtmlMap[currentResultKey] }}
+                      />
+                    ) : (
+                      <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>
+                        {displayPreviewMarkdown}
+                      </ReactMarkdown>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="py-10 flex flex-col items-center justify-center text-center space-y-2">
