@@ -42,14 +42,12 @@ export default function AiToolsPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
 
-  // STATE IDENTITAS GURU LOGIN
   const [userDisplayName, setUserDisplayName] = useState('MEMUAT...')
   const [userNuptkDisplay, setUserNuptkDisplay] = useState('-')
   const [isStrictOperatorRole, setIsStrictOperatorRole] = useState(false)
   const [waliKelasAssignedId, setWaliKelasAssignedId] = useState<number | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  // DATA KEPALA SEKOLAH PER JENJANG DARI DATABASE
   const [kepalaSmp, setKepalaSmp] = useState<KepalaInfo>({
     nama: 'SULASTRI, S.Pd., Gr.',
     nuptk: '6337763664131233',
@@ -59,7 +57,6 @@ export default function AiToolsPage() {
     nuptk: '-',
   })
 
-  // STATE JENJANG AKTIF ('SMP' | 'SMK')
   const [selectedJenjang, setSelectedJenjang] = useState<'SMP' | 'SMK'>('SMP')
 
   const formatNuptk = (val: unknown): string => {
@@ -76,7 +73,6 @@ export default function AiToolsPage() {
     return str
   }
 
-  // HELPER DETEKSI FASE KURIKULUM OTOMATIS BERDASARKAN JENJANG & NAMA KELAS
   const getFaseLabel = (jenjang: 'SMP' | 'SMK', namaKelas: string): string => {
     const clean = (namaKelas || '').trim().toUpperCase()
     if (jenjang === 'SMP') {
@@ -100,7 +96,6 @@ export default function AiToolsPage() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
   const [isSavingSoal, setIsSavingSoal] = useState(false)
 
-  // MODAL SIMPAN SOAL SPESIFIK JENJANG, KELAS & MAPEL
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saveTargetJenjang, setSaveTargetJenjang] = useState<'SMP' | 'SMK'>('SMP')
   const [saveTargetMapel, setSaveTargetMapel] = useState('')
@@ -114,7 +109,6 @@ export default function AiToolsPage() {
     }
   }, [])
 
-  // MASTER DATA SUPABASE (SELURUH JENJANG)
   const [mapelList, setMapelList] = useState<MapelItem[]>([])
   const [kelasList, setKelasList] = useState<KelasItem[]>([])
 
@@ -133,7 +127,7 @@ export default function AiToolsPage() {
     legalitas: 'NPSN: 71407877 SK IZIN OPERASIONAL : 503/029/IPO/VIII/36/2026',
     alamat: 'Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376',
     email: 'munamustofa1922@gmail.com',
-    website: 'https://smpmunamustofa.netlify.app/#sambutan',
+    website: 'https://smpmunamustofa.netlify.app',
     kopSmkImage: '/kop-smk.png',
   })
 
@@ -149,9 +143,9 @@ export default function AiToolsPage() {
     kokuDimensi: 'Beriman, Bertakwa & Berakhlak Mulia',
     lkpdAktivitas: 'Studi Kasus & Pemecahan Masalah',
     lkpdHots: true,
-    soalJumlah: '10',
+    soalJumlah: '40',
     soalTipe: 'Pilihan Ganda',
-    soalLevel: 'HOTS (C4-C6)',
+    soalLevel: 'MOTS (C2-C3)',
     soalKunci: true,
     multiSubTool: 'Ide Ice Breaking & Game Kelas',
   })
@@ -199,7 +193,6 @@ export default function AiToolsPage() {
     nipKepala: '6337763664131233',
   })
 
-  // FILTER MAPEL & KELAS BERDASARKAN JENJANG AKTIF
   const filteredMapelList = useMemo(() => {
     return mapelList.filter((m) => {
       const j = (m.jenjang || 'SMP').toUpperCase().trim()
@@ -214,7 +207,6 @@ export default function AiToolsPage() {
     })
   }, [kelasList, selectedJenjang])
 
-  // FILTER UNTUK MODAL SIMPAN BANK SOAL
   const modalFilteredMapel = useMemo(() => {
     return mapelList.filter((m) => {
       const j = (m.jenjang || 'SMP').toUpperCase().trim()
@@ -229,7 +221,6 @@ export default function AiToolsPage() {
     })
   }, [kelasList, saveTargetJenjang])
 
-  // FUNGSI GANTI JENJANG ('SMP' | 'SMK')
   const handleJenjangSwitch = (newJenjang: 'SMP' | 'SMK') => {
     setSelectedJenjang(newJenjang)
     setSaveTargetJenjang(newJenjang)
@@ -281,7 +272,6 @@ export default function AiToolsPage() {
     setSaveTargetKelas(defaultKelasName)
   }
 
-  // INIT USER LOGIN REAL DARI TABEL GURU & MASTER DATA SUPABASE
   useEffect(() => {
     let isMounted = true
 
@@ -341,7 +331,6 @@ export default function AiToolsPage() {
         }
       }
 
-      // AMBIL DATA KEPALA SEKOLAH SMP & SMK
       const { data: daftarKepala } = await supabase
         .from('guru')
         .select('nama_lengkap, NUPTK, jabatan')
@@ -377,7 +366,6 @@ export default function AiToolsPage() {
         }
       }
 
-      // LOAD MASTER MAPEL & KELAS SUPABASE
       const { data: dMapel } = await supabase
         .from('mapel')
         .select('id, nama_mapel, kode_mapel, jenjang, urutan')
@@ -489,7 +477,6 @@ export default function AiToolsPage() {
     }
   }
 
-  // BUKA MODAL KONFIRMASI SIMPAN SOAL
   const handleOpenSaveModal = () => {
     const hasilSoal = generatedResults['soal']
     if (!hasilSoal) {
@@ -505,7 +492,6 @@ export default function AiToolsPage() {
     setShowSaveModal(true)
   }
 
-  // HANDLER GANTI JENJANG DI DALAM MODAL SIMPAN
   const handleModalJenjangChange = (newJenjang: 'SMP' | 'SMK') => {
     setSaveTargetJenjang(newJenjang)
     const mList = mapelList.filter((m) => {
@@ -518,7 +504,6 @@ export default function AiToolsPage() {
     if (kList.length > 0) setSaveTargetKelas(kList[0].nama_kelas)
   }
 
-  // EKSEKUSI SIMPAN SOAL KE DATABASE
   const handleConfirmSaveBankSoal = async () => {
     const hasilSoal = generatedResults['soal']
     if (!hasilSoal) return
@@ -553,7 +538,7 @@ export default function AiToolsPage() {
         bentuk_soal: formData.soalTipe,
         jumlah_soal: parseInt(formData.soalJumlah) || 10,
         tingkat_kesulitan: formData.soalLevel,
-        isi_soal: hasilSoal,
+        isi_soal: hasilSoal.replace('[[KUNCI_JAWABAN_START]]', '\n\n---\n'),
         user_id: user?.id || null,
       }
 
@@ -635,7 +620,7 @@ export default function AiToolsPage() {
     },
     soal: {
       title: 'Generator Bank Soal & Ujian AI',
-      subtitle: 'Buat naskah ujian SMP & SMK (DKV) lengkap kunci jawaban siap cetak.',
+      subtitle: 'Buat naskah ujian SMP & SMK (DKV) format 2 kolom resmi siap cetak.',
       badge: '❓ BANK SOAL & EVALUASI',
       buttonText: 'Generate Paket Ujian',
       bgBanner: 'bg-gradient-to-r from-rose-800 via-red-800 to-rose-950 border-rose-600/50',
@@ -692,11 +677,9 @@ export default function AiToolsPage() {
       .replace(/#+\s*.*Kisi-Kisi[\s\S]*?(?=#+\s*|\n\n\d+\.|\n\nKunci|$)/gi, '')
       .replace(/Dokumen ini dibuat secara otomatis menggunakan Aplikasi Guru AI[\s\S]*/gi, '')
       .replace(/Created & Developed by Muzaini Al Kahfi[\s\S]*/gi, '')
-      .replace(/([^\n])\s+([a-eA-E]\.\s+)/g, '$1\n\n$2')
-      .replace(/\n([a-eA-E]\.\s+)/g, '\n\n$1')
+      .replace(/([^\n])\s+([A-D]\.\s+)/g, '$1\n$2')
   }
 
-  // KOP SURAT DINAMIS: GAMBAR PNG UNTUK SMK, HTML TERSTRUKTUR UNTUK SMP
   const getActiveKopSuratHTML = () => {
     if (selectedJenjang === 'SMK') {
       const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -704,41 +687,85 @@ export default function AiToolsPage() {
         ? kopSekolah.kopSmkImage
         : `${originUrl}${kopSekolah.kopSmkImage}`
       return `
-        <div style="text-align: center; margin-bottom: 16px;">
-          <img src="${fullImgSrc}" alt="Kop Surat SMK Muna Mustofa" style="width: 100%; max-height: 165px; object-fit: contain; display: block; margin: 0 auto;" />
+        <div style="text-align: center; margin-bottom: 12px;">
+          <img src="${fullImgSrc}" alt="Kop Surat SMK Muna Mustofa" style="width: 100%; max-height: 155px; object-fit: contain; display: block; margin: 0 auto;" />
         </div>
       `
     }
 
     return `
-      <div style="text-align: center; margin-bottom: 20px; font-family: 'Times New Roman', serif; color: #000;">
-        <div style="font-size: 18pt; font-weight: bold; font-family: 'Traditional Arabic', 'Amiri', serif; line-height: 1.2; margin-bottom: 4px;">
+      <div style="text-align: center; margin-bottom: 12px; font-family: 'Times New Roman', serif; color: #000;">
+        <div style="font-size: 16pt; font-weight: bold; font-family: 'Traditional Arabic', 'Amiri', serif; line-height: 1.15; margin-bottom: 2px;">
           ${kopSekolah.kaligrafi}
         </div>
-        <h3 style="margin: 0; font-size: 11pt; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">
+        <h3 style="margin: 0; font-size: 10.5pt; text-transform: uppercase; font-weight: bold; letter-spacing: 0.4px;">
           ${kopSekolah.yayasan}
         </h3>
-        <h1 style="margin: 2px 0; font-size: 16pt; text-transform: uppercase; font-weight: bold;">
+        <h1 style="margin: 1px 0; font-size: 15pt; text-transform: uppercase; font-weight: bold;">
           ${kopSekolah.namaSekolah}
         </h1>
-        <h4 style="margin: 0; font-size: 10.5pt; text-transform: uppercase; font-weight: bold;">
+        <h4 style="margin: 0; font-size: 10pt; text-transform: uppercase; font-weight: bold;">
           ${kopSekolah.lokasi}
         </h4>
-        <p style="margin: 2px 0; font-size: 9.5pt; font-weight: bold;">
+        <p style="margin: 1px 0; font-size: 9pt; font-weight: bold;">
           ${kopSekolah.legalitas}
         </p>
         
-        <div style="border-top: 1.5px solid #000; margin-top: 6px; padding-top: 4px; font-size: 9.5pt; font-style: italic;">
+        <div style="border-top: 1.5px solid #000; margin-top: 4px; padding-top: 3px; font-size: 9pt; font-style: italic;">
           <span><em>Address :</em> ${kopSekolah.alamat}</span><br/>
           <span><em>Email:</em> <a href="mailto:${kopSekolah.email}" style="color:#000; text-decoration:underline;">${kopSekolah.email}</a> &nbsp; <em>Website:</em> <a href="${kopSekolah.website}" style="color:#000; text-decoration:underline;">${kopSekolah.website}</a></span>
         </div>
-        <div style="border-bottom: 1px solid #000; margin-top: 4px;"></div>
+        <div style="border-bottom: 1px solid #000; margin-top: 3px;"></div>
+      </div>
+    `
+  }
+
+  const getExamHeaderBoxHTML = () => {
+    const jumlahSoal = parseInt(formData.soalJumlah) || 40
+    const estimasiMenit = jumlahSoal >= 35 ? 90 : jumlahSoal >= 20 ? 60 : 45
+    const tahunPelajaran = adminForm.tahunPelajaran || '2026/2027'
+
+    return `
+      <div style="font-family: 'Times New Roman', serif; color: #000; margin-bottom: 10px;">
+        <div style="text-align: center; font-weight: bold; font-size: 11.5pt; text-transform: uppercase; margin: 6px 0 8px 0; letter-spacing: 0.3px;">
+          NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER TA ${tahunPelajaran}
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 8px; border: 1px solid #000;">
+          <tr>
+            <td style="width: 15%; border: 1px solid #000; padding: 3px 6px; font-weight: bold;">Mata Pelajaran</td>
+            <td style="width: 35%; border: 1px solid #000; padding: 3px 6px;">: <strong>${formData.mapel}</strong></td>
+            <td style="width: 17%; border: 1px solid #000; padding: 3px 6px; font-weight: bold;">Nama Siswa</td>
+            <td style="width: 33%; border: 1px solid #000; padding: 3px 6px;">: ..................................................</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 6px; font-weight: bold;">Kelas / Fase</td>
+            <td style="border: 1px solid #000; padding: 3px 6px;">: ${formData.faseKelas}</td>
+            <td style="border: 1px solid #000; padding: 3px 6px; font-weight: bold;">No. Peserta / NIS</td>
+            <td style="border: 1px solid #000; padding: 3px 6px;">: ..................................................</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 6px; font-weight: bold;">Waktu / Soal</td>
+            <td style="border: 1px solid #000; padding: 3px 6px;">: ${estimasiMenit} Menit (${jumlahSoal} Butir ${formData.soalTipe})</td>
+            <td style="border: 1px solid #000; padding: 3px 6px; font-weight: bold;">Hari / Tanggal</td>
+            <td style="border: 1px solid #000; padding: 3px 6px;">: ..................................................</td>
+          </tr>
+        </table>
+
+        <div style="border: 1px solid #000; padding: 5px 8px; font-size: 9pt; background-color: #f9f9f9; margin-bottom: 8px; line-height: 1.35;">
+          <strong>Petunjuk Umum:</strong>
+          <ol style="margin: 2px 0 2px 18px; padding: 0;">
+            <li>Berdoalah sebelum mengerjakan soal dan tulislah identitas pada lembar jawaban yang tersedia.</li>
+            <li>Periksalah kelengkapan naskah soal sebelum mulai mengerjakan serta dahulukan soal yang dianggap paling mudah.</li>
+            <li>Pilihlah satu jawaban yang paling tepat dengan memberi tanda silang (<strong>X</strong>) pada huruf <strong>A, B, C,</strong> atau <strong>D</strong> pada lembar jawaban.</li>
+          </ol>
+        </div>
       </div>
     `
   }
 
   const copyrightFooterHTML = `
-    <div style="text-align: center; margin-top: 35px; padding-top: 12px; border-top: 1px solid #000; font-size: 9.5pt; color: #000; font-family: 'Times New Roman', serif; page-break-inside: avoid;">
+    <div style="text-align: center; margin-top: 24px; padding-top: 8px; border-top: 1px solid #000; font-size: 9pt; color: #000; font-family: 'Times New Roman', serif; page-break-inside: avoid;">
       Dokumen ini dibuat secara otomatis menggunakan <strong>Aplikasi Guru AI</strong> - Created & Developed by <strong>MUZAINI AL KAHFI</strong> &copy; 2026
     </div>
   `
@@ -849,11 +876,49 @@ export default function AiToolsPage() {
     }
   }
 
+  const buildFormattedPrintBody = (rawInnerHtml: string) => {
+    if (activeTool !== 'soal') {
+      return rawInnerHtml
+    }
+
+    const marker = '[[KUNCI_JAWABAN_START]]'
+    let soalPart = rawInnerHtml
+    let kunciPart = ''
+
+    if (rawInnerHtml.includes(marker)) {
+      const splitArr = rawInnerHtml.split(marker)
+      soalPart = splitArr[0]
+      kunciPart = splitArr.slice(1).join('')
+    } else {
+      const kunciRegex = /(<h[1-4][^>]*>[\s\S]*?KUNCI JAWABAN[\s\S]*)/i
+      const match = rawInnerHtml.match(kunciRegex)
+      if (match && match.index !== undefined) {
+        soalPart = rawInnerHtml.slice(0, match.index)
+        kunciPart = rawInnerHtml.slice(match.index)
+      }
+    }
+
+    return `
+      ${getExamHeaderBoxHTML()}
+      <div class="exam-two-columns">
+        ${soalPart}
+      </div>
+      ${
+        kunciPart
+          ? `<div class="kunci-page-break">
+              ${kunciPart}
+            </div>`
+          : ''
+      }
+    `
+  }
+
   const handlePrintPDF = () => {
     const resultElement = document.getElementById('ai-document-result')
     if (!resultElement) return
 
-    const printContents = resultElement.innerHTML
+    const rawContents = resultElement.innerHTML
+    const formattedContents = buildFormattedPrintBody(rawContents)
     const kopHTML = pakaiKop ? getActiveKopSuratHTML() : ''
 
     const printWindow = window.open('', '_blank')
@@ -861,43 +926,77 @@ export default function AiToolsPage() {
       printWindow.document.write(`
         <html>
           <head>
-            <title>Dokumen Pembelajaran - ${kopSekolah.namaSekolah}</title>
+            <title>Naskah Dokumen - ${kopSekolah.namaSekolah}</title>
             <style>
               @page { 
-                margin: 1.5cm 2cm; 
+                margin: 1.2cm 1.4cm; 
                 size: A4; 
               }
               body { 
                 font-family: 'Times New Roman', Times, serif; 
                 padding: 0; 
-                line-height: 1.5; 
+                margin: 0;
+                line-height: 1.38; 
                 color: #000; 
-                font-size: 11pt;
+                font-size: 10.5pt;
               }
               h1, h2, h3, h4 { 
                 color: #000; 
-                margin-top: 14px; 
-                margin-bottom: 6px; 
+                margin-top: 10px; 
+                margin-bottom: 5px; 
                 page-break-after: avoid; 
               }
               p { 
-                margin-bottom: 6px; 
+                margin-top: 0;
+                margin-bottom: 5px; 
                 text-align: justify; 
+              }
+              .exam-two-columns {
+                column-count: 2;
+                -webkit-column-count: 2;
+                -moz-column-count: 2;
+                column-gap: 22px;
+                -webkit-column-gap: 22px;
+                column-rule: 1px solid #94a3b8;
+                -webkit-column-rule: 1px solid #94a3b8;
+                font-size: 10pt;
+                line-height: 1.32;
+              }
+              .exam-two-columns ol {
+                margin: 0;
+                padding-left: 18px;
+              }
+              .exam-two-columns li {
+                margin-bottom: 7px;
+                break-inside: avoid;
+                page-break-inside: avoid;
+                text-align: left;
+              }
+              .exam-two-columns p {
+                margin-bottom: 4px;
+                break-inside: avoid;
+                page-break-inside: avoid;
+                text-align: left;
+              }
+              .kunci-page-break {
+                page-break-before: always;
+                break-before: page;
+                padding-top: 8px;
               }
               table { 
                 border-collapse: collapse; 
                 width: 100%; 
-                margin: 12px 0; 
-                font-size: 10.5pt; 
+                margin: 8px 0; 
+                font-size: 10pt; 
                 page-break-inside: auto; 
               }
               tr { 
-                page-break-inside: auto !important; 
+                page-break-inside: avoid; 
                 page-break-after: auto; 
               }
               th, td { 
                 border: 1px solid #000; 
-                padding: 5px 7px; 
+                padding: 4px 6px; 
                 text-align: left; 
                 vertical-align: top; 
               }
@@ -907,13 +1006,8 @@ export default function AiToolsPage() {
                 text-align: center; 
               }
               ul, ol { 
-                margin-bottom: 10px; 
+                margin-bottom: 8px; 
                 padding-left: 20px; 
-              }
-              li { 
-                margin-bottom: 4px; 
-                line-height: 1.4; 
-                page-break-inside: auto !important; 
               }
               strong, b { 
                 font-weight: bold; 
@@ -929,7 +1023,7 @@ export default function AiToolsPage() {
           </head>
           <body>
             ${kopHTML}
-            ${printContents}
+            ${formattedContents}
             ${copyrightFooterHTML}
           </body>
         </html>
@@ -945,24 +1039,30 @@ export default function AiToolsPage() {
     const resultElement = document.getElementById('ai-document-result')
     if (!resultElement) return
 
-    const printContents = resultElement.innerHTML
+    const rawContents = resultElement.innerHTML
+    const formattedContents = buildFormattedPrintBody(rawContents)
     const kopHTML = pakaiKop ? getActiveKopSuratHTML() : ''
 
     const header =
-      "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export Word</title><style>body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; } p { margin-bottom: 8pt; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 5pt; } table.ttd-table, table.ttd-table td { border: none !important; }</style></head><body>"
+      "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export Word</title><style>body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; } p { margin-bottom: 6pt; } .exam-two-columns { column-count: 2; column-gap: 18pt; column-rule: 1pt solid #999; font-size: 10pt; } .kunci-page-break { page-break-before: always; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 4pt; } table.ttd-table, table.ttd-table td { border: none !important; }</style></head><body>"
     const footer = copyrightFooterHTML + '</body></html>'
-    const sourceHTML = header + kopHTML + printContents + footer
+    const sourceHTML = header + kopHTML + formattedContents + footer
 
     const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML)
     const fileDownload = document.createElement('a')
     document.body.appendChild(fileDownload)
     fileDownload.href = source
-    fileDownload.download = `Dokumen_${selectedJenjang}_${kopSekolah.namaSekolah}_${activeTool}.doc`
+    fileDownload.download = `Naskah_${selectedJenjang}_${formData.mapel}_${activeTool}.doc`
     fileDownload.click()
     document.body.removeChild(fileDownload)
   }
 
   const currentToolData = aiToolsConfig[activeTool] || aiToolsConfig['chatbot']
+
+  const displayPreviewMarkdown = useMemo(() => {
+    const raw = generatedResults[currentResultKey] || ''
+    return raw.replace('[[KUNCI_JAWABAN_START]]', '\n\n---\n\n')
+  }, [generatedResults, currentResultKey])
 
   return (
     <motion.div
@@ -998,10 +1098,12 @@ export default function AiToolsPage() {
           <div className="flex items-center gap-2 shrink-0">
             <Link
               href="/"
-              className={`p-1 rounded-lg transition ${
-                isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
-              }`}
               title="Kembali ke Dashboard"
+              className={`p-1 rounded-lg transition ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -1049,7 +1151,6 @@ export default function AiToolsPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* BADGE PROFIL POJOK KANAN ATAS */}
             <div
               className={`border text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1.5 shadow-xs ${
                 isDarkMode
@@ -2204,7 +2305,7 @@ export default function AiToolsPage() {
                     placeholder={
                       selectedJenjang === 'SMK'
                         ? 'Contoh: Komposisi fotografi, teori warna CMYK vs RGB, atau brief desain logo UMKM...'
-                        : 'Contoh: Menghitung gaya gravitasi Newton...'
+                        : 'Contoh: Sel dan mikroskop, sel tumbuhan dan sel hewan, spesialisasi sel...'
                     }
                     className={`w-full border rounded-lg p-2 text-xs font-medium resize-none ${
                       isDarkMode
@@ -2323,7 +2424,7 @@ export default function AiToolsPage() {
                   disabled={!generatedResults[currentResultKey]}
                   className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  🖨️ Cetak PDF
+                  🖨️ Cetak PDF {activeTool === 'soal' ? '(2 Kolom)' : ''}
                 </button>
                 <button
                   onClick={handleDownloadWord}
@@ -2355,8 +2456,8 @@ export default function AiToolsPage() {
                     : 'bg-slate-50 border-slate-300 text-slate-900 prose-headings:text-indigo-900 prose-a:text-indigo-700'
                 }`}
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                  {generatedResults[currentResultKey]}
+                <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>
+                  {displayPreviewMarkdown}
                 </ReactMarkdown>
               </div>
             ) : (
@@ -2544,7 +2645,9 @@ export default function AiToolsPage() {
           <Link
             href="/"
             className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+              isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-950'
             }`}
           >
             <span className="text-base leading-none">🕒</span>
@@ -2555,7 +2658,9 @@ export default function AiToolsPage() {
             <Link
               href="/siswa"
               className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-                isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-950'
               }`}
             >
               <span className="text-base leading-none">👥</span>
@@ -2567,7 +2672,9 @@ export default function AiToolsPage() {
             <Link
               href="/guru"
               className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-                isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-950'
               }`}
             >
               <span className="text-base leading-none">👨‍🏫</span>
@@ -2578,7 +2685,9 @@ export default function AiToolsPage() {
           <Link
             href="/jadwal"
             className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+              isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-950'
             }`}
           >
             <span className="text-base leading-none">🎓</span>
@@ -2596,7 +2705,9 @@ export default function AiToolsPage() {
           <Link
             href="/laporan"
             className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
+              isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-950'
             }`}
           >
             <span className="text-base leading-none">🖨️</span>

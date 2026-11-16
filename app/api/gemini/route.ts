@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       ? `Jenjang: SMK (Sekolah Menengah Kejuruan) — Kompetensi Keahlian: ${jurusanResmi}. Gunakan pendekatan vokasi/industri kreatif, studi kasus proyek klien (client brief), standar teknis produksi media visual, tipografi, tata letak, fotografi/videografi, dan kesiapan kerja dunia industri (DUDI) sesuai Kurikulum Merdeka SMK Fase E/F.`
       : `Jenjang: SMP (Sekolah Menengah Pertama) Kurikulum Merdeka Fase D.`
 
-    // Helper pemanggil API Inception Labs Mercury (URL bersih tanpa format Markdown)
+    // Helper pemanggil API Inception Labs Mercury
     const callMercuryAPI = async (
       systemPrompt: string,
       userPrompt: string,
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
         try {
           parsed = JSON.parse(rawText)
         } catch {
-          lastErrorMsg = `Inception Labs merespons non-JSON (${res.status}):${rawText.substring(0, 150)}`
+          lastErrorMsg = `Inception Labs merespons non-JSON (${res.status}): ${rawText.substring(0, 150)}`
           lastStatus = res.status || 500
           continue
         }
@@ -187,6 +187,53 @@ Instruksi Penjawab Chatbot:
 1. Jawablah pertanyaan guru secara langsung pada inti masalah, lugas, dan praktis.
 2. DILARANG MEMBUAT struktur dokumen formal seperti "1. Identitas Dokumen", "2. Latar Belakang", atau bagian tanda tangan di akhir.
 3. Gunakan format Markdown yang rapi (bullet points, bold, dan paragraf singkat) agar mudah dibaca.`
+    } else if (activeTool === 'soal') {
+      // =======================================================================
+      // KHUSUS GENERATOR NASKAH SOAL UJIAN RESMI (2 KOLOM SIAP CETAK)
+      // =======================================================================
+      systemPrompt = `Anda adalah Tim Penyusun Naskah Soal Asesmen Sumatif Nasional Kurikulum Merdeka (${jenjangResmi}) yang sangat teliti secara ilmiah, pedagogis, dan rapi dalam pemformatan naskah ujian sekolah.`
+
+      userPrompt = `Susunlah Naskah Soal Asesmen Sumatif / Ulangan Resmi untuk ${namaSekolahResmi}.
+- ${konteksJenjangPrompt}
+- Mata Pelajaran: ${mapel || '-'}
+- Fase / Kelas: ${faseKelas || '-'}
+- Jumlah Butir Soal: ${spesifikData?.soalJumlah || 10} butir soal
+- Bentuk Soal: ${spesifikData?.soalTipe || 'Pilihan Ganda'}
+- Level Kognitif: ${spesifikData?.soalLevel || 'MOTS (C2-C3)'}
+- Topik / Indikator Materi: ${materiTopik}
+
+ATURAN FORMAT NASKAH SOAL (WAJIB DIPATUHI 100%):
+1. DILARANG KERAS menggunakan tabel Markdown (simbol \`|\`), blok kode, atau kotak kisi-kisi pada daftar soal!
+2. DILARANG membuat judul kop, tabel identitas siswa, atau petunjuk umum di awal, karena sistem cetak otomatis sudah menyertakannya. Langsung mulai dari soal nomor **1.**.
+3. Format setiap butir soal Pilihan Ganda WAJIB menggunakan daftar bernomor standar dengan opsi A, B, C, D tersusun rapi vertikal ke bawah seperti contoh berikut:
+
+1. Teks pertanyaan soal yang jelas dan sesuai kaidah bahasa Indonesia...
+A. Pilihan jawaban pertama
+B. Pilihan jawaban kedua
+C. Pilihan jawaban ketiga
+D. Pilihan jawaban keempat
+
+2. Teks pertanyaan soal kedua...
+A. Pilihan jawaban pertama
+B. Pilihan jawaban kedua
+C. Pilihan jawaban ketiga
+D. Pilihan jawaban keempat
+
+4. KUALITAS AKADEMIK & AKURASI KONSEP:
+   - Setiap opsi A, B, C, D WAJIB berbeda satu sama lain (DILARANG keras ada pilihan jawaban yang kembar/sama), homogen, dan masuk akal.
+   - Pastikan kebenaran ilmiah mutlak sesuai buku teks Kurikulum Merdeka Kemendikbudristek (contoh pada IPA: perbesaran mikroskop cahaya standar 40x hingga 1000x; mitokondria adalah tempat respirasi seluler/penghasil energi ATP pada sel hewan maupun tumbuhan; kloroplas adalah tempat fotosintesis; otot jantung/lurik memiliki istilah baku yang tepat).
+   - Untuk level ${spesifikData?.soalLevel || 'MOTS (C2-C3)'}, gunakan stimulus singkat, ilustrasi kasus sehari-hari, atau perbandingan fungsi agar soal menguji pemahaman dan penerapan (bukan sekadar tebak definisi hafalan).
+   ${isSmk ? '- Khusus SMK DKV: Gunakan studi kasus nyata (client brief, komposisi desain, manajemen warna RGB/CMYK, resolusi DPI/PPI, tipografi, atau alur produksi multimedia) serta tambahkan keterangan [Ilustrasi Visual: ...] bila diperlukan.' : ''}
+5. ATURAN KUNCI JAWABAN & PEMBAHASAN:
+   ${
+     spesifikData?.soalKunci
+       ? `- Setelah seluruh ${spesifikData?.soalJumlah || 10} soal selesai ditulis tuntas, tuliskan baris pemisah persis:
+[[KUNCI_JAWABAN_START]]
+### KUNCI JAWABAN DAN PEMBAHASAN SINGKAT
+Lalu tuliskan daftar kunci jawaban bernomor (1. D — penjelasan singkat, 2. A — penjelasan singkat, dst.) hingga nomor terakhir.`
+       : '- Jangan sertakan kunci jawaban.'
+   }
+6. DILARANG membuat blok tanda tangan atau lembar pengesahan di akhir teks karena sistem menginjeksikannya secara otomatis.`
     } else {
       systemPrompt = `Anda adalah Asisten Guru AI dan Pakar Pedagogi Kurikulum Merdeka (SMP Fase D & SMK Kejuruan Fase E/F) serta KBC Kemenag RI yang cerdas, terstruktur, mendalam, dan profesional.`
 
@@ -216,16 +263,6 @@ WAJIB ikuti struktur berikut secara berurutan:
         case 'lkpd':
           detailInstruksi = `Buat Lembar Kerja Peserta Didik (LKPD). ${konteksJenjangPrompt} Jenis Aktivitas: ${spesifikData?.lkpdAktivitas}. Materi: ${materiTopik}. ${spesifikData?.lkpdHots ? 'Gunakan soal HOTS dan konteks kearifan lokal / studi kasus industri.' : ''}`
           break
-        case 'soal':
-          detailInstruksi = `Buat Paket Naskah Ujian Resmi. ${konteksJenjangPrompt}
-- Jumlah Soal: ${spesifikData?.soalJumlah}
-- Bentuk Soal: ${spesifikData?.soalTipe}
-- Tingkat Kesulitan: ${spesifikData?.soalLevel}
-- Topik/Indikator Materi: ${materiTopik}
-${isSmk ? '- Khususan SMK DKV: Jika mata pelajaran termasuk produktif/kejuruan DKV, wajib gunakan studi kasus nyata (client brief, komposisi desain, manajemen warna RGB/CMYK, resolusi DPI/PPI, tipografi, atau alur produksi multimedia) serta tambahkan keterangan [Ilustrasi Visual: ...] pada soal yang membutuhkan stimulus gambar.' : ''}
-- DILARANG membuat tabel kisi-kisi soal.
-${spesifikData?.soalKunci ? '- Sertakan Kunci Jawaban lengkap beserta pembahasan singkat di bagian paling akhir.' : ''}`
-          break
         case 'multi':
           detailInstruksi = `Bantu saya membuat: ${spesifikData?.multiSubTool}. ${konteksJenjangPrompt} Catatan/Konteks: ${materiTopik}.`
           break
@@ -248,7 +285,9 @@ Instruksi Format WAJIB:
 3. DILARANG KERAS membuat teks tanda tangan, penutup 'Disetujui Oleh', 'Penyusun', atau blok pengesahan di akhir teks, karena Lembar Pengesahan resmi akan diinjeksi secara otomatis oleh sistem.`
     }
 
-    const apiRes = await callMercuryAPI(systemPrompt, userPrompt, 8192, 0.7)
+    // Gunakan temperature lebih rendah (0.35) untuk soal agar presisi tinggi & tidak halusinasi
+    const tempToUse = activeTool === 'soal' ? 0.35 : 0.7
+    const apiRes = await callMercuryAPI(systemPrompt, userPrompt, 8192, tempToUse)
 
     if (!apiRes.ok) {
       return NextResponse.json(
