@@ -72,6 +72,7 @@ export default function LaporanPage() {
   // Ceklis TTD & Stempel Kepsek (dipisah, masing-masing punya centang sendiri)
   const [pakaiTtdKepsek, setPakaiTtdKepsek] = useState<boolean>(true)
   const [pakaiCapKepsek, setPakaiCapKepsek] = useState<boolean>(true)
+  const [sertakanPengesahanSoal, setSertakanPengesahanSoal] = useState<boolean>(true)
 
   // Filter Cetak Laporan (Semua 8 Kartu)
   const [filterKelasAbsensi, setFilterKelasAbsensi] = useState('')
@@ -1380,7 +1381,7 @@ export default function LaporanPage() {
           </head>
           <body>
             ${htmlSections.replace(/src="\//g, `src="${originUrl}/`)}
-            ${footerTtdPdf.replace(/src="\//g, `src="${originUrl}/`)}
+            ${sertakanPengesahanSoal ? footerTtdPdf.replace(/src="\//g, `src="${originUrl}/`) : ''}
           </body>
         </html>
       `)
@@ -2527,6 +2528,16 @@ export default function LaporanPage() {
                     <span>🔑</span> Word Kunci Jawaban
                   </button>
                 </div>
+
+                <label className="flex items-center gap-2 text-[10px] font-bold text-amber-100 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={sertakanPengesahanSoal}
+                    onChange={(e) => setSertakanPengesahanSoal(e.target.checked)}
+                    className="accent-amber-400 size-3.5"
+                  />
+                  Sertakan Lembar Pengesahan (TTD Kepsek &amp; Guru)
+                </label>
               </div>
 
               {/* 2. CETAK RAPOR INDIVIDU SISWA (3 HALAMAN + AI GENERATOR) */}

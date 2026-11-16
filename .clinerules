@@ -1,0 +1,224 @@
+# APLIKASI GURU AI — Panduan & Peta Arsitektur Proyek
+
+Dokumen ini adalah referensi utama untuk memahami proyek **Next.js** ini agar setiap pekerjaan (fix bug, tambah fitur, refactor, dll.) selalu memakai pola, file, dan alur data yang benar. Baca dokumen ini sebelum mengubah kode apa pun.
+
+---
+
+## 1. Ringkasan Proyek
+
+- **Nama aplikasi:** Aplikasi Guru AI — Sistem Informasi Administrasi Guru **SMP & SMK Muna Mustofa**.
+- **Framework:** Next.js **16.4.2** (App Router) — **wajib** membaca catatan versioning di `AGENTS.md` (Next.js versi ini punya breaking change vs versi yang umum dikenal).
+- **Bahasa:** TypeScript (strict mode), React 19, `'use client'` di hampir semua halaman (mayoritas logika berjalan di sisi browser).
+- **Styling:** Tailwind CSS v4 (melalui `@tailwindcss/turbopack` di `next.config.ts`) + klas `dark` di `<html>`.
+- **Animasi/UI:** `framer-motion`, `lucide-react`, CSS custom (pixel art, view transitions, dll).
+- **Database:** Supabase (PostgreSQL) — client `@supabase/supabase-js`.
+- **AI / Generator dokumen:** Inception Labs **Mercury** API (melalui route `/api/gemini`) untuk membuat RPP/ATP/modul/soal, dll.
+- **Markdown:** `react-markdown` + `remark-gfm` + `rehype-raw` (dipakai di halaman AI untuk mem-print hasil generasi).
+
+### Script (package.json)
+- `npm run dev` → `next dev`
+- `npm run build` → `next build`
+- `npm run start` → `next start`
+- `npm run lint` → `eslint`
+
+### Alias impor
+- `@/*` → root proyek (mis. `@/hooks/useAuthRole`, `@/lib/supabase`, `@/app/components/...`).
+- Jalur relatif antar-file dalam `app/` juga banyak digunakan.
+
+---
+
+## 2. Struktur Folder Utama
+
+```
+aplikasi-guru-ai/
+├── .clinerules              ← file ini
+├── .env.local               ← kredensial lokal (Supabase + Mercury), TIDAK di-commit
+├── AGENTS.md                ← aturan agent Next.js (jangan edit blok generated-nya)
+├── next.config.ts           ← config Next.js (turbopack + tailwind css rule, cacheComponents)
+├── tsconfig.json            ← alias @/* → root, strict mode
+├── package.json
+├── lib/
+│   └── supabase.ts          ← ekspor client Supabase terpusat (dipakai sebagian halaman)
+├── hooks/
+│   └── useAuthRole.ts       ← hook deteksi role pengguna (operator/guru/wali kelas)
+└── app/
+    ├── layout.tsx           ← Root layout (dark theme, InactivityHandler)
+    ├── page.tsx             ← Dashboard SMP (halaman utama)
+    ├── globals.css
+    ├── favicon.ico
+    ├── login/page.tsx       ← Halaman login
+    ├── components/          ← Komponen bersama
+    │   ├── Navbar.tsx
+    │   ├── InactivityHandler.tsx
+    │   ├── KineticMorphLoader.tsx
+    │   ├── PixelBatSwitcher.tsx
+    │   └── RaporPreviewModal.tsx
+    ├── utils/
+    │   └── raporBuilder.ts  ← Logika penyusunan dokumen rapor (HTML)
+    ├── api/
+    │   └── gemini/route.ts  ← Route API (server) pemanggil Mercury AI
+    ├── [halaman SMP]/page.tsx
+    └── smk/
+        ├── page.tsx         ← Dashboard SMK
+        └── [halaman SMK]/page.tsx
+```
+
+> Catatan: Halaman-halaman dikelompokkan di bawah `app/` sesuai path URL. Halaman SMP berada langsung di `app/<fitur>/page.tsx`; halaman SMK berada di `app/smk/<fitur>/page.tsx`.
+
+---
+
+## 3. Daftar Halaman (Routes) & Fungsinya
+
+### Portal SMP (root)
+| Path | File | Fungsi utama |
+|------|------|--------------|
+| `/` | `app/page.tsx` | Dashboard SMP: ringkasan statistik (total siswa, kelas, guru, persentase hadir), kartu menu fitur, toggle dark mode, integrasi `useAuthRole` & `PixelBatSwitcher`. |
+| `/login` | `app/login/page.tsx` | Authentication via Supabase Auth (email+password), animasi `KineticMorphLoader`, redirect sesuai sesi. |
+| `/absensi` | `app/absensi/page.tsx` | Presensi harian: input manual + scan QR (`html5-qrcode`), ambil data dari `master_jam`, `jadwal`, `kelas`, `mapel`, `siswa`, `absensi`. |
+| `/jadwal` | `app/jadwal/page.tsx` | Kelola jadwal pelajaran (CRUD) memakai `jadwal`, `kelas`, `mapel`, `guru`. |
+| `/nilai` | `app/nilai/page.tsx` | Input/kelola nilai siswa (CRUD) memakai `nilai`, `siswa`, `mapel`. |
+| `/jurnal` | `app/jurnal/page.tsx` | Jurnal agenda harian guru memakai `jurnal_agenda`, `master_jam`. |
+| `/bimbingan` | `app/bimbingan/page.tsx` | Bimbingan wali kelas (rekapitulasi, CRUD) memakai `bimbingan_wali`, `siswa`, `kelas`. Akses dibatasi (operator/wali kelas). |
+| `/mapel` | `app/mapel/page.tsx` | Master mata pelajaran (CRUD) memakai `mapel`. Khusus operator. |
+| `/kelas` | `app/kelas/page.tsx` | Master kelas + penugasan wali kelas (CRUD) memakai `kelas`, `guru`. Khusus operator. |
+| `/siswa` | `app/siswa/page.tsx` | Master data siswa (CRUD) memakai `siswa`, `kelas`. Khusus operator. |
+| `/guru` | `app/guru/page.tsx` | Master data guru + pembuatan akun login (CRUD) memakai `guru`. Khusus operator. |
+| `/kartu` | `app/kartu/page.tsx` | Cetak kartu (pelajar/ujian/guru) memakai `siswa`, `guru`. |
+| `/administrasi` | `app/administrasi/page.tsx` | Surat administrasi (CRUD, kode surat, cetak/unduh) memakai `surat_administrasi`. |
+| `/laporan` | `app/laporan/page.tsx` | Laporan rapor: bangun dokumen rapor via `utils/raporBuilder.ts`, pratinjau via `components/RaporPreviewModal.tsx`; membaca `nilai`, `jurnal_agenda`, `siswa`, `kelas`, `mapel`, `guru`. |
+| `/ai` | `app/ai/page.tsx` | Pusat **Tool AI** (generator dokumen): KBC, Perangkat Ajar, Modul Ajar, Kokurikuler, Chatbot, LKPD, Soal, Multi-tool. Kirim ke `/api/gemini`, render hasil Markdown. |
+| `/cek-struktur` | `app/cek-struktur/page.tsx` | Utilitas diagnostik: memeriksa skema/kolom semua tabel Supabase (daftar `ALL_TABLES`). |
+
+### Portal SMK (`/smk`)
+| Path | File | Fungsi utama |
+|------|------|--------------|
+| `/smk` | `app/smk/page.tsx` | Dashboard SMK (DKV): lampu studio, link fitur, memakai `@/lib/supabase`. |
+| `/smk/master` | `app/smk/master/page.tsx` | Master data SMK dengan tab: kelas, siswa, mapel, guru (CRUD). Khusus operator. |
+| `/smk/jadwal` | `app/smk/jadwal/page.tsx` | Kelola jadwal SMK (CRUD). |
+| `/smk/absensi` | `app/smk/absensi/page.tsx` | Presensi SMK (manual + scan QR). |
+| `/smk/nilai` | `app/smk/nilai/page.tsx` | Kelola nilai siswa SMK (CRUD). |
+| `/smk/jurnal` | `app/smk/jurnal/page.tsx` | Jurnal agenda SMK. |
+
+> Catatan: Router AI di `Navbar.tsx` menunjuk ke route seperti `/ai/kbc`, `/ai/perangkat`, `/ai/deep-learning`, dst. — semuanya **ditangani oleh satu halaman** `app/ai/page.tsx` (state `activeTool`/`tool` menentukan mode), bukan folder terpisah. Jangan menambahkan folder baru kecuali memang dibutuhkan.
+
+---
+
+## 4. Fungsi Tiap File Penting
+
+### Konfigurasi & Infrastruktur
+- **`next.config.ts`** — mengaktifkan `experimental.agentFeedback`, `cacheComponents`, `partialPrefetching`, dan mendaftarkan rule Tailwind v4 (`.css` → `@tailwindcss/turbopack`). Jangan ubah tanpa perlu.
+- **`lib/supabase.ts`** — ekspor `supabase` client (createClient) menggunakan env `NEXT_PUBLIC_SUPABASE_URL` & `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Dipakai oleh halaman yang impor dari `@/lib/supabase` (mis. dashboard & jadwal & master SMK).
+- **`hooks/useAuthRole.ts`** — hook utama kontrol akses. Mengembalikan `{ role, isOperator, isWaliKelas, canAccessBimbingan, loading }`. Logika: ambil user dari `supabase.auth.getUser()`, cocokkan email dengan tabel `guru` (`.ilike`), tentukan role `'operator' | 'guru'`, cek wali kelas via `kelas.wali_kelas_id`. Dipakai hampir di semua halaman untuk guard `router.push('/')` jika bukan operator, dst.
+- **`app/layout.tsx`** — root layout: set `<html lang="id" className="dark">`, load font Inter, render `<InactivityHandler />`, dan `{children}`. Metadata judul "APLIKASI GURU AI | SMP Muna Mustofa".
+
+### Komponen (`app/components/`)
+- **`Navbar.tsx`** — navigasi bawah (bottom dock) + tombol logout + modal pemilih tool AI (daftar `aiToolsList` → `router.push`). Memakai `useAuthRole`.
+- **`InactivityHandler.tsx`** — auto-logout setelah 1 jam tanpa aktivitas (mousemove/mousedown/keydown/scroll/touchstart) → `supabase.auth.signOut()` → hard redirect `/login`. Mengingat `theme` di localStorage.
+- **`KineticMorphLoader.tsx`** — layar loader animasi (progress 1–100% dengan fase bentuk) yang dipakai saat login/pindah halaman utama.
+- **`PixelBatSwitcher.tsx`** — tombol berpindah antara portal SMP ↔ SMK (animasi "kelelawar" + overlay sinematik). Menentukan target route berdasar `pathname.startsWith('/smk')`.
+- **`RaporPreviewModal.tsx`** — modal pratinjau & cetak/unduh rapor; memicu generasi deskripsi AI per mapel via `generateAiCapaianRapor` dari `utils/raporBuilder`.
+
+### Logika / Utilitas
+- **`app/utils/raporBuilder.ts`** — pembangun dokumen rapor: interface tipe (RaporKelasItem, RaporSiswaItem, RaporGuruInfo, RaporMapelContextItem), fungsi `buildRaporDocument`, `detectUnitByKelas`, `getKelasGradeWeight`, `generateAiCapaianRapor`. Membaca data dari Supabase (nilai, jurnal, siswa, kelas, mapel, guru).
+
+### API Route (server)
+- **`app/api/gemini/route.ts`** — satu-satunya route API. `POST` menerima payload tool AI, lalu memanggil **Inception Labs Mercury** (`https://api.inceptionlabs.ai/v1/chat/completions`, model `mercury-2` → fallback `mercury-coder-small`) dengan `MERCURY_API_KEY`. Menyusun prompt system/user sesuai tool (KBC, perangkat, chatbot, lkpd, soal, multi, dll.), menambahkan blok Lembar Pengesahan HTML, dan mengembalikan `{ result }`. Temperature lebih rendah (0.35) untuk tool `soal`. Error jika API key tidak ada.
+
+---
+
+## 5. Koneksi Database (Supabase)
+
+### Env vars (dari `.env.local`)
+- `NEXT_PUBLIC_SUPABASE_URL` — URL proyek (domain `...supabase.co`).
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — anon/publishable key.
+- `MERCURY_API_KEY` — secret key Inception Labs Mercury (hanya dipakai di sisi server `/api/gemini`).
+
+### Pola inisialisasi client (penting!)
+Kodebase menggunakan **lebih dari satu pola** untuk bikin client Supabase. Saat menambah/memperbaiki kode, ikuti pola pada file yang sedang Anda ubah:
+1. **Pola langsung** (mis. `app/page.tsx`, `app/login/page.tsx`, `app/kelas/page.tsx`):
+   ```ts
+   const supabase = createClient(
+     (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/['"]/g, '').trim(),
+     (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').replace(/['"]/g, '').trim()
+   )
+   ```
+2. **Pola helper `getSupabaseUrl/getSupabaseAnonKey`** (supaya aman dari error prerender/SSG Vercel — dipakai di banyak halaman: `absensi`, `administrasi`, `bimbingan`, `guru`, `jadwal`, `jurnal`, `nilai`, `siswa`, `smk/absensi`, `smk/jurnal`, `smk/nilai`, `InactivityHandler`):
+   ```ts
+   const getSupabaseUrl = () =>
+     (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
+       .replace(/['"]/g, '').trim()
+   const getSupabaseAnonKey = () =>
+     (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder').replace(/['"]/g, '').trim()
+   const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
+   ```
+3. **Pola client terpusat** (`@/lib/supabase`) — dipakai `app/smk/page.tsx`, `app/smk/jadwal/page.tsx`, `app/smk/master/page.tsx`.
+
+> Peringatan: Jangan inisialisasi client Supabase di **top-level file yang di-prerender** tanpa helper yang aman — bisa memicu error build. Gunakan pola helper atau init di dalam `useEffect`/fungsi.
+
+### Tabel dalam database (dari `app/cek-struktur/page.tsx`)
+Daftar tabel `ALL_TABLES`: `absensi`, `bank_soal`, `bimbingan_wali`, `guru`, `guru_mapel`, `jadwal`, `jurnal_agenda`, `kelas`, `mapel`, `master_jam`, `nilai`, `profiles`, `siswa`, `surat_administrasi`.
+
+Kolom penting yang teramati di kode:
+- **`guru`**: `id`, `nama_lengkap`, `email`, `password`, `role` (`'operator' | 'guru'`), `NUPTK`, `nip`, `jabatan`, `unit_mengajar`.
+- **`kelas`**: `id`, `nama_kelas`, `tingkat`, `jenjang` (`SMP`/`SMK`), `jurusan`, `wali_kelas_id` (FK → `guru.id`).
+- **`siswa`**: `id`, `nisn`, `nama_lengkap`, `jenis_kelamin`, `kelas_id` (FK → `kelas.id`), `jenjang`, plus data identitas (TTL, agama, alamat, ortu, dll.).
+- **`mapel`**: `id`, `kode_mapel`, `nama_mapel`, `kelompok`, `tingkat`, `jumlah_jp`, `semester`, `tahun_ajaran`, `urutan`, `jenjang`.
+- **`absensi`**, **`jadwal`** (hari, jam, guru_id, mapel_id, kelas_id), **`jurnal_agenda`**, **`nilai`** (siswa_id, mata_pelajaran, semester, dst.), **`bimbingan_wali`**, **`surat_administrasi`** (nomor_surat, jenis_surat, penerima, keterangan, semester, tahun_ajaran), **`master_jam`** (hari, jam_ke, waktu_mulai, waktu_selesai, keterangan, jenjang), **`bank_soal`**, **`profiles`**, **`guru_mapel`** (relasi guru↔mapel).
+
+### Relasi utama
+- `kelas.wali_kelas_id` → `guru.id`.
+- `siswa.kelas_id` → `kelas.id`.
+- `jadwal` menghubungkan `guru`, `mapel`, `kelas` (via kolom id/relasi).
+- `nilai.siswa_id` → `siswa.id`.
+- Auth Supabase memakai tabel internal `auth.users`; data profil/role tambahan ada di `guru` (cocok berdasarkan email).
+
+---
+
+## 6. Alur Autentikasi & Kontrol Akses
+
+1. Login: `app/login/page.tsx` → `supabase.auth.signInWithPassword(...)`.
+2. Status sesi: `supabase.auth.getUser()` (dipakai di `useAuthRole` dan halaman-halaman).
+3. Role: `hooks/useAuthRole.ts` mencocokkan email user dengan tabel `guru` (`ilike`), lalu set `role` (`operator`/`guru`) dan cek `isWaliKelas`.
+4. Guard halaman: sebagian besar halaman CRUD mengecek `isOperator`; jika bukan operator → `router.push('/')`. Halaman `bimbingan` mengecek `canAccessBimbingan`.
+5. Auto-logout: `components/InactivityHandler.tsx` → `supabase.auth.signOut()` setelah 1 jam idle.
+
+---
+
+## 7. Alur AI / Generator Dokumen
+
+1. Pengguna membuka `/ai` (`app/ai/page.tsx`), memilih tool & mengisi form.
+2. Frontend mengirim `POST` ke `/api/gemini` dengan payload `{ tool, activeTool, selectedDoc, jenjang, jurusan, mapel, faseKelas, materiTopik, spesifikData, ...kbcData }`.
+3. Server (`app/api/gemini/route.ts`):
+   - Validasi `MERCURY_API_KEY`.
+   - Sanitasi data; default jenjang `SMP`/`SMK`; nama sekolah & kepala sekolah default (SMP: SULASTRI, S.Pd., Gr.).
+   - Susun prompt sistem + user sesuai tool (persiapkan prompt panjang, larang tanda tangan karena Lembar Pengesahan diinjeksi belakangan).
+   - Panggil Mercury API (model `mercury-2`, fallback `mercury-coder-small`), temperature 0.35 untuk `soal`, else 0.7, `max_tokens: 8192`.
+   - Tambahkan blok **Lembar Pengesahan** HTML (kecuali `chatbot`).
+   - Balas `{ result }` (Markdown+HTML).
+4. Frontend merender `result` dengan `react-markdown`/`rehype-raw`, mendukung cetak/unduh.
+
+---
+
+## 8. Konvensi & Aturan Kerja (Harus Diikuti)
+
+1. **Baca AGENTS.md** sebelum mengubah kode Next.js (versi 16 punya perubahan API; dokumentasi tersedia di `node_modules/next/dist/docs/`).
+2. **Ikuti pola file yang sedang Anda ubah** — terutama cara inisialisasi Supabase client (lihat §5) dan penggunaan `useAuthRole` untuk guard akses.
+3. **Halaman adalah `'use client'`** — sebagian besar logika & query Supabase berjalan di browser. Jika menambah logika server, gunakan route API (`app/api/...`) atau komponen Server.
+4. **Jangan meletakkan secret di frontend** — `MERCURY_API_KEY` hanya boleh dipakai di `/api/gemini` (server). `NEXT_PUBLIC_*` bersifat publik.
+5. **Alias** `@/*` dan jalur relatif saling dipakai; jika menambah file, ikuti konvensi di folder sekitarnya.
+6. **Styling** Tailwind v4 + `dark` mode via class di `<html>`; gunakan pola dark mode (mengikuti `isDarkMode` state + `localStorage('theme')`) bila ada.
+7. **Routing** — tambah halaman dengan membuat folder `app/<path>/page.tsx`. Untuk fitur SMK, tempatkan di bawah `app/smk/<path>/`.
+8. **Role guard** — untuk halaman CRUD yang khusus operator, ikuti pola `useEffect` + `router.push('/')` saat `!isOperator`.
+9. **Jangan hapus/ubah** blok `<!-- BEGIN/END:nextjs-agent-rules -->` di `AGENTS.md`.
+10. **Pengurutan kelas** — Untuk daftar/dropdown pilihan kelas, gunakan helper terpusat di `@/lib/utils`: `getKelasGradeWeight`, `compareKelasName`, dan `sortKelas`. Urutan yang benar: SMP `VII→VIII→IX` dan SMK `X→XI→XII`. JANGAN mengandalkan `.order('nama_kelas')` (alfabetis) karena urutan Romawi salah (misalnya `IX` muncul sebelum `VII`); bungkus array dengan `sortKelas(...)` setelah mengambil data. Halaman yang sudah benar (contoh: `bimbingan` memakai `sortKelas7to12`, `laporan` & `ai` memakai `getKelasGradeWeight`/urutan `tingkat`) jangan diubah.
+
+---
+
+## 9. Lokasi Umum Bug (Petunjuk)
+- **Error prerender/SSG Vercel** → biasanya karena inisialisasi Supabase client di top-level tanpa helper aman; pindah ke pola `getSupabaseUrl/getSupabaseAnonKey` atau init di dalam `useEffect`.
+- **Role salah / redirect tidak sesuai** → cek `hooks/useAuthRole.ts` (pencocokan email `.ilike`, default role `guru`).
+- **Data tidak muncul/kolom salah** → cek nama tabel & kolom di kode vs skema nyata via `/cek-struktur`.
+- **AI tidak merespons** → cek `MERCURY_API_KEY` di `.env.local`/Vercel; cek log `/api/gemini`; coba ganti model fallback.
+- **Dark mode tidak konsisten** → periksa penyimpanan `localStorage('theme')` dan class `dark` di `<html>`.
+
+
