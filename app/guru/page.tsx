@@ -6,6 +6,16 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import {
+  GraduationCap,
+  ClipboardList,
+  Trash2,
+  Clock,
+  Users,
+  BookOpen,
+  Printer,
+  Pencil,
+} from 'lucide-react'
 
 // Helper Inisialisasi Supabase Client yang aman dari error Prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -270,7 +280,7 @@ export default function DataGuruPage() {
             }`}>
               <div className="space-y-3">
                 <div className={`flex items-center gap-2 border-b pb-2.5 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
-                  <span className="text-indigo-500 text-base">👨‍🏫</span>
+                  <GraduationCap className="w-4 h-4 text-indigo-500" />
                   <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     {editingId ? 'Edit Data Guru' : 'Tambah Guru & Akun Login'}
                   </h3>
@@ -379,7 +389,7 @@ export default function DataGuruPage() {
                 : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
             }`}>
               <div className={`flex items-center gap-2 border-b pb-2.5 shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-indigo-200/80'}`}>
-                <span className="text-indigo-500 text-base">📋</span>
+                <ClipboardList className="w-4 h-4 text-indigo-500" />
                 <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Daftar Guru SMP Muna Mustofa</h3>
               </div>
 
@@ -435,7 +445,7 @@ export default function DataGuruPage() {
                               : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
                           }`}
                         >
-                          ✏️ Edit
+                          <Pencil className="w-4 h-4" /> Edit
                         </button>
                         <button
                           onClick={() => handleDelete(g.id)}
@@ -445,7 +455,7 @@ export default function DataGuruPage() {
                               : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
                           }`}
                         >
-                          🗑️ Hapus
+                          <Trash2 className="w-4 h-4" /> Hapus
                         </button>
                       </div>
                     </div>
@@ -493,14 +503,14 @@ export default function DataGuruPage() {
                               className="bg-amber-50 text-amber-700 hover:bg-amber-100 p-1.5 rounded-lg border border-amber-200 transition cursor-pointer"
                               title="Edit Guru"
                             >
-                              ✏️
+                              <Pencil className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(g.id)}
                               className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
                               title="Hapus Guru"
                             >
-                              🗑️
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
@@ -534,7 +544,7 @@ export default function DataGuruPage() {
           <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -542,14 +552,14 @@ export default function DataGuruPage() {
             <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
 
           {isOperator && (
             <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-500 transition">
-              <span className="text-base">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -557,14 +567,14 @@ export default function DataGuruPage() {
           <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
           <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

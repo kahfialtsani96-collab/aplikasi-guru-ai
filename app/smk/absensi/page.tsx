@@ -26,6 +26,8 @@ import {
   Search,
   SlidersHorizontal,
   GraduationCap,
+  Lightbulb,
+  X,
 } from 'lucide-react'
 
 const getSupabaseClient = () => {
@@ -1344,7 +1346,7 @@ export default function SmkAbsensiPage() {
                 onClick={handlePullLampCord}
                 className="z-10 px-3 py-1 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.09] text-[10px] font-bold text-amber-200/90 transition cursor-pointer"
               >
-                💡 Tarik Tali → {activeTab === 'input' ? 'Riwayat' : 'Input'}
+                <Lightbulb className="w-4 h-4 inline-block align-middle" /> Tarik Tali → {activeTab === 'input' ? 'Riwayat' : 'Input'}
               </button>
             </div>
 
@@ -1694,7 +1696,7 @@ export default function SmkAbsensiPage() {
                         >
                           <option value="">-- Pilih Kelas --</option>
                           {kelasList.length > 0 && (
-                            <option value="ALL">✨ Semua Kelas DKV ({kelasList.length})</option>
+                            <option value="ALL">Semua Kelas DKV ({kelasList.length})</option>
                           )}
                           {kelasList.map((k) => (
                             <option key={k.id} value={k.id}>
@@ -1958,7 +1960,7 @@ export default function SmkAbsensiPage() {
                               {item.nama_siswa}
                             </h4>
                             <p className="text-[9px] font-mono text-slate-400 truncate">
-                              📅 {item.tanggal} • {item.kelas} • {item.mapel}
+                              <CalendarDays className="w-4 h-4 inline-block align-middle" /> {item.tanggal} • {item.kelas} • {item.mapel}
                             </p>
                           </div>
 
@@ -2017,7 +2019,7 @@ export default function SmkAbsensiPage() {
                 }}
                 className="text-slate-400 hover:text-rose-400 font-extrabold text-sm p-1 cursor-pointer"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 

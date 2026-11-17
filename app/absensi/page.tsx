@@ -8,6 +8,25 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { sortKelas } from '@/lib/utils'
+import {
+  Clock,
+  ClipboardList,
+  NotebookPen,
+  HeartHandshake,
+  History,
+  Camera,
+  RefreshCw,
+  CheckCircle2,
+  Save,
+  CalendarDays,
+  Trash2,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Printer,
+  Star,
+  X,
+} from 'lucide-react'
 
 // Helper Instansiasi Aman Supabase Client untuk Vercel SSG Build
 const getSupabaseClient = () => {
@@ -949,13 +968,13 @@ export default function AbsensiPage() {
                   : 'bg-white text-slate-700 border-slate-300'
               }`}
             >
-              <span>🕒</span> Jadwal
+              <Clock className="w-4 h-4" /> Jadwal
             </Link>
             <Link
               href="/absensi"
               className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1"
             >
-              <span>📋</span> Absensi
+              <ClipboardList className="w-4 h-4" /> Absensi
             </Link>
             <Link
               href="/nilai"
@@ -965,7 +984,7 @@ export default function AbsensiPage() {
                   : 'bg-white text-slate-700 border-slate-300'
               }`}
             >
-              <span>⭐</span> Penilaian
+              <Star className="w-4 h-4" /> Penilaian
             </Link>
             <Link
               href="/jurnal"
@@ -975,7 +994,7 @@ export default function AbsensiPage() {
                   : 'bg-white text-slate-700 border-slate-300'
               }`}
             >
-              <span>📓</span> Jurnal
+              <NotebookPen className="w-4 h-4" /> Jurnal
             </Link>
             {canAccessBimbingan && (
               <Link
@@ -986,7 +1005,7 @@ export default function AbsensiPage() {
                     : 'bg-white text-slate-700 border-slate-300'
                 }`}
               >
-                <span>💖</span> Bimbingan
+                <HeartHandshake className="w-4 h-4" /> Bimbingan
               </Link>
             )}
           </div>
@@ -1010,7 +1029,7 @@ export default function AbsensiPage() {
                   : 'text-slate-700'
               }`}
             >
-              <span>📋</span> Input Presensi
+              <ClipboardList className="w-4 h-4" /> Input Presensi
             </button>
             <button
               onClick={() => setActiveTab('rekap')}
@@ -1022,7 +1041,7 @@ export default function AbsensiPage() {
                   : 'text-slate-700'
               }`}
             >
-              <span>📜</span> Riwayat Presensi
+              <History className="w-4 h-4" /> Riwayat Presensi
             </button>
           </div>
 
@@ -1136,7 +1155,7 @@ export default function AbsensiPage() {
                     >
                       <option value="">-- Kelas SMP --</option>
                       {kelasList.length > 0 && (
-                        <option value="ALL">✨ Semua Kelas ({kelasList.length})</option>
+                        <option value="ALL">Semua Kelas ({kelasList.length})</option>
                       )}
                       {kelasList.map((k) => (
                         <option key={k.id} value={k.id}>
@@ -1172,7 +1191,7 @@ export default function AbsensiPage() {
                       className="w-full h-full bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer shadow-xs"
                       title="Scan QR Code Siswa"
                     >
-                      📷 QR
+                      <Camera className="w-4 h-4" /> QR
                     </button>
                   </div>
                 </div>
@@ -1190,7 +1209,7 @@ export default function AbsensiPage() {
                   >
                     <div className="w-full flex items-center justify-between">
                       <h3 className="text-xs font-black uppercase flex items-center gap-1.5">
-                        <span>📷</span> Scan QR Kartu Pelajar
+                        <Camera className="w-4 h-4" /> Scan QR Kartu Pelajar
                       </h3>
                       <button
                         onClick={() => {
@@ -1201,7 +1220,7 @@ export default function AbsensiPage() {
                         }}
                         className="text-slate-400 hover:text-rose-500 font-extrabold text-sm p-1"
                       >
-                        ✕
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
 
@@ -1220,7 +1239,7 @@ export default function AbsensiPage() {
                         onClick={toggleCameraFacing}
                         className="text-[11px] font-bold text-indigo-400 hover:underline"
                       >
-                        🔄 Putar Kamera ({facingMode === 'environment' ? 'Belakang' : 'Depan'})
+                        <RefreshCw className="w-4 h-4" /> Putar Kamera ({facingMode === 'environment' ? 'Belakang' : 'Depan'})
                       </button>
                       <button
                         onClick={() => setShowQrModal(false)}
@@ -1317,7 +1336,7 @@ export default function AbsensiPage() {
                 ) : subTabAbsen === 'belum' ? (
                   siswaBelumAbsen.length === 0 ? (
                     <div className="py-8 text-center text-xs text-emerald-500 font-extrabold">
-                      🎉 Semua siswa di kelas ini sudah terabsen!
+                      <CheckCircle2 className="w-4 h-4 inline-block align-middle" /> Semua siswa di kelas ini sudah terabsen!
                     </div>
                   ) : (
                     /* AREA SCROLL KHUSUS UNTUK DAFTAR SISWA BELUM ABSEN */
@@ -1435,7 +1454,7 @@ export default function AbsensiPage() {
                               className="text-rose-500 hover:text-rose-700 font-bold p-0.5 text-xs"
                               title="Batalkan"
                             >
-                              ✕
+                              <X className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1458,7 +1477,7 @@ export default function AbsensiPage() {
                   }
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 text-white font-black py-1.5 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer shrink-0"
                 >
-                  <span>💾</span>
+                  <Save className="w-4 h-4" />
                   <span>
                     {saving
                       ? 'Menyimpan...'
@@ -1688,7 +1707,7 @@ export default function AbsensiPage() {
                               isDarkMode ? 'text-slate-400' : 'text-slate-500'
                             }`}
                           >
-                            📅 {item.tanggal} • {item.kelas} • {item.mapel}
+                            <CalendarDays className="w-4 h-4 inline-block align-middle" /> {item.tanggal} • {item.kelas} • {item.mapel}
                           </p>
                         </div>
 
@@ -1715,7 +1734,7 @@ export default function AbsensiPage() {
                             }}
                             className="text-rose-500 hover:text-rose-700 font-bold p-0.5 text-xs"
                           >
-                            🗑️
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1745,7 +1764,7 @@ export default function AbsensiPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -1758,7 +1777,7 @@ export default function AbsensiPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -1772,7 +1791,7 @@ export default function AbsensiPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -1781,7 +1800,7 @@ export default function AbsensiPage() {
             href="/absensi"
             className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition"
           >
-            <span className="text-base leading-none">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
@@ -1793,7 +1812,7 @@ export default function AbsensiPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

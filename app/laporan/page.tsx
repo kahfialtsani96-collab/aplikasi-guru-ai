@@ -16,6 +16,22 @@ import {
   RaporSiswaItem,
 } from '../utils/raporBuilder'
 import RaporPreviewModal, { RaporPreviewMeta } from '../components/RaporPreviewModal'
+import {
+  Printer,
+  FileText,
+  FileEdit,
+  KeyRound,
+  Eye,
+  BarChart3,
+  Save,
+  Paperclip,
+  Clock,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Settings,
+  PencilLine,
+} from 'lucide-react'
 
 const getSupabaseUrl = () =>
   (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co')
@@ -577,7 +593,7 @@ export default function LaporanPage() {
 
   const headerKopHTML = `
     <div style="text-align: center; margin-bottom: 12px;">
-      <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; max-height: 140px; object-fit: contain;" />
+      <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block;" />
     </div>
   `
 
@@ -973,7 +989,7 @@ export default function LaporanPage() {
   }
 
   // Helper Kop Surat Ujian dinamis SMP vs SMK
-  const buildKopUjianWordHtml = (faseOrKelasStr: string, mapelStr: string, maxImgHeight: string) => {
+  const buildKopUjianWordHtml = (faseOrKelasStr: string, mapelStr: string) => {
     const isSmkSoal = detectIsSmkSoal(faseOrKelasStr, mapelStr)
 
     if (isSmkSoal) {
@@ -989,7 +1005,7 @@ export default function LaporanPage() {
 
     return `
       <div style="text-align: center; margin-bottom: 4px;">
-        <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; max-height: ${maxImgHeight}; object-fit: contain;" />
+        <img src="/kop-surat.png" alt="Kop Surat" style="width: 100%; height: auto; display: block;" />
       </div>
     `
   }
@@ -1025,7 +1041,7 @@ export default function LaporanPage() {
               : ''
           }
           <div class="WordSectionHeader">
-            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel, '88px')}
+            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel)}
             <div class="judul-ujian">
               NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}
             </div>
@@ -1157,8 +1173,7 @@ export default function LaporanPage() {
       <div class="WordSectionSingle" style="font-size: 10pt; line-height: 1.4;">
         ${buildKopUjianWordHtml(
           firstSoal?.fase_kelas || filterKelasBankSoal,
-          firstSoal?.mapel || filterMapelBankSoal,
-          '110px'
+          firstSoal?.mapel || filterMapelBankSoal
         )}
         <h2 style="text-align: center; text-transform: uppercase; font-size: 12pt; margin-bottom: 12px;">
           LEMBAR KUNCI JAWABAN &amp; PEDOMAN PENILAIAN GURU
@@ -1217,7 +1232,7 @@ export default function LaporanPage() {
         return `
           ${idx > 0 ? '<div class="soal-page-break"></div>' : ''}
           <div class="kop-ujian">
-            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel, '105px')}
+            ${buildKopUjianWordHtml(s.fase_kelas, s.mapel)}
             <div class="judul-ujian">
               NASKAH SOAL ASESMEN SUMATIF / ULANGAN SEMESTER ${selectedSemester.toUpperCase()} TA ${selectedTahunAjaran}
             </div>
@@ -1317,7 +1332,7 @@ export default function LaporanPage() {
           <head>
             <title>Naskah Soal ${safeMapel} - ${safeKelas}</title>
             <style>
-              @page { size: A4 portrait; margin: 12mm 14mm 12mm 14mm; }
+              @page { size: A4 portrait; margin: 18mm 15mm 16mm 15mm; }
               body {
                 font-family: 'Times New Roman', Times, serif;
                 color: #000;
@@ -1327,11 +1342,14 @@ export default function LaporanPage() {
                 padding: 0;
               }
               .soal-page-break { page-break-before: always; }
+              .kop-ujian {
+                padding-top: 6px;
+              }
               .judul-ujian {
                 text-align: center;
                 text-transform: uppercase;
-                margin: 4px 0 6px 0;
-                font-size: 10.5pt;
+                margin: 10px 0 8px 0;
+                font-size: 11pt;
                 font-weight: bold;
               }
               .header-identitas {
@@ -1355,6 +1373,7 @@ export default function LaporanPage() {
                 column-count: 2;
                 column-gap: 20px;
                 column-rule: 0.5pt solid #888;
+                margin-top: 12px;
               }
               .soal-item {
                 break-inside: avoid;
@@ -1378,6 +1397,10 @@ export default function LaporanPage() {
                 vertical-align: top;
               }
             </style>
+          <style>
+            @page { margin: 18mm 15mm 16mm 15mm; }
+            body { padding: 0 !important; }
+          </style>
           </head>
           <body>
             ${htmlSections.replace(/src="\//g, `src="${originUrl}/`)}
@@ -1829,6 +1852,10 @@ export default function LaporanPage() {
             .table-data td { border: 1px solid #000; padding: 4.5px 6px; vertical-align: middle; }
             .page-break { page-break-before: always; }
           </style>
+        <style>
+          @page { margin: 0; }
+          body { padding: 1.2cm 1.4cm !important; }
+        </style>
         </head>
         <body>
           ${innerHtml}
@@ -2173,6 +2200,10 @@ export default function LaporanPage() {
               body { font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.4; }
               th, td { border: 1px solid #000; padding: 6px; }
             </style>
+          <style>
+            @page { margin: 0; }
+            body { padding: 1.5cm !important; }
+          </style>
           </head>
           <body>
             ${headerKopHTML}
@@ -2409,7 +2440,7 @@ export default function LaporanPage() {
                     : 'text-indigo-900 border-slate-300'
                 }`}
               >
-                🖨️ Laporan:
+                <Printer className="w-4 h-4 inline-block align-middle" /> Laporan:
               </span>
               <button
                 onClick={() => setActiveTab('pusat')}
@@ -2421,7 +2452,7 @@ export default function LaporanPage() {
                     : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-300'
                 }`}
               >
-                <span>🖨️</span> Pusat Cetak Laporan
+                <Printer className="w-4 h-4" /> Pusat Cetak Laporan
               </button>
               <button
                 onClick={() => setActiveTab('pengaturan')}
@@ -2433,7 +2464,7 @@ export default function LaporanPage() {
                     : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-300'
                 }`}
               >
-                <span>⚙️</span> Pengaturan TTD Kepsek
+                <Settings className="w-4 h-4" /> Pengaturan TTD Kepsek
               </button>
             </div>
 
@@ -2445,7 +2476,7 @@ export default function LaporanPage() {
                   onChange={(e) => setPakaiTtdKepsek(e.target.checked)}
                   className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                 />
-                <span>✍️ TTD Kepsek</span>
+                <span><PencilLine className="w-4 h-4" /> TTD Kepsek</span>
               </label>
               <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs">
                 <input
@@ -2454,7 +2485,7 @@ export default function LaporanPage() {
                   onChange={(e) => setPakaiCapKepsek(e.target.checked)}
                   className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                 />
-                <span>🖇️ Cap Sekolah</span>
+                <span><Paperclip className="w-4 h-4" /> Cap Sekolah</span>
               </label>
             </div>
           </div>
@@ -2467,7 +2498,7 @@ export default function LaporanPage() {
               <div className="md:col-span-2 bg-gradient-to-r from-amber-700 via-orange-800 to-amber-950 text-white rounded-2xl p-4 shadow-md space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-extrabold text-sm">
-                    <span>📝</span>
+                    <FileEdit className="w-4 h-4" />
                     <h3>Download Naskah Soal Ulangan</h3>
                   </div>
                   <span className="text-[10px] bg-amber-950/80 border border-amber-400/40 px-2.5 py-0.5 rounded-full font-bold text-amber-200">
@@ -2513,19 +2544,19 @@ export default function LaporanPage() {
                     onClick={handlePrintBankSoal}
                     className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <span>📝</span> Word Naskah Soal
+                    <FileEdit className="w-4 h-4" /> Word Naskah Soal
                   </button>
                   <button
                     onClick={handlePrintBankSoalPdf}
                     className="w-full bg-white hover:bg-amber-100 text-amber-900 font-black py-2 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <span>🖨️</span> Cetak PDF Naskah Soal
+                    <Printer className="w-4 h-4" /> Cetak PDF Naskah Soal
                   </button>
                   <button
                     onClick={handlePrintKunciJawaban}
                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <span>🔑</span> Word Kunci Jawaban
+                    <KeyRound className="w-4 h-4" /> Word Kunci Jawaban
                   </button>
                 </div>
 
@@ -2544,7 +2575,7 @@ export default function LaporanPage() {
               <div className="md:col-span-2 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 text-white rounded-2xl p-4 shadow-md space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-extrabold text-sm">
-                    <span>🎓</span>
+                    <GraduationCap className="w-4 h-4" />
                     <h3>
                       Cetak Lembar Rapor Hasil Belajar Peserta Didik (Cover + Biodata + Nilai + AI)
                     </h3>
@@ -2623,7 +2654,7 @@ export default function LaporanPage() {
                     disabled={!selectedSiswaRapor || isBuildingRapor}
                     className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-400 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                   >
-                    <span>👁️</span>{' '}
+                    <Eye className="w-4 h-4" />{' '}
                     {isBuildingRapor ? 'Menyiapkan...' : 'Preview & Edit Rapor (AI)'}
                   </button>
 
@@ -2632,7 +2663,7 @@ export default function LaporanPage() {
                     disabled={!selectedSiswaRapor}
                     className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-slate-400 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                   >
-                    <span>🖨️</span> Cetak PDF Langsung
+                    <Printer className="w-4 h-4" /> Cetak PDF Langsung
                   </button>
 
                   <button
@@ -2640,7 +2671,7 @@ export default function LaporanPage() {
                     disabled={!selectedSiswaRapor}
                     className="w-full bg-sky-500 hover:bg-sky-600 disabled:bg-slate-400 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                   >
-                    <span>📝</span> Download Word (.doc)
+                    <FileEdit className="w-4 h-4" /> Download Word (.doc)
                   </button>
                 </div>
               </div>
@@ -2659,7 +2690,7 @@ export default function LaporanPage() {
                       isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
                     }`}
                   >
-                    <span>📄</span>
+                    <FileText className="w-4 h-4" />
                     <h3>Cetak PDF Rekap Presensi Harian</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -2714,7 +2745,7 @@ export default function LaporanPage() {
                   onClick={() => handlePrintDocument('absensi')}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>🖨️</span> Cetak PDF Absensi
+                  <Printer className="w-4 h-4" /> Cetak PDF Absensi
                 </button>
               </div>
 
@@ -2732,7 +2763,7 @@ export default function LaporanPage() {
                       isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
                     }`}
                   >
-                    <span>📄</span>
+                    <FileText className="w-4 h-4" />
                     <h3>Cetak PDF Leger Nilai Akademik</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -2795,13 +2826,13 @@ export default function LaporanPage() {
                     onClick={() => handlePrintDocument('leger')}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <span>🖨️</span> Cetak PDF
+                    <Printer className="w-4 h-4" /> Cetak PDF
                   </button>
                   <button
                     onClick={handleExportLegerExcel}
                     className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <span>📊</span> Export Excel
+                    <BarChart3 className="w-4 h-4" /> Export Excel
                   </button>
                 </div>
               </div>
@@ -2820,7 +2851,7 @@ export default function LaporanPage() {
                       isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
                     }`}
                   >
-                    <span>📄</span>
+                    <FileText className="w-4 h-4" />
                     <h3>Jurnal Agenda Mengajar Harian / Bulanan</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -2902,7 +2933,7 @@ export default function LaporanPage() {
                   onClick={() => handlePrintDocument('jurnal')}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>🖨️</span> Cetak PDF Jurnal Agenda
+                  <Printer className="w-4 h-4" /> Cetak PDF Jurnal Agenda
                 </button>
               </div>
 
@@ -2920,7 +2951,7 @@ export default function LaporanPage() {
                       isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
                     }`}
                   >
-                    <span>📄</span>
+                    <FileText className="w-4 h-4" />
                     <h3>Catatan Bimbingan Guru Wali</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -2976,7 +3007,7 @@ export default function LaporanPage() {
                   onClick={() => handlePrintDocument('bimbingan')}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>🖨️</span> Cetak PDF Bimbingan Wali
+                  <Printer className="w-4 h-4" /> Cetak PDF Bimbingan Wali
                 </button>
               </div>
 
@@ -2994,7 +3025,7 @@ export default function LaporanPage() {
                       isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
                     }`}
                   >
-                    <span>📄</span>
+                    <FileText className="w-4 h-4" />
                     <h3>Laporan Detail Presensi BK (Jam Ke-1 s/d 8)</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -3068,7 +3099,7 @@ export default function LaporanPage() {
                   onClick={handlePrintRiwayatAbsensi}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>🖨️</span> Cetak Presensi Detail (Jam 1 - 8)
+                  <Printer className="w-4 h-4" /> Cetak Presensi Detail (Jam 1 - 8)
                 </button>
               </div>
 
@@ -3086,7 +3117,7 @@ export default function LaporanPage() {
                       isDarkMode ? 'text-indigo-400' : 'text-indigo-950'
                     }`}
                   >
-                    <span>📄</span>
+                    <FileText className="w-4 h-4" />
                     <h3>Laporan Riwayat Input Nilai</h3>
                   </div>
                   <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -3147,7 +3178,7 @@ export default function LaporanPage() {
                   onClick={handlePrintRiwayatNilai}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>🖨️</span> Cetak PDF Riwayat Nilai
+                  <Printer className="w-4 h-4" /> Cetak PDF Riwayat Nilai
                 </button>
               </div>
             </div>
@@ -3332,7 +3363,7 @@ export default function LaporanPage() {
                   onClick={handleSimpanPengaturan}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-5 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>💾</span> Simpan Pengaturan
+                  <Save className="w-4 h-4" /> Simpan Pengaturan
                 </button>
               </div>
             </div>
@@ -3385,7 +3416,7 @@ export default function LaporanPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -3398,7 +3429,7 @@ export default function LaporanPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -3412,7 +3443,7 @@ export default function LaporanPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -3425,7 +3456,7 @@ export default function LaporanPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
@@ -3435,7 +3466,7 @@ export default function LaporanPage() {
               isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
             }`}
           >
-            <span className="text-base">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

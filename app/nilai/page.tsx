@@ -8,6 +8,21 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { sortKelas } from '@/lib/utils'
+import {
+  Clock,
+  ClipboardList,
+  NotebookPen,
+  HeartHandshake,
+  History,
+  Save,
+  BookOpen,
+  CalendarDays,
+  Trash2,
+  Users,
+  GraduationCap,
+  Printer,
+  Star,
+} from 'lucide-react'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -544,26 +559,26 @@ export default function PenilaianPage() {
             <Link href="/jadwal" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
               isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
             }`}>
-              <span>🕒</span> Jadwal
+              <Clock className="w-4 h-4" /> Jadwal
             </Link>
             <Link href="/absensi" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
               isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
             }`}>
-              <span>📋</span> Absensi
+              <ClipboardList className="w-4 h-4" /> Absensi
             </Link>
             <Link href="/nilai" className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1">
-              <span>⭐</span> Penilaian
+              <Star className="w-4 h-4" /> Penilaian
             </Link>
             <Link href="/jurnal" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
               isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
             }`}>
-              <span>📓</span> Jurnal
+              <NotebookPen className="w-4 h-4" /> Jurnal
             </Link>
             {canAccessBimbingan && (
               <Link href="/bimbingan" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
                 isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
               }`}>
-                <span>💖</span> Bimbingan
+                <HeartHandshake className="w-4 h-4" /> Bimbingan
               </Link>
             )}
           </div>
@@ -584,7 +599,7 @@ export default function PenilaianPage() {
                   : isDarkMode ? 'text-slate-400' : 'text-slate-700'
               }`}
             >
-              <span>⭐</span> Input Nilai
+              <Star className="w-4 h-4" /> Input Nilai
             </button>
             <button
               onClick={() => setActiveTab('rekap')}
@@ -594,7 +609,7 @@ export default function PenilaianPage() {
                   : isDarkMode ? 'text-slate-400' : 'text-slate-700'
               }`}
             >
-              <span>📜</span> Riwayat Nilai
+              <History className="w-4 h-4" /> Riwayat Nilai
             </button>
           </div>
 
@@ -712,7 +727,7 @@ export default function PenilaianPage() {
                   disabled={saving}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 text-white font-black py-1.5 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer shrink-0"
                 >
-                  <span>💾</span>
+                  <Save className="w-4 h-4" />
                   <span>{saving ? 'Menyimpan...' : 'SIMPAN NILAI SISWA'}</span>
                 </button>
               )}
@@ -814,10 +829,10 @@ export default function PenilaianPage() {
 
                           <div className="flex items-center justify-between text-[10px]">
                             <span className={`font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-950'}`}>
-                              📖 {item.mata_pelajaran}
+                              <BookOpen className="w-4 h-4 inline-block align-middle" /> {item.mata_pelajaran}
                             </span>
                             <span className={`font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                              📅 {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
+                              <CalendarDays className="w-4 h-4 inline-block align-middle" /> {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
                             </span>
                           </div>
 
@@ -846,7 +861,7 @@ export default function PenilaianPage() {
                               }}
                               className="text-rose-500 hover:text-rose-700 font-bold text-[10px]"
                             >
-                              🗑️ Hapus Nilai
+                              <Trash2 className="w-4 h-4" /> Hapus Nilai
                             </button>
                           </div>
                         </div>
@@ -870,7 +885,7 @@ export default function PenilaianPage() {
           <Link href="/" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base leading-none">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -878,7 +893,7 @@ export default function PenilaianPage() {
             <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base leading-none">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -887,20 +902,20 @@ export default function PenilaianPage() {
             <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base leading-none">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
 
           <Link href="/nilai" className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition">
-            <span className="text-base leading-none">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
           <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base leading-none">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

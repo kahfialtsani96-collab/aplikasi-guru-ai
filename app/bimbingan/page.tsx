@@ -8,6 +8,26 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { getKelasGradeWeight, sortKelas } from '@/lib/utils'
+import {
+  Clock,
+  ClipboardList,
+  NotebookPen,
+  HeartHandshake,
+  History,
+  Save,
+  AlertTriangle,
+  Lightbulb,
+  CalendarDays,
+  Users,
+  GraduationCap,
+  Printer,
+  Star,
+  X,
+  SquareCheckBig,
+  CheckCircle2,
+  Trash2,
+  BookOpen,
+} from 'lucide-react'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -756,7 +776,7 @@ export default function BimbinganWaliPage() {
                   : 'bg-white text-slate-700 border-slate-300'
               }`}
             >
-              <span>🕒</span> Jadwal
+              <Clock className="w-4 h-4" /> Jadwal
             </Link>
             <Link
               href="/absensi"
@@ -766,7 +786,7 @@ export default function BimbinganWaliPage() {
                   : 'bg-white text-slate-700 border-slate-300'
               }`}
             >
-              <span>📋</span> Absensi
+              <ClipboardList className="w-4 h-4" /> Absensi
             </Link>
             <Link
               href="/nilai"
@@ -776,7 +796,7 @@ export default function BimbinganWaliPage() {
                   : 'bg-white text-slate-700 border-slate-300'
               }`}
             >
-              <span>⭐</span> Penilaian
+              <Star className="w-4 h-4" /> Penilaian
             </Link>
             <Link
               href="/jurnal"
@@ -786,13 +806,13 @@ export default function BimbinganWaliPage() {
                   : 'bg-white text-slate-700 border-slate-300'
               }`}
             >
-              <span>📓</span> Jurnal
+              <NotebookPen className="w-4 h-4" /> Jurnal
             </Link>
             <Link
               href="/bimbingan"
               className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1"
             >
-              <span>💖</span> Bimbingan
+              <HeartHandshake className="w-4 h-4" /> Bimbingan
             </Link>
           </div>
         </div>
@@ -815,7 +835,7 @@ export default function BimbinganWaliPage() {
                   : 'text-slate-700'
               }`}
             >
-              <span>💖</span> Catat Kasus
+              <HeartHandshake className="w-4 h-4" /> Catat Kasus
             </button>
             <button
               onClick={() => setActiveTab('rekap')}
@@ -827,7 +847,7 @@ export default function BimbinganWaliPage() {
                   : 'text-slate-700'
               }`}
             >
-              <span>📜</span> Rekap Kasus
+              <History className="w-4 h-4" /> Rekap Kasus
             </button>
           </div>
 
@@ -926,8 +946,8 @@ export default function BimbinganWaliPage() {
                         }}
                         placeholder={
                           selectedSiswaList.length > 0
-                            ? `🔍 Tambah siswa lain... (${selectedSiswaList.length} terpilih: ${selectedSummary.smpCount} SMP, ${selectedSummary.smkCount} SMK)`
-                            : '🔍 Klik untuk pilih 1 atau banyak siswa (SMP / SMK)...'
+                            ? `Tambah siswa lain... (${selectedSiswaList.length} terpilih: ${selectedSummary.smpCount} SMP, ${selectedSummary.smkCount} SMK)`
+                            : 'Klik untuk pilih 1 atau banyak siswa (SMP / SMK)...'
                         }
                         className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none ${
                           isDarkMode
@@ -994,7 +1014,7 @@ export default function BimbinganWaliPage() {
                             onClick={() => setIsDropdownSiswaOpen(false)}
                             className="text-slate-400 hover:text-slate-200 cursor-pointer"
                           >
-                            ✕
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1095,7 +1115,7 @@ export default function BimbinganWaliPage() {
                     rows={2}
                     value={masalah}
                     onChange={(e) => setMasalah(e.target.value)}
-                    placeholder="📝 Deskripsi Permasalahan Siswa..."
+                    placeholder="Deskripsi Permasalahan Siswa..."
                     className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none resize-none ${
                       isDarkMode
                         ? 'bg-slate-800 border-slate-700 text-white'
@@ -1108,7 +1128,7 @@ export default function BimbinganWaliPage() {
                     rows={2}
                     value={solusi}
                     onChange={(e) => setSolusi(e.target.value)}
-                    placeholder="💡 Solusi / Tindak Lanjut Guru..."
+                    placeholder="Solusi / Tindak Lanjut Guru..."
                     className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none resize-none ${
                       isDarkMode
                         ? 'bg-slate-800 border-slate-700 text-white'
@@ -1123,7 +1143,7 @@ export default function BimbinganWaliPage() {
                   disabled={saving || selectedSiswaList.length === 0}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-1.5 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  <span>💾</span>
+                  <Save className="w-4 h-4" />
                   <span>
                     {saving
                       ? 'Menyimpan...'
@@ -1211,7 +1231,7 @@ export default function BimbinganWaliPage() {
                 >
                   <option value="ALL">Status</option>
                   <option value="PROSES">⏳ Proses</option>
-                  <option value="SELESAI">✅ Selesai</option>
+                  <option value="SELESAI">Selesai</option>
                 </select>
 
                 <input
@@ -1248,7 +1268,7 @@ export default function BimbinganWaliPage() {
                           : 'bg-white text-indigo-800 border-indigo-300 hover:bg-indigo-100'
                       }`}
                     >
-                      <span>☑️</span>
+                      <SquareCheckBig className="w-4 h-4" />
                       <span>
                         {isAllDisplayedChecked
                           ? `Batal Semua (${selectedRekapIds.length})`
@@ -1279,7 +1299,7 @@ export default function BimbinganWaliPage() {
                         disabled={bulkProcessing}
                         className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[10px] font-black transition shadow-xs cursor-pointer flex items-center gap-1"
                       >
-                        <span>✅</span>
+                        <CheckCircle2 className="w-4 h-4" />
                         <span>
                           {bulkProcessing
                             ? 'Memproses...'
@@ -1293,7 +1313,7 @@ export default function BimbinganWaliPage() {
                         disabled={bulkProcessing}
                         className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-[10px] font-black transition shadow-xs cursor-pointer flex items-center gap-1"
                       >
-                        <span>🗑️</span>
+                        <Trash2 className="w-4 h-4" />
                         <span>
                           {bulkProcessing
                             ? 'Menghapus...'
@@ -1394,7 +1414,7 @@ export default function BimbinganWaliPage() {
                               isDarkMode ? 'text-slate-200' : 'text-slate-800'
                             }`}
                           >
-                            🚨 {item.masalah}
+                            <AlertTriangle className="w-4 h-4 inline-block align-middle" /> {item.masalah}
                           </p>
 
                           {item.solusi && (
@@ -1403,7 +1423,7 @@ export default function BimbinganWaliPage() {
                                 isDarkMode ? 'text-emerald-400' : 'text-emerald-700'
                               }`}
                             >
-                              💡 {item.solusi}
+                              <Lightbulb className="w-4 h-4 inline-block align-middle" /> {item.solusi}
                             </p>
                           )}
 
@@ -1423,7 +1443,7 @@ export default function BimbinganWaliPage() {
                                 isDarkMode ? 'text-slate-400' : 'text-slate-500'
                               }`}
                             >
-                              📅 {item.tanggal}
+                              <CalendarDays className="w-4 h-4 inline-block align-middle" /> {item.tanggal}
                             </span>
 
                             <div className="flex items-center gap-1">
@@ -1465,7 +1485,7 @@ export default function BimbinganWaliPage() {
                                   className="text-rose-500 hover:text-rose-700 font-bold p-0.5 cursor-pointer"
                                   title="Hapus Satuan"
                                 >
-                                  🗑️
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               )}
                             </div>
@@ -1496,7 +1516,7 @@ export default function BimbinganWaliPage() {
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -1507,7 +1527,7 @@ export default function BimbinganWaliPage() {
                 isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -1519,7 +1539,7 @@ export default function BimbinganWaliPage() {
                 isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -1528,7 +1548,7 @@ export default function BimbinganWaliPage() {
             href="/bimbingan"
             className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition"
           >
-            <span className="text-base leading-none">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
@@ -1538,7 +1558,7 @@ export default function BimbinganWaliPage() {
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

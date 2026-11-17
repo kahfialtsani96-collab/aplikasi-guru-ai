@@ -8,6 +8,29 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import {
+  Users,
+  School,
+  GraduationCap,
+  ClipboardCheck,
+  Sparkles,
+  Pencil,
+  LayoutGrid,
+  BookOpen,
+  FileText,
+  CreditCard,
+  CalendarDays,
+  ClipboardList,
+  NotebookPen,
+  HeartHandshake,
+  FileDown,
+  ArrowRight,
+  Clock,
+  Printer,
+  Sun,
+  Moon,
+  BarChart3,
+} from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
 const getSupabaseUrl = () =>
@@ -301,9 +324,11 @@ export default function DashboardPage() {
                 isDarkMode ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'
               }
             >
-              <span className="text-sm sm:text-base">
-                {isDarkMode ? '☀️' : '🌙'}
-              </span>
+              {isDarkMode ? (
+                <Sun className="w-4 h-4 sm:w-5 sm:h-5" />
+              ) : (
+                <Moon className="w-4 h-4 sm:w-5 sm:h-5" />
+              )}
             </button>
 
             <div
@@ -399,7 +424,7 @@ export default function DashboardPage() {
                     : 'bg-white/80 border-indigo-200 text-indigo-600'
                 }`}
               >
-                👥
+                <Users className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
                 <p
@@ -433,7 +458,7 @@ export default function DashboardPage() {
                     : 'bg-white/80 border-indigo-200 text-indigo-600'
                 }`}
               >
-                🏫
+                <School className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
                 <p
@@ -467,7 +492,7 @@ export default function DashboardPage() {
                     : 'bg-white/80 border-indigo-200 text-indigo-600'
                 }`}
               >
-                👨‍🏫
+                <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
                 <p
@@ -501,7 +526,7 @@ export default function DashboardPage() {
                     : 'bg-white/80 border-indigo-200 text-indigo-600'
                 }`}
               >
-                📋
+                <ClipboardCheck className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
                 <p
@@ -526,7 +551,7 @@ export default function DashboardPage() {
           <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl space-y-4 sm:space-y-6 relative overflow-hidden border border-emerald-700/50">
             <div className="inline-flex items-center gap-2 bg-amber-400 text-slate-950 text-[10px] sm:text-[11px] font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-md">
               <span>DEEP LEARNING AI PRO</span>
-              <span>✨</span>
+              <Sparkles className="w-3.5 h-3.5" />
             </div>
 
             <div className="space-y-2 max-w-2xl">
@@ -545,7 +570,7 @@ export default function DashboardPage() {
                 href="/ai"
                 className="inline-flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl text-xs transition shadow-lg cursor-pointer"
               >
-                <span>✏️</span>
+                <Pencil className="w-4 h-4" />
                 <span>Buka Modul Ajar AI</span>
               </Link>
             </div>
@@ -559,7 +584,7 @@ export default function DashboardPage() {
                   isDarkMode ? 'text-white' : 'text-slate-900'
                 }`}
               >
-                <span className="text-indigo-500">🔲</span> Akses Cepat Modul
+                <LayoutGrid className="w-4 h-4 text-indigo-500" /> Akses Cepat Modul
                 &amp; Menu Administrasi Guru
               </h3>
             </div>
@@ -581,7 +606,7 @@ export default function DashboardPage() {
                           : 'bg-white/80 border-indigo-200 text-indigo-700'
                       }`}
                     >
-                      🏫
+                      <School className="w-5 h-5" />
                     </div>
                     <span
                       className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -619,7 +644,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <span>Buka Fitur</span>
-                    <span>➔</span>
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               )}
@@ -640,7 +665,7 @@ export default function DashboardPage() {
                           : 'bg-white/80 border-indigo-200 text-indigo-700'
                       }`}
                     >
-                      👥
+                      <Users className="w-5 h-5" />
                     </div>
                     <span
                       className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -678,7 +703,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <span>Buka Fitur</span>
-                    <span>➔</span>
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               )}
@@ -699,7 +724,7 @@ export default function DashboardPage() {
                           : 'bg-white/80 border-indigo-200 text-indigo-700'
                       }`}
                     >
-                      📖
+                      <BookOpen className="w-5 h-5" />
                     </div>
                     <span
                       className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -737,7 +762,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <span>Buka Fitur</span>
-                    <span>➔</span>
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               )}
@@ -758,7 +783,7 @@ export default function DashboardPage() {
                           : 'bg-white/80 border-indigo-200 text-indigo-700'
                       }`}
                     >
-                      📑
+                      <FileText className="w-5 h-5" />
                     </div>
                     <span
                       className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -796,7 +821,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <span>Buka Fitur</span>
-                    <span>➔</span>
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               )}
@@ -817,7 +842,7 @@ export default function DashboardPage() {
                           : 'bg-white/80 border-indigo-200 text-indigo-700'
                       }`}
                     >
-                      🎴
+                      <CreditCard className="w-5 h-5" />
                     </div>
                     <span
                       className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -855,7 +880,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <span>Buka Fitur</span>
-                    <span>➔</span>
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               )}
@@ -875,7 +900,7 @@ export default function DashboardPage() {
                         : 'bg-white/80 border-indigo-200 text-indigo-700'
                     }`}
                   >
-                    📅
+                    <CalendarDays className="w-5 h-5" />
                   </div>
                   <span
                     className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -913,7 +938,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   <span>Buka Fitur</span>
-                  <span>➔</span>
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
 
@@ -932,7 +957,7 @@ export default function DashboardPage() {
                         : 'bg-white/80 border-indigo-200 text-indigo-700'
                     }`}
                   >
-                    📋
+                    <ClipboardList className="w-5 h-5" />
                   </div>
                   <span
                     className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -970,7 +995,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   <span>Buka Fitur</span>
-                  <span>➔</span>
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
 
@@ -989,7 +1014,7 @@ export default function DashboardPage() {
                         : 'bg-white/80 border-indigo-200 text-indigo-700'
                     }`}
                   >
-                    🎓
+                    <BarChart3 className="w-5 h-5" />
                   </div>
                   <span
                     className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -1027,7 +1052,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   <span>Buka Fitur</span>
-                  <span>➔</span>
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
 
@@ -1046,7 +1071,7 @@ export default function DashboardPage() {
                         : 'bg-white/80 border-indigo-200 text-indigo-700'
                     }`}
                   >
-                    📓
+                    <NotebookPen className="w-5 h-5" />
                   </div>
                   <span
                     className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -1084,7 +1109,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   <span>Buka Fitur</span>
-                  <span>➔</span>
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
 
@@ -1104,7 +1129,7 @@ export default function DashboardPage() {
                           : 'bg-white/80 border-indigo-200 text-indigo-700'
                       }`}
                     >
-                      💖
+                      <HeartHandshake className="w-5 h-5" />
                     </div>
                     <span
                       className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -1142,7 +1167,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <span>Buka Fitur</span>
-                    <span>➔</span>
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               )}
@@ -1162,7 +1187,7 @@ export default function DashboardPage() {
                         : 'bg-white/80 border-indigo-200 text-indigo-700'
                     }`}
                   >
-                    📄
+                    <FileDown className="w-5 h-5" />
                   </div>
                   <span
                     className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
@@ -1200,7 +1225,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   <span>Buka Fitur</span>
-                  <span>➔</span>
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
             </div>
@@ -1246,7 +1271,7 @@ export default function DashboardPage() {
             href="/"
             className="flex flex-col items-center gap-1 text-xs font-bold text-indigo-500 transition"
           >
-            <span className="text-lg">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -1259,7 +1284,7 @@ export default function DashboardPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-lg">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -1273,7 +1298,7 @@ export default function DashboardPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-lg">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -1286,7 +1311,7 @@ export default function DashboardPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-lg">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
@@ -1298,7 +1323,7 @@ export default function DashboardPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-lg">✨</span>
+            <Sparkles className="w-5 h-5" />
             <span>AI Tools</span>
           </Link>
 
@@ -1310,7 +1335,7 @@ export default function DashboardPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-lg">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { Search, ClipboardList } from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
 const getSupabaseUrl = () =>
@@ -99,7 +100,7 @@ export default function CekStrukturPage() {
     <div className="min-h-screen bg-slate-900 text-slate-100 p-6 font-sans">
       <div className="max-w-5xl mx-auto space-y-6">
         <div className="border-b border-slate-700 pb-4">
-          <h1 className="text-xl font-bold text-emerald-400">🔍 Inspektur Kolom Database Supabase</h1>
+          <h1 className="text-xl font-bold text-emerald-400 inline-flex items-center gap-2"><Search className="w-6 h-6" /> Inspektur Kolom Database Supabase</h1>
           <p className="text-xs text-slate-400 mt-1">
             Halaman ini menampilkan seluruh nama tabel dan struktur kolom yang tersimpan di Supabase Anda.
           </p>
@@ -118,7 +119,7 @@ export default function CekStrukturPage() {
               >
                 <div className="flex items-center justify-between border-b border-slate-700 pb-2">
                   <h3 className="font-extrabold text-sm text-indigo-400">
-                    📋 Tabel: <span className="text-white font-mono">{item.tableName}</span>
+                    <ClipboardList className="w-4 h-4 inline-block align-middle" /> Tabel: <span className="text-white font-mono">{item.tableName}</span>
                   </h3>
                   <span className="text-[10px] bg-slate-700 text-slate-300 font-extrabold px-2 py-0.5 rounded-md">
                     {item.columns.length} Kolom
@@ -146,7 +147,7 @@ export default function CekStrukturPage() {
                     {item.sampleRow && (
                       <details className="mt-2 text-xs">
                         <summary className="cursor-pointer text-slate-400 hover:text-white font-bold select-none">
-                          🔍 Lihat Contoh Data (JSON)
+                          <Search className="w-4 h-4 inline-block align-middle" /> Lihat Contoh Data (JSON)
                         </summary>
                         <pre className="mt-2 p-2.5 bg-slate-950 rounded-xl font-mono text-[11px] text-slate-300 overflow-x-auto border border-slate-800">
                           {JSON.stringify(item.sampleRow, null, 2)}

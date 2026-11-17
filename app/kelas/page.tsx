@@ -8,6 +8,19 @@ import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { sortKelas } from '@/lib/utils'
+import {
+  School,
+  ClipboardList,
+  RefreshCw,
+  UserRound,
+  Trash2,
+  Clock,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Printer,
+  Pencil,
+} from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
 const getSupabaseUrl = () =>
@@ -276,7 +289,7 @@ export default function KelolaKelasPage() {
             }`}>
               <div className="space-y-4">
                 <div className={`flex items-center gap-2 border-b pb-2.5 ${isDarkMode ? 'border-slate-800' : 'border-emerald-300/80'}`}>
-                  <span className="text-emerald-500 text-base">🏫</span>
+                  <School className="w-4 h-4 text-emerald-500" />
                   <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     {editingId ? 'Edit Data Rombel' : 'Tambah Rombel Kelas'}
                   </h3>
@@ -361,7 +374,7 @@ export default function KelolaKelasPage() {
             }`}>
               <div className={`flex items-center justify-between border-b pb-2.5 shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-emerald-300/80'}`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-emerald-500 text-base">📋</span>
+                  <ClipboardList className="w-4 h-4 text-emerald-500" />
                   <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Daftar Rombel SMP Muna Mustofa</h3>
                 </div>
                 <button
@@ -372,7 +385,7 @@ export default function KelolaKelasPage() {
                       : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
                   }`}
                 >
-                  🔄 Refresh Data
+                  <RefreshCw className="w-4 h-4" /> Refresh Data
                 </button>
               </div>
 
@@ -405,7 +418,7 @@ export default function KelolaKelasPage() {
                                   ? 'bg-emerald-950 text-emerald-300 border-emerald-800' 
                                   : 'bg-emerald-100 text-emerald-900 border-emerald-200'
                               }`}>
-                                👤 {k.nama_wali}
+                                <UserRound className="w-4 h-4 inline-block align-middle" /> {k.nama_wali}
                               </span>
                             ) : (
                               <span className={`italic text-[11px] ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>(Belum Ditentukan)</span>
@@ -417,14 +430,14 @@ export default function KelolaKelasPage() {
                               className="bg-amber-50 text-amber-700 hover:bg-amber-100 p-1.5 rounded-lg border border-amber-200 transition cursor-pointer"
                               title="Edit Kelas"
                             >
-                              ✏️
+                              <Pencil className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(k.id)}
                               className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
                               title="Hapus Kelas"
                             >
-                              🗑️
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
@@ -458,7 +471,7 @@ export default function KelolaKelasPage() {
           <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -466,7 +479,7 @@ export default function KelolaKelasPage() {
             <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -475,7 +488,7 @@ export default function KelolaKelasPage() {
             <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -483,14 +496,14 @@ export default function KelolaKelasPage() {
           <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
           <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

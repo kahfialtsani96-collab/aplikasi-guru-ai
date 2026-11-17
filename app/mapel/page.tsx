@@ -7,6 +7,16 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import {
+  RefreshCw,
+  Trash2,
+  Clock,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Printer,
+  Pencil,
+} from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
 const getSupabaseUrl = () =>
@@ -465,7 +475,7 @@ export default function KelolaMapelPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="🔍 Cari Kode, Nama Mapel, atau Kelompok..."
+                  placeholder="Cari Kode, Nama Mapel, atau Kelompok..."
                   className={`w-full border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                     isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-400' : 'bg-white border-slate-300 text-slate-900'
                   }`}
@@ -480,7 +490,7 @@ export default function KelolaMapelPage() {
                     : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
                 }`}
               >
-                🔄 Refresh Data
+                <RefreshCw className="w-4 h-4" /> Refresh Data
               </button>
             </div>
 
@@ -536,14 +546,14 @@ export default function KelolaMapelPage() {
                             className="bg-amber-50 text-amber-700 hover:bg-amber-100 p-1.5 rounded-lg border border-amber-200 transition cursor-pointer"
                             title="Edit Mapel"
                           >
-                            ✏️
+                            <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(item.id)}
                             className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200 transition cursor-pointer"
                             title="Hapus Mapel"
                           >
-                            🗑️
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
@@ -578,7 +588,7 @@ export default function KelolaMapelPage() {
           <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -586,7 +596,7 @@ export default function KelolaMapelPage() {
             <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -595,7 +605,7 @@ export default function KelolaMapelPage() {
             <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -603,14 +613,14 @@ export default function KelolaMapelPage() {
           <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-bold transition ${
             isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
           }`}>
-            <span className="text-base">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
           <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

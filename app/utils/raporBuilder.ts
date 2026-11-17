@@ -469,7 +469,7 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
 
   // Kop Surat Halaman 3 (SMK fallback ke header teks resmi jika kop-smk.png belum tersedia)
   const kopRaporHtml = !isSmk
-    ? `<img src="${originUrl}/kop-surat.png" alt="Kop Surat SMP" style="width: 100%; max-height: 110px; object-fit: contain;" />`
+    ? `<img src="${originUrl}/kop-surat.png" alt="Kop Surat SMP" style="width: 100%; height: auto; display: block;" />`
     : `
       <div style="border-bottom: 3px double #000; padding-bottom: 6px; margin-bottom: 4px; text-align: center;">
         <p style="margin: 0; font-size: 10pt; font-weight: bold; letter-spacing: 0.5px;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>

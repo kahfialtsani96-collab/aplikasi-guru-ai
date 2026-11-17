@@ -8,6 +8,15 @@ import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { sortKelas } from '@/lib/utils'
+import {
+  Trash2,
+  Clock,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Printer,
+  Pencil,
+} from 'lucide-react'
 
 // Inisialisasi Supabase Client yang aman dari Prerender/SSG Vercel
 const getSupabaseUrl = () => {
@@ -404,7 +413,7 @@ export default function MasterSiswaPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="🔍 Cari NISN atau Nama Siswa..."
+                  placeholder="Cari NISN atau Nama Siswa..."
                   className={`w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-600 ${
                     isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-400' : 'bg-white border-slate-300 text-slate-900'
                   }`}
@@ -500,7 +509,7 @@ export default function MasterSiswaPage() {
                             : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
                         }`}
                       >
-                        ✏️ Edit
+                        <Pencil className="w-4 h-4" /> Edit
                       </button>
                       <button
                         onClick={() => handleDelete(siswa.id)}
@@ -510,7 +519,7 @@ export default function MasterSiswaPage() {
                             : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
                         }`}
                       >
-                        🗑️ Hapus
+                        <Trash2 className="w-4 h-4" /> Hapus
                       </button>
                     </div>
                   </div>
@@ -562,14 +571,14 @@ export default function MasterSiswaPage() {
                             className="bg-amber-50 text-amber-700 hover:bg-amber-100 p-1 rounded-lg border border-amber-200 transition cursor-pointer"
                             title="Edit Siswa"
                           >
-                            ✏️
+                            <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(siswa.id)}
                             className="bg-rose-50 text-rose-600 hover:bg-rose-100 p-1 rounded-lg border border-rose-200 transition cursor-pointer"
                             title="Hapus Siswa"
                           >
-                            🗑️
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
@@ -604,14 +613,14 @@ export default function MasterSiswaPage() {
           <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
           {isOperator && (
             <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-bold transition ${
               isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
             }`}>
-              <span className="text-base">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -619,20 +628,20 @@ export default function MasterSiswaPage() {
             <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
           <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
           <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

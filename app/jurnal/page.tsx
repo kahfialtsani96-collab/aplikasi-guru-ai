@@ -8,6 +8,23 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { sortKelas } from '@/lib/utils'
+import {
+  Clock,
+  ClipboardList,
+  NotebookPen,
+  HeartHandshake,
+  History,
+  Timer,
+  RefreshCw,
+  Save,
+  CalendarDays,
+  Users,
+  GraduationCap,
+  Printer,
+  BookOpen,
+  Trash2,
+  Star,
+} from 'lucide-react'
 
 // Helper instansiasi Supabase aman untuk SSG Vercel
 const getSupabaseUrl = () => {
@@ -620,26 +637,26 @@ export default function AgendaMengajarPage() {
             <Link href="/jadwal" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
               isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
             }`}>
-              <span>🕒</span> Jadwal
+              <Clock className="w-4 h-4" /> Jadwal
             </Link>
             <Link href="/absensi" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
               isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
             }`}>
-              <span>📋</span> Absensi
+              <ClipboardList className="w-4 h-4" /> Absensi
             </Link>
             <Link href="/nilai" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
               isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
             }`}>
-              <span>⭐</span> Penilaian
+              <Star className="w-4 h-4" /> Penilaian
             </Link>
             <Link href="/jurnal" className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1">
-              <span>📓</span> Jurnal
+              <NotebookPen className="w-4 h-4" /> Jurnal
             </Link>
             {canAccessBimbingan && (
               <Link href="/bimbingan" className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
                 isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-700 border-slate-300'
               }`}>
-                <span>💖</span> Bimbingan
+                <HeartHandshake className="w-4 h-4" /> Bimbingan
               </Link>
             )}
           </div>
@@ -660,7 +677,7 @@ export default function AgendaMengajarPage() {
                   : isDarkMode ? 'text-slate-400' : 'text-slate-700'
               }`}
             >
-              <span>📋</span> Input Agenda
+              <ClipboardList className="w-4 h-4" /> Input Agenda
             </button>
             <button
               onClick={() => setActiveTab('rekap')}
@@ -670,7 +687,7 @@ export default function AgendaMengajarPage() {
                   : isDarkMode ? 'text-slate-400' : 'text-slate-700'
               }`}
             >
-              <span>📜</span> Riwayat &amp; Rekap
+              <History className="w-4 h-4" /> Riwayat &amp; Rekap
             </button>
           </div>
 
@@ -764,7 +781,7 @@ export default function AgendaMengajarPage() {
                       required
                     >
                       <option value="">-- Kelas --</option>
-                      <option value="GABUNGAN">⭐ Gabungan (Ekskul)</option>
+                      <option value="GABUNGAN">Gabungan (Ekskul)</option>
                       {kelasList.map((k) => (
                         <option key={k.id} value={k.id}>{k.nama}</option>
                       ))}
@@ -794,7 +811,7 @@ export default function AgendaMengajarPage() {
                     type="text"
                     value={materi}
                     onChange={(e) => setMateri(e.target.value)}
-                    placeholder="📖 Materi Pembelajaran..."
+                    placeholder="Materi Pembelajaran..."
                     className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                     }`}
@@ -814,8 +831,8 @@ export default function AgendaMengajarPage() {
                           : 'bg-rose-100 text-rose-900 border-rose-300'
                       }`}
                     >
-                      <option value="Terlaksana">🟢 Terlaksana</option>
-                      <option value="Tertunda">🔴 Tertunda</option>
+                      <option value="Terlaksana">Terlaksana</option>
+                      <option value="Tertunda">Tertunda</option>
                     </select>
                   </div>
 
@@ -835,7 +852,7 @@ export default function AgendaMengajarPage() {
                       className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shrink-0 cursor-pointer"
                       title="Refresh Absensi Supabase"
                     >
-                      {loadingAutoAbsen ? '⏳' : '🔄'}
+                      {loadingAutoAbsen ? <Timer className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
@@ -846,7 +863,7 @@ export default function AgendaMengajarPage() {
                   disabled={saving}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 text-white font-black py-1.5 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer mt-1"
                 >
-                  <span>💾</span>
+                  <Save className="w-4 h-4" />
                   <span>{saving ? 'Menyimpan...' : 'SIMPAN JURNAL AGENDA'}</span>
                 </button>
               </form>
@@ -857,7 +874,7 @@ export default function AgendaMengajarPage() {
               }`}>
                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-700/30 shrink-0">
                   <h3 className={`text-[11px] font-black uppercase flex items-center gap-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
-                    <span>📓</span> Agenda Hari Ini ({jurnalList.length})
+                    <NotebookPen className="w-4 h-4" /> Agenda Hari Ini ({jurnalList.length})
                   </h3>
                   <span className="text-[10px] font-mono text-slate-400">{todayStr}</span>
                 </div>
@@ -888,7 +905,7 @@ export default function AgendaMengajarPage() {
                         </div>
 
                         <p className={`text-[11px] font-bold leading-tight ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
-                          📖 {item.materi}
+                          <BookOpen className="w-4 h-4 inline-block align-middle" /> {item.materi}
                         </p>
 
                         <div className="flex items-center justify-between pt-1 border-t border-slate-700/20 text-[10px]">
@@ -910,7 +927,7 @@ export default function AgendaMengajarPage() {
                               className="text-rose-500 hover:text-rose-700 font-bold p-0.5 cursor-pointer"
                               title="Hapus"
                             >
-                              🗑️
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1017,7 +1034,7 @@ export default function AgendaMengajarPage() {
                       >
                         <div className="flex items-center justify-between text-[11px] font-bold">
                           <span className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>
-                            📅 {item.tanggal} ({item.jam_ke})
+                            <CalendarDays className="w-4 h-4 inline-block align-middle" /> {item.tanggal} ({item.jam_ke})
                           </span>
                           <span className={`px-1.5 py-0.2 rounded font-black text-[9px] uppercase ${
                             item.status === 'Terlaksana'
@@ -1033,7 +1050,7 @@ export default function AgendaMengajarPage() {
                         </div>
 
                         <p className={`text-[11px] font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
-                          📖 {item.materi}
+                          <BookOpen className="w-4 h-4 inline-block align-middle" /> {item.materi}
                         </p>
 
                         <div className="flex items-center justify-between pt-1 border-t border-slate-700/20 text-[10px]">
@@ -1044,7 +1061,7 @@ export default function AgendaMengajarPage() {
                             onClick={() => handleDeleteJurnal(item.id)}
                             className="text-rose-500 hover:text-rose-700 font-bold p-0.5 cursor-pointer"
                           >
-                            🗑️
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1067,7 +1084,7 @@ export default function AgendaMengajarPage() {
           <Link href="/" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base leading-none">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -1075,7 +1092,7 @@ export default function AgendaMengajarPage() {
             <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base leading-none">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -1084,20 +1101,20 @@ export default function AgendaMengajarPage() {
             <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-base leading-none">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
 
           <Link href="/jurnal" className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition">
-            <span className="text-base leading-none">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
           <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-base leading-none">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

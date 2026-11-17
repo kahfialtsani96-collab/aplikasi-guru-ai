@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import { FileText, Printer, Trash2, Pencil } from 'lucide-react'
 
 const getSupabaseUrl = () => (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co').replace(/['"]/g, '').trim()
 const getSupabaseAnonKey = () => (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder').replace(/['"]/g, '').trim()
@@ -544,6 +545,10 @@ export default function AdministrasiTUPage() {
             * { box-sizing: border-box; }
             body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; padding: 0; }
           </style>
+        <style>
+          @page { margin: 0; }
+          body { padding: 8mm 15mm !important; }
+        </style>
         </head>
         <body>
           ${htmlContent}
@@ -639,7 +644,7 @@ export default function AdministrasiTUPage() {
               <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
                 <div className="flex items-center justify-between border-b pb-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-indigo-500 text-base">📑</span>
+                    <FileText className="w-4 h-4 text-indigo-500" />
                     <h3 className={`font-extrabold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                       {editingId ? 'Edit Arsip Surat' : 'Form Parameter Surat'}
                     </h3>
@@ -836,7 +841,7 @@ export default function AdministrasiTUPage() {
                   onClick={() => handlePrintSurat()}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-extrabold text-xs shadow-md transition flex items-center gap-1"
                 >
-                  <span>🖨️</span>
+                  <Printer className="w-4 h-4" />
                   <span>Cetak PDF</span>
                 </button>
                 {editingId && (
@@ -856,8 +861,8 @@ export default function AdministrasiTUPage() {
               <div className="flex-1 border rounded-xl p-4 bg-white text-black shadow-inner overflow-y-auto max-h-[60vh]">
                 <div className="flex items-center justify-between border-b pb-2 mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">📄 Live Preview (Dapat Di-edit Langsung)</span>
-                    <span className="text-[9px] text-amber-600 font-bold">✏️ Klik teks di bawah untuk edit manual!</span>
+                    <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded"><FileText className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Live Preview (Dapat Di-edit Langsung)</span>
+                    <span className="text-[9px] text-amber-600 font-bold"><Pencil className="w-3.5 h-3.5 inline-block align-middle" /> Klik teks di bawah untuk edit manual!</span>
                   </div>
                   <div className="flex items-center gap-3 text-xs font-bold">
                     <label className="flex items-center gap-1 cursor-pointer select-none">
@@ -889,7 +894,7 @@ export default function AdministrasiTUPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Cari Arsip..."
+                    placeholder="Cari Arsip..."
                     className="border rounded-lg px-2 py-0.5 text-xs font-bold bg-white dark:bg-slate-800"
                   />
                 </div>
@@ -911,9 +916,9 @@ export default function AdministrasiTUPage() {
                           <td className="p-2 font-semibold">{s.jenis_surat}</td>
                           <td className="p-2 font-bold">{s.penerima}</td>
                           <td className="p-2 text-center space-x-1 whitespace-nowrap">
-                            <button onClick={() => handlePrintSurat(s)} className="px-2 py-0.5 text-[10px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold rounded">🖨️ Cetak</button>
-                            <button onClick={() => handleEdit(s)} className="px-2 py-0.5 text-[10px] bg-amber-50 border border-amber-200 text-amber-700 font-bold rounded">✏️ Edit</button>
-                            <button onClick={() => handleDelete(s.id)} className="px-2 py-0.5 text-[10px] bg-rose-50 border border-rose-200 text-rose-600 font-bold rounded">🗑️</button>
+                            <button onClick={() => handlePrintSurat(s)} className="px-2 py-0.5 text-[10px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold rounded"><Printer className="w-4 h-4 inline-block align-middle" /> Cetak</button>
+                            <button onClick={() => handleEdit(s)} className="px-2 py-0.5 text-[10px] bg-amber-50 border border-amber-200 text-amber-700 font-bold rounded"><Pencil className="w-4 h-4 inline-block align-middle" /> Edit</button>
+                            <button onClick={() => handleDelete(s.id)} className="px-2 py-0.5 text-[10px] bg-rose-50 border border-rose-200 text-rose-600 font-bold rounded"><Trash2 className="w-4 h-4" /></button>
                           </td>
                         </tr>
                       ))}

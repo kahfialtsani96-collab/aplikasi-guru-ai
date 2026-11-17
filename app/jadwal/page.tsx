@@ -8,6 +8,28 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { sortKelas } from '@/lib/utils'
+import {
+  Clock,
+  ClipboardList,
+  NotebookPen,
+  HeartHandshake,
+  Radio,
+  History,
+  Printer,
+  Star,
+  Hand,
+  CalendarDays,
+  School,
+  Flame,
+  CheckCircle2,
+  BarChart3,
+  Trash2,
+  Users,
+  GraduationCap,
+  BookOpen,
+  UserRound,
+  Pencil,
+} from 'lucide-react'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
 const getSupabaseUrl = () => {
@@ -1019,7 +1041,7 @@ export default function JadwalMengajarPage() {
                 href="/jadwal"
                 className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1"
               >
-                <span>🕒</span> Jadwal
+                <Clock className="w-4 h-4" /> Jadwal
               </Link>
               <Link
                 href="/absensi"
@@ -1029,7 +1051,7 @@ export default function JadwalMengajarPage() {
                     : 'bg-white text-slate-700 border-slate-300'
                 }`}
               >
-                <span>📋</span> Absensi
+                <ClipboardList className="w-4 h-4" /> Absensi
               </Link>
               <Link
                 href="/nilai"
@@ -1039,7 +1061,7 @@ export default function JadwalMengajarPage() {
                     : 'bg-white text-slate-700 border-slate-300'
                 }`}
               >
-                <span>⭐</span> Penilaian
+                <Star className="w-4 h-4" /> Penilaian
               </Link>
               <Link
                 href="/jurnal"
@@ -1049,7 +1071,7 @@ export default function JadwalMengajarPage() {
                     : 'bg-white text-slate-700 border-slate-300'
                 }`}
               >
-                <span>📓</span> Jurnal
+                <NotebookPen className="w-4 h-4" /> Jurnal
               </Link>
               {canAccessBimbingan && (
                 <Link
@@ -1060,7 +1082,7 @@ export default function JadwalMengajarPage() {
                       : 'bg-white text-slate-700 border-slate-300'
                   }`}
                 >
-                  <span>💖</span> Bimbingan
+                  <HeartHandshake className="w-4 h-4" /> Bimbingan
                 </Link>
               )}
             </div>
@@ -1072,7 +1094,7 @@ export default function JadwalMengajarPage() {
                   isDarkMode ? 'text-emerald-400' : 'text-emerald-800'
                 }`}
               >
-                📡 Pantau Absen:
+                <Radio className="w-4 h-4 inline-block align-middle" /> Pantau Absen:
               </span>
               <input
                 type="date"
@@ -1133,7 +1155,7 @@ export default function JadwalMengajarPage() {
                     : 'text-slate-700'
                 }`}
               >
-                <span>🕒</span> {isOperator ? 'Input & Kelola' : 'Jadwal Mengajar'}
+                <Clock className="w-4 h-4" /> {isOperator ? 'Input & Kelola' : 'Jadwal Mengajar'}
               </button>
               <button
                 onClick={() => setActiveTab('rekap')}
@@ -1145,7 +1167,7 @@ export default function JadwalMengajarPage() {
                     : 'text-slate-700'
                 }`}
               >
-                <span>📜</span> Rekap &amp; Cetak
+                <History className="w-4 h-4" /> Rekap &amp; Cetak
               </button>
             </div>
 
@@ -1154,7 +1176,7 @@ export default function JadwalMengajarPage() {
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-2.5 py-1 rounded-lg text-[10px] flex items-center justify-center gap-1 transition shadow-xs cursor-pointer shrink-0"
               title="Cetak Jadwal PDF"
             >
-              <span>🖨️</span> Cetak
+              <Printer className="w-4 h-4" /> Cetak
             </button>
           </div>
 
@@ -1178,7 +1200,7 @@ export default function JadwalMengajarPage() {
                 >
                   {editingJadwalId && (
                     <div className="flex items-center justify-between text-[10px] font-black text-amber-500 px-0.5">
-                      <span>✏️ MODE EDIT JADWAL #{editingJadwalId}</span>
+                      <span><Pencil className="w-4 h-4" /> MODE EDIT JADWAL #{editingJadwalId}</span>
                       <button
                         type="button"
                         onClick={resetFormInput}
@@ -1305,7 +1327,7 @@ export default function JadwalMengajarPage() {
                         <option value="">-- Pilih Kelas SMP --</option>
                         {!editingJadwalId && kelasList.length > 0 && (
                           <option value="ALL">
-                            🌟 Semua Kelas Serentak ({kelasList.length} Kelas)
+                            <Star className="w-4 h-4 inline-block align-middle" /> Semua Kelas Serentak ({kelasList.length} Kelas)
                           </option>
                         )}
                         {kelasList.map((k) => (
@@ -1351,9 +1373,9 @@ export default function JadwalMengajarPage() {
                       {isSubmitting
                         ? 'Menyimpan...'
                         : editingJadwalId
-                        ? '💾 SIMPAN PERUBAHAN JADWAL'
+                        ? 'SIMPAN PERUBAHAN JADWAL'
                         : selectedKelasId === 'ALL'
-                        ? `🌟 SIMPAN SERENTAK KE ${kelasList.length} KELAS`
+                        ? `SIMPAN SERENTAK KE ${kelasList.length} KELAS`
                         : '+ SIMPAN JADWAL'}
                     </span>
                   </button>
@@ -1374,7 +1396,7 @@ export default function JadwalMengajarPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-[11px] font-black text-indigo-400">
-                        👋 {userDisplayName}
+                        <Hand className="w-4 h-4 inline-block align-middle" /> {userDisplayName}
                       </p>
                       <p
                         className={`text-[10px] font-semibold ${
@@ -1405,7 +1427,7 @@ export default function JadwalMengajarPage() {
                             : 'text-slate-600'
                         }`}
                       >
-                        📅 Jadwal Saya
+                        <CalendarDays className="w-4 h-4" /> Jadwal Saya
                       </button>
                       <button
                         type="button"
@@ -1418,7 +1440,7 @@ export default function JadwalMengajarPage() {
                             : 'text-slate-600'
                         }`}
                       >
-                        🏫 Semua Kelas
+                        <School className="w-4 h-4" /> Semua Kelas
                       </button>
                     </div>
                   </div>
@@ -1433,7 +1455,7 @@ export default function JadwalMengajarPage() {
                       }`}
                     >
                       <p className="text-[10px] font-black uppercase text-amber-500 mb-1">
-                        🔥 Jadwal {selectedDateHariName} ({tanggalCekAbsen}) •{' '}
+                        <Flame className="w-4 h-4 inline-block align-middle" /> Jadwal {selectedDateHariName} ({tanggalCekAbsen}) •{' '}
                         {myTodayJadwal.length} Sesi
                       </p>
                       {myTodayJadwal.length === 0 ? (
@@ -1499,13 +1521,13 @@ export default function JadwalMengajarPage() {
                                         : 'bg-amber-600 hover:bg-amber-700'
                                     }`}
                                   >
-                                    {sudahAbsen ? '✅ Lihat Absen' : '📋 Absen'}
+                                    {sudahAbsen ? (<><CheckCircle2 className="w-4 h-4" /> Lihat Absen</>) : (<><ClipboardList className="w-4 h-4" /> Absen</>)}
                                   </Link>
                                   <Link
                                     href="/jurnal"
                                     className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black"
                                   >
-                                    📓 Jurnal
+                                    <NotebookPen className="w-4 h-4" /> Jurnal
                                   </Link>
                                 </div>
                               </div>
@@ -1534,7 +1556,7 @@ export default function JadwalMengajarPage() {
                         isDarkMode ? 'text-indigo-300' : 'text-indigo-900'
                       }`}
                     >
-                      <span>🕒</span>{' '}
+                      <Clock className="w-4 h-4" />{' '}
                       {isOperator || guruScope === 'all'
                         ? 'Daftar Jadwal SMP'
                         : 'Jadwal Mingguan Saya'}{' '}
@@ -1576,7 +1598,7 @@ export default function JadwalMengajarPage() {
                           : 'text-slate-600'
                       }`}
                     >
-                      📋 Mode List
+                      <ClipboardList className="w-4 h-4" /> Mode List
                     </button>
                     <button
                       type="button"
@@ -1589,7 +1611,7 @@ export default function JadwalMengajarPage() {
                           : 'text-slate-600'
                       }`}
                     >
-                      📊 Matriks Kelas
+                      <BarChart3 className="w-4 h-4" /> Matriks Kelas
                     </button>
                   </div>
                 </div>
@@ -1688,7 +1710,7 @@ export default function JadwalMengajarPage() {
                           type="text"
                           value={searchMapelQuery}
                           onChange={(e) => setSearchMapelQuery(e.target.value)}
-                          placeholder="🔍 Cari mapel / kelas..."
+                          placeholder="Cari mapel / kelas..."
                           className={`w-full border rounded-lg px-2 py-1 text-[10px] font-semibold focus:outline-none ${
                             isDarkMode
                               ? 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-500'
@@ -1750,7 +1772,7 @@ export default function JadwalMengajarPage() {
                                   {isCollapsed ? '▶' : '▼'}
                                 </span>
                                 <span className="text-[11px] font-black uppercase tracking-wide">
-                                  📅 {group.hari}
+                                  <CalendarDays className="w-4 h-4 inline-block align-middle" /> {group.hari}
                                 </span>
                                 {isSelectedDateDay && (
                                   <span className="px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 text-[8px] font-black">
@@ -1849,7 +1871,7 @@ export default function JadwalMengajarPage() {
                                             isDarkMode ? 'text-slate-300' : 'text-slate-700'
                                           }`}
                                         >
-                                          👤 {getGuruDisplayName(item.guru_email)}
+                                          <UserRound className="w-4 h-4 inline-block align-middle" /> {getGuruDisplayName(item.guru_email)}
                                         </span>
 
                                         <div className="flex items-center gap-2 shrink-0">
@@ -1871,7 +1893,7 @@ export default function JadwalMengajarPage() {
                                                 className="px-1.5 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 font-bold cursor-pointer"
                                                 title="Edit Jadwal"
                                               >
-                                                ✏️
+                                                <Pencil className="w-4 h-4" />
                                               </button>
                                               <button
                                                 type="button"
@@ -1879,7 +1901,7 @@ export default function JadwalMengajarPage() {
                                                 className="px-1.5 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 font-bold cursor-pointer"
                                                 title="Hapus Jadwal"
                                               >
-                                                🗑️
+                                                <Trash2 className="w-4 h-4" />
                                               </button>
                                             </div>
                                           )}
@@ -2244,14 +2266,14 @@ export default function JadwalMengajarPage() {
                                 isDarkMode ? 'text-slate-400' : 'text-slate-600'
                               }`}
                             >
-                              👤 {getGuruDisplayName(item.guru_email)}
+                              <UserRound className="w-4 h-4 inline-block align-middle" /> {getGuruDisplayName(item.guru_email)}
                             </span>
                             {isOperator && (
                               <button
                                 onClick={() => handleDelete(item.id)}
                                 className="text-rose-500 hover:text-rose-700 font-bold text-[10px] cursor-pointer print:hidden"
                               >
-                                🗑️ Hapus
+                                <Trash2 className="w-4 h-4" /> Hapus
                               </button>
                             )}
                           </div>
@@ -2283,7 +2305,7 @@ export default function JadwalMengajarPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -2296,7 +2318,7 @@ export default function JadwalMengajarPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -2310,7 +2332,7 @@ export default function JadwalMengajarPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -2319,7 +2341,7 @@ export default function JadwalMengajarPage() {
             href="/jadwal"
             className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition"
           >
-            <span className="text-base leading-none">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
@@ -2331,7 +2353,7 @@ export default function JadwalMengajarPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

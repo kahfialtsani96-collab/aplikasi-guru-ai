@@ -23,6 +23,7 @@ import {
   Sparkles,
   BookOpen,
   GraduationCap,
+  Star,
 } from 'lucide-react'
 
 const HARI_AKTIF = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Sabtu', 'Minggu'] as const
@@ -1500,7 +1501,7 @@ export default function SmkJadwalPage() {
                   <option value="">-- Pilih Kelas SMK --</option>
                   {listKelas.length > 0 && (
                     <option value="ALL_CLASSES">
-                      ★ Semua Kelas ({listKelas.map((k) => k.nama_kelas).join(', ')})
+                      <Star className="w-4 h-4" /> Semua Kelas ({listKelas.map((k) => k.nama_kelas).join(', ')})
                     </option>
                   )}
                   {listKelas.map((k) => (

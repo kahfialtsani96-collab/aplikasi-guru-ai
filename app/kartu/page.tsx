@@ -8,6 +8,23 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { sortKelas } from '@/lib/utils'
+import {
+  CreditCard,
+  FileText,
+  Download,
+  Search,
+  Save,
+  UserRound,
+  History,
+  Printer,
+  Clock,
+  Users,
+  BookOpen,
+  Plus,
+  Pencil,
+  X,
+  Sparkles,
+} from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
 const getSupabaseUrl = () =>
@@ -664,6 +681,10 @@ export default function CetakKartuPage() {
             .sign-name { margin: 0; font-size: 6pt; color: #0f172a; }
             .sign-nip { margin: 0; font-size: 5pt; color: #475569; }
           </style>
+        <style>
+          @page { margin: 0; }
+          body { padding: 10mm 12mm !important; }
+        </style>
         </head>
         <body>
           <div class="grid">${cardsHtml}</div>
@@ -756,7 +777,7 @@ export default function CetakKartuPage() {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-emerald-800 text-white rounded-2xl flex items-center justify-center text-lg shadow-xs">
-                    🎴
+                    <CreditCard className="w-4 h-4" />
                   </div>
                   <div>
                     <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Pusat Cetak Kartu Digital</h2>
@@ -780,9 +801,9 @@ export default function CetakKartuPage() {
                     }}
                     className="bg-indigo-600 text-white font-extrabold border border-indigo-700 rounded-xl px-3.5 py-2 text-xs focus:outline-none cursor-pointer shadow-xs"
                   >
-                    <option value="pelajar">🪪 Kartu Tanda Pelajar</option>
-                    <option value="ujian">📝 Kartu Peserta Ujian</option>
-                    <option value="guru">👨‍🏫 Kartu Pegawai / Guru</option>
+                    <option value="pelajar">Kartu Tanda Pelajar</option>
+                    <option value="ujian">Kartu Peserta Ujian</option>
+                    <option value="guru">Kartu Pegawai / Guru</option>
                   </select>
 
                   {jenisKartu === 'ujian' && (
@@ -833,7 +854,7 @@ export default function CetakKartuPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="🔍 Cari..."
+                    placeholder="Cari..."
                     className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600 w-28 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
@@ -844,7 +865,7 @@ export default function CetakKartuPage() {
                     className="bg-amber-600 hover:bg-amber-500 text-white font-extrabold px-3 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1 cursor-pointer"
                     title="Tambah Kartu Susulan Manual"
                   >
-                    <span>➕</span> Kartu
+                    <Plus className="w-4 h-4" /> Kartu
                   </button>
 
                   <button
@@ -852,7 +873,7 @@ export default function CetakKartuPage() {
                     disabled={filteredItems.length === 0}
                     className="bg-blue-700 hover:bg-blue-600 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                   >
-                    <span>📄</span> Word ({filteredItems.length})
+                    <FileText className="w-4 h-4" /> Word ({filteredItems.length})
                   </button>
 
                   <button
@@ -860,7 +881,7 @@ export default function CetakKartuPage() {
                     disabled={filteredItems.length === 0}
                     className="bg-emerald-800 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-2 cursor-pointer"
                   >
-                    <span>📥</span> Cetak ({filteredItems.length})
+                    <Download className="w-4 h-4" /> Cetak ({filteredItems.length})
                   </button>
                 </div>
               </div>
@@ -909,7 +930,7 @@ export default function CetakKartuPage() {
             <div className="flex-1 flex flex-col items-center justify-center py-4">
               {jenisKartu !== 'guru' && !selectedKelasId && cardItems.length === 0 ? (
                 <p className={`text-xs text-center font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                  Silakan pilih kelas di atas atau klik tombol <b>➕ Kartu</b> untuk menambah manual.
+                  Silakan pilih kelas di atas atau klik tombol <b>Kartu</b> untuk menambah manual.
                 </p>
               ) : loading ? (
                 <div className={`flex flex-col items-center gap-2 text-xs font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -959,12 +980,12 @@ export default function CetakKartuPage() {
                             className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500 text-white hover:bg-amber-600 transition"
                             title="Edit Kartu Ini"
                           >
-                            ✏️ Edit
+                            <Pencil className="w-4 h-4" /> Edit
                           </button>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition ${
                             isDarkMode ? 'bg-slate-900 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-700 group-hover:bg-indigo-600 group-hover:text-white'
                           }`}>
-                            🔍 Detail
+                            <Search className="w-4 h-4" /> Detail
                           </span>
                         </div>
                       </div>
@@ -1060,12 +1081,12 @@ export default function CetakKartuPage() {
               }`}
             >
               <div className="flex justify-between items-center border-b pb-3 border-slate-700">
-                <h3 className="font-extrabold text-sm">✏️ Edit Data Kartu</h3>
+                <h3 className="font-extrabold text-sm"><Pencil className="w-4 h-4 inline-block align-middle" /> Edit Data Kartu</h3>
                 <button
                   onClick={() => setEditingItem(null)}
                   className="text-slate-400 hover:text-white"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -1143,7 +1164,7 @@ export default function CetakKartuPage() {
                   onClick={() => handleSaveEdit(editingItem)}
                   className="flex-1 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold py-2.5 rounded-xl text-xs transition cursor-pointer"
                 >
-                  💾 Simpan Perubahan
+                  <Save className="w-4 h-4" /> Simpan Perubahan
                 </button>
                 <button
                   onClick={() => setEditingItem(null)}
@@ -1175,7 +1196,7 @@ export default function CetakKartuPage() {
                   isDarkMode ? 'text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700' : 'text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200'
                 }`}
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
 
               <div className={`flex items-center gap-3 border-b pb-3 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
@@ -1201,7 +1222,7 @@ export default function CetakKartuPage() {
                         : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    🪪 Sisi Depan
+                    <UserRound className="w-4 h-4" /> Sisi Depan
                   </button>
                   <button
                     onClick={() => setModalActiveTab('back')}
@@ -1211,7 +1232,7 @@ export default function CetakKartuPage() {
                         : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    📜 Sisi Belakang
+                    <History className="w-4 h-4" /> Sisi Belakang
                   </button>
                 </div>
               )}
@@ -1365,7 +1386,7 @@ export default function CetakKartuPage() {
                   }}
                   className="flex-1 bg-blue-700 hover:bg-blue-600 text-white font-extrabold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  📄 Export Word
+                  <FileText className="w-4 h-4" /> Export Word
                 </button>
                 <button
                   onClick={() => {
@@ -1374,7 +1395,7 @@ export default function CetakKartuPage() {
                   }}
                   className="flex-1 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  🖨️ Cetak Kartu Ini
+                  <Printer className="w-4 h-4" /> Cetak Kartu Ini
                 </button>
               </div>
             </motion.div>
@@ -1390,33 +1411,33 @@ export default function CetakKartuPage() {
           <Link href="/" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-lg">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
           {isOperator && (
             <Link href="/siswa" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
               isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
             }`}>
-              <span className="text-lg">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
           <Link href="/jadwal" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-lg">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
           <Link href="/ai" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-lg">✨</span>
+            <Sparkles className="w-5 h-5" />
             <span>AI Tools</span>
           </Link>
           <Link href="/laporan" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
             isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
           }`}>
-            <span className="text-lg">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

@@ -4,6 +4,23 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthRole } from '@/hooks/useAuthRole' // Import custom hook role
+import {
+  Clock,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Sparkles,
+  Printer,
+  Heart,
+  FileText,
+  Wand2,
+  Compass,
+  Bot,
+  HelpCircle,
+  Globe,
+  X,
+  ChevronRight,
+} from 'lucide-react'
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -28,7 +45,7 @@ export default function Navbar() {
       badge: 'KBC',
       badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
       desc: 'ACP, TP, ATP, Prota, Prosem, KKTP, Modul, LKPD & Rubrik KBC',
-      icon: '❤️',
+      icon: Heart,
       iconBg: 'bg-[#1e293b]',
       href: '/ai/kbc',
       highlight: false,
@@ -38,7 +55,7 @@ export default function Navbar() {
       badge: 'AI Pro',
       badgeColor: 'bg-amber-400 text-slate-950 font-bold',
       desc: 'Buat RPP & ATP otomatis dengan AI',
-      icon: '📄',
+      icon: FileText,
       iconBg: 'bg-amber-500 text-slate-950 font-bold',
       href: '/ai/perangkat',
       highlight: true,
@@ -48,7 +65,7 @@ export default function Navbar() {
       badge: 'Deep Learning',
       badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
       desc: 'Susun Modul Ajar Deep Learning Kurikulum Merdeka',
-      icon: '🪄',
+      icon: Wand2,
       iconBg: 'bg-[#1e293b]',
       href: '/ai/deep-learning',
       highlight: false,
@@ -58,7 +75,7 @@ export default function Navbar() {
       badge: 'Kokurikuler',
       badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
       desc: 'Perencanaan kokurikuler lintas mapel & dimensi profil',
-      icon: '🧭',
+      icon: Compass,
       iconBg: 'bg-[#1e293b]',
       href: '/ai/kokurikuler',
       highlight: false,
@@ -68,7 +85,7 @@ export default function Navbar() {
       badge: 'Chatbot',
       badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
       desc: 'Tanya jawab & konsultasi materi mengajar',
-      icon: '🤖',
+      icon: Bot,
       iconBg: 'bg-[#1e293b]',
       href: '/ai/chatbot',
       highlight: false,
@@ -78,7 +95,7 @@ export default function Navbar() {
       badge: 'LKPD',
       badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
       desc: 'Buat Lembar Kerja Peserta Didik interaktif',
-      icon: '✨',
+      icon: Sparkles,
       iconBg: 'bg-[#1e293b]',
       href: '/ai/lkpd',
       highlight: false,
@@ -88,7 +105,7 @@ export default function Navbar() {
       badge: 'Ujian',
       badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
       desc: 'Naskah Soal Ujian, LJS, dan Kunci Jawaban Siap Cetak',
-      icon: '❓',
+      icon: HelpCircle,
       iconBg: 'bg-[#1e293b]',
       href: '/ai/soal',
       highlight: false,
@@ -98,7 +115,7 @@ export default function Navbar() {
       badge: 'Multi-Tool',
       badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
       desc: 'Generator Soal, Silabus, Rubrik Asesmen & Media',
-      icon: '🌐',
+      icon: Globe,
       iconBg: 'bg-[#1e293b]',
       href: '/ai/multi',
       highlight: false,
@@ -122,7 +139,7 @@ export default function Navbar() {
               pathname === '/' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            <span className="text-lg">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -134,7 +151,7 @@ export default function Navbar() {
                 pathname === '/siswa' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              <span className="text-lg">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -147,7 +164,7 @@ export default function Navbar() {
                 pathname === '/guru' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              <span className="text-lg">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -159,7 +176,7 @@ export default function Navbar() {
               isAkademikActive ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            <span className="text-lg">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
@@ -173,7 +190,7 @@ export default function Navbar() {
                 : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            <span className="text-lg">✨</span>
+            <Sparkles className="w-5 h-5" />
             <span>AI Tools</span>
           </button>
 
@@ -184,7 +201,7 @@ export default function Navbar() {
               pathname === '/laporan' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            <span className="text-lg">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>
@@ -213,8 +230,8 @@ export default function Navbar() {
 
             <div className="px-6 pb-4 pt-1 bg-[#111c30] border-b border-slate-800/80 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xl font-bold">
-                  ✨
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold">
+                  <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-white text-base">Pilih Tool AI Lengkap</h3>
@@ -225,9 +242,9 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={() => setShowAiModal(false)}
-                className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-lg transition"
+                className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -243,8 +260,8 @@ export default function Navbar() {
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-md ${item.iconBg}`}>
-                      {item.icon}
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-md ${item.iconBg}`}>
+                      <item.icon className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -259,9 +276,7 @@ export default function Navbar() {
                     </div>
                   </div>
 
-                  <span className="text-amber-500 font-bold text-lg group-hover:translate-x-1 transition pr-2">
-                    ›
-                  </span>
+                  <ChevronRight className="w-5 h-5 text-amber-500 group-hover:translate-x-1 transition pr-2 shrink-0" />
                 </div>
               ))}
             </div>

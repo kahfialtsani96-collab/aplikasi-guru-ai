@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { FileEdit, X, Printer, Sparkles, Pencil } from 'lucide-react'
 import {
   generateAiCapaianRapor,
   RaporMapelContextItem,
@@ -136,7 +137,7 @@ export default function RaporPreviewModal({
               )}
             </div>
             <p className="text-[11px] text-amber-500 font-bold mt-0.5">
-              ✏️ Klik langsung pada teks mana saja di dalam kertas rapor untuk mengedit manual,
+              <Pencil className="w-3.5 h-3.5 inline-block align-middle" /> Klik langsung pada teks mana saja di dalam kertas rapor untuk mengedit manual,
               atau gunakan tombol AI untuk mengisi capaian kompetensi otomatis.
             </p>
           </div>
@@ -148,7 +149,7 @@ export default function RaporPreviewModal({
               disabled={isGeneratingAi}
               className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-500 text-white font-black px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
             >
-              <span>✨</span>
+              <Sparkles className="w-4 h-4" />
               <span>
                 {isGeneratingAi
                   ? 'AI Menyusun Capaian...'
@@ -161,7 +162,7 @@ export default function RaporPreviewModal({
               onClick={handlePrintClick}
               className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
-              <span>🖨️</span> Cetak PDF (4 Halaman)
+              <Printer className="w-4 h-4" /> Cetak PDF (4 Halaman)
             </button>
 
             <button
@@ -169,7 +170,7 @@ export default function RaporPreviewModal({
               onClick={handleDownloadWordClick}
               className="bg-sky-600 hover:bg-sky-700 text-white font-black px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
-              <span>📝</span> Unduh Word
+              <FileEdit className="w-4 h-4" /> Unduh Word
             </button>
 
             <button
@@ -177,7 +178,7 @@ export default function RaporPreviewModal({
               onClick={onClose}
               className="bg-rose-600 hover:bg-rose-700 text-white font-black px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
             >
-              ✕ Tutup
+              <X className="w-4 h-4 inline-block align-middle" /> Tutup
             </button>
           </div>
         </div>

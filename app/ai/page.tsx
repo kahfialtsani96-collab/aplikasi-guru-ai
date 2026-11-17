@@ -10,6 +10,42 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import {
+  Clock,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Printer,
+  Save,
+  Download,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  School,
+  Palette,
+  FolderOpen,
+  MessageSquare,
+  Lightbulb,
+  Heart,
+  FileText,
+  Wand2,
+  Compass,
+  Bot,
+  Sparkles,
+  HelpCircle,
+  Globe,
+  ClipboardList,
+  BookMarked,
+  CalendarDays,
+  Medal,
+  NotebookPen,
+  SquareCheckBig,
+  X,
+  Settings,
+  PencilLine,
+  Pencil,
+  CheckCircle2,
+} from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
 const getSupabaseUrl = () =>
@@ -856,7 +892,7 @@ export default function AiToolsPage() {
       title: 'Perangkat Ajar KBC AI',
       subtitle:
         'Generator 9 Paket Perangkat Administrasi Pembelajaran KBC terintegrasi Panca Cinta Kemenag & 10 Nilai PPRA!',
-      badge: '💚 KURIKULUM BERBASIS CINTA (KBC)',
+      badge: 'KURIKULUM BERBASIS CINTA (KBC)',
       buttonText: 'Generate 9 Dokumen KBC',
       bgBanner: 'bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 border-emerald-700/50',
     },
@@ -864,7 +900,7 @@ export default function AiToolsPage() {
       title: 'Generator Perangkat Ajar AI Pro',
       subtitle:
         'Otomatisasi pembuatan RPP, Prota, Prosem, Silabus, dan ATP Kurikulum Merdeka secara praktis.',
-      badge: '📄 AI PRO GENERATOR PERANGKAT',
+      badge: 'AI PRO GENERATOR PERANGKAT',
       buttonText: 'Generate Dokumen Perangkat',
       bgBanner: 'bg-gradient-to-r from-amber-700 via-orange-800 to-amber-950 border-amber-600/50',
     },
@@ -872,7 +908,7 @@ export default function AiToolsPage() {
       title: 'Modul Ajar Deep Learning AI',
       subtitle:
         'Susun skenario Modul Pembelajaran lengkap Rubrik Asesmen & Lembar Pengesahan Akreditasi.',
-      badge: '🪄 DEEP LEARNING AI ENGINE',
+      badge: 'DEEP LEARNING AI ENGINE',
       buttonText: 'Generate Modul Deep Learning',
       bgBanner: 'bg-gradient-to-r from-indigo-800 via-purple-800 to-indigo-950 border-indigo-600/50',
     },
@@ -880,7 +916,7 @@ export default function AiToolsPage() {
       title: 'Modul Kokurikuler AI (P5 / PPRA)',
       subtitle:
         'Perancangan modul projek lintas mata pelajaran, tema P5/PPRA, dimensi profil, dan asesmen.',
-      badge: '🧭 KOKURIKULER & PROJEK P5',
+      badge: 'KOKURIKULER & PROJEK P5',
       buttonText: 'Generate Modul Projek',
       bgBanner: 'bg-gradient-to-r from-sky-800 via-blue-800 to-sky-950 border-sky-600/50',
     },
@@ -888,7 +924,7 @@ export default function AiToolsPage() {
       title: 'Asisten Chatbot Pedagogy AI',
       subtitle:
         'Konsultan pedagogi pintar untuk konsultasi strategi mengajar, penanganan siswa, hingga narasi rapor.',
-      badge: '🤖 ASISTEN GURU VIRTUAL 24/7',
+      badge: 'ASISTEN GURU VIRTUAL 24/7',
       buttonText: 'Kirim Pesan Konsultasi',
       bgBanner: 'bg-gradient-to-r from-purple-800 via-fuchsia-800 to-purple-950 border-purple-600/50',
     },
@@ -896,14 +932,14 @@ export default function AiToolsPage() {
       title: 'Generator LKPD Interaktif AI',
       subtitle:
         'Buat Lembar Kerja Siswa (LKPD) menarik berbasis studi kasus, kearifan lokal, dan HOTS.',
-      badge: '✨ LEMBAR KERJA PESERTA DIDIK',
+      badge: 'LEMBAR KERJA PESERTA DIDIK',
       buttonText: 'Generate LKPD Interaktif',
       bgBanner: 'bg-gradient-to-r from-amber-800 via-yellow-800 to-amber-950 border-amber-600/50',
     },
     soal: {
       title: 'Generator Bank Soal & Ujian AI',
       subtitle: 'Buat naskah ujian SMP & SMK (DKV) format 2 kolom resmi siap cetak.',
-      badge: '❓ BANK SOAL & EVALUASI',
+      badge: 'BANK SOAL & EVALUASI',
       buttonText: 'Generate Paket Ujian',
       bgBanner: 'bg-gradient-to-r from-rose-800 via-red-800 to-rose-950 border-rose-600/50',
     },
@@ -911,33 +947,33 @@ export default function AiToolsPage() {
       title: 'Multi-Tool Generator AI Lainnya',
       subtitle:
         'Kumpulan generator serbaguna: Ide ice breaking, rubrik penilaian, surat wali murid, dll.',
-      badge: '🌐 MULTI-PURPOSE PEDAGOGY',
+      badge: 'MULTI-PURPOSE PEDAGOGY',
       buttonText: 'Generate Media / Rubrik',
       bgBanner: 'bg-gradient-to-r from-teal-800 via-emerald-800 to-teal-950 border-teal-600/50',
     },
   }
 
   const aiToolsNav = [
-    { id: 'kbc', title: 'Perangkat KBC', icon: '💖' },
-    { id: 'perangkat', title: 'Perangkat Umum', icon: '📄' },
-    { id: 'deep-learning', title: 'Deep Learning', icon: '🪄' },
-    { id: 'kokurikuler', title: 'P5 / PPRA', icon: '🧭' },
-    { id: 'chatbot', title: 'Asisten Guru', icon: '🤖' },
-    { id: 'lkpd', title: 'Generator LKPD', icon: '✨' },
-    { id: 'soal', title: 'Bank Soal', icon: '❓' },
-    { id: 'multi', title: 'Multi-Tool AI', icon: '🌐' },
+    { id: 'kbc', title: 'Perangkat KBC', icon: Heart },
+    { id: 'perangkat', title: 'Perangkat Umum', icon: FileText },
+    { id: 'deep-learning', title: 'Deep Learning', icon: Wand2 },
+    { id: 'kokurikuler', title: 'P5 / PPRA', icon: Compass },
+    { id: 'chatbot', title: 'Asisten Guru', icon: Bot },
+    { id: 'lkpd', title: 'Generator LKPD', icon: Sparkles },
+    { id: 'soal', title: 'Bank Soal', icon: HelpCircle },
+    { id: 'multi', title: 'Multi-Tool AI', icon: Globe },
   ]
 
   const kbcDocsList = [
-    { id: 'cp', name: '1. Analisis CP', icon: '📖' },
-    { id: 'tp', name: '2. Tujuan Pembelaj...', icon: '📋' },
-    { id: 'atp', name: '3. Alur TP (ATP)', icon: '📚' },
-    { id: 'prota', name: '4. Program Tahunan', icon: '📅' },
-    { id: 'prosem', name: '5. Program Semester', icon: '📑' },
-    { id: 'kktp', name: '6. KKTP KBC', icon: '🏅' },
-    { id: 'modul', name: '7. Modul Ajar KBC', icon: '💖' },
-    { id: 'lkpd', name: '8. LKPD KBC', icon: '📄' },
-    { id: 'rubrik', name: '9. Rubrik Formatif ...', icon: '☑️' },
+    { id: 'cp', name: '1. Analisis CP', icon: BookOpen },
+    { id: 'tp', name: '2. Tujuan Pembelaj...', icon: ClipboardList },
+    { id: 'atp', name: '3. Alur TP (ATP)', icon: BookMarked },
+    { id: 'prota', name: '4. Program Tahunan', icon: CalendarDays },
+    { id: 'prosem', name: '5. Program Semester', icon: FileText },
+    { id: 'kktp', name: '6. KKTP KBC', icon: Medal },
+    { id: 'modul', name: '7. Modul Ajar KBC', icon: NotebookPen },
+    { id: 'lkpd', name: '8. LKPD KBC', icon: FileText },
+    { id: 'rubrik', name: '9. Rubrik Formatif ...', icon: SquareCheckBig },
   ]
 
   const multiSubToolsList = [
@@ -1249,7 +1285,7 @@ export default function AiToolsPage() {
             <title>Naskah Dokumen - ${kopSekolah.namaSekolah}</title>
             <style>
               @page { 
-                margin: 1.2cm 1.4cm; 
+                margin: 1.9cm 1.4cm 1.4cm 1.4cm; 
                 size: A4; 
               }
               body { 
@@ -1281,6 +1317,7 @@ export default function AiToolsPage() {
                 -webkit-column-rule: 1px solid #94a3b8;
                 font-size: 10pt;
                 line-height: 1.32;
+                margin-top: 14px;
               }
               .exam-two-columns ol {
                 margin: 0;
@@ -1340,6 +1377,10 @@ export default function AiToolsPage() {
                 border: none !important;
               }
             </style>
+          <style>
+            @page { margin: 1.9cm 1.4cm 1.4cm 1.4cm; }
+            body { padding: 0 !important; }
+          </style>
           </head>
           <body>
             ${kopHTML}
@@ -1563,7 +1604,7 @@ export default function AiToolsPage() {
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-indigo-50'
                 }`}
               >
-                <span>{tool.icon}</span>
+                <tool.icon className="w-3.5 h-3.5" />
                 <span>{tool.title}</span>
               </button>
             ))}
@@ -1592,7 +1633,7 @@ export default function AiToolsPage() {
               disabled={isGenerating}
               className="w-full sm:w-auto bg-white hover:bg-slate-100 text-indigo-950 font-black px-3.5 py-2 rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 cursor-pointer shrink-0"
             >
-              <span>✨</span>
+              <Sparkles className="w-4 h-4" />
               <span>{isGenerating ? 'AI Memproses...' : currentToolData.buttonText}</span>
             </button>
           </div>
@@ -1613,14 +1654,14 @@ export default function AiToolsPage() {
                 }`}
               >
                 <div className="flex items-center gap-1.5 truncate">
-                  <span>🏫</span>
+                  <School className="w-4 h-4" />
                   <span className="truncate">
                     Kop Surat ({kopSekolah.namaSekolah}{' '}
                     {selectedJenjang === 'SMK' ? '• Gambar PNG' : ''})
                   </span>
                 </div>
                 <span className="shrink-0 text-[10px]">
-                  {showKopAccordion ? '🔼 Tutup' : '🔽 Ubah'}
+                  {showKopAccordion ? (<><ChevronUp className="w-4 h-4" /> Tutup</>) : (<><ChevronDown className="w-4 h-4" /> Ubah</>)}
                 </span>
               </button>
 
@@ -1782,7 +1823,7 @@ export default function AiToolsPage() {
                   isDarkMode ? 'text-white' : 'text-slate-900'
                 }`}
               >
-                <span>⚙️</span>
+                <Settings className="w-4 h-4" />
                 <span>Parameter Input AI</span>
               </h3>
 
@@ -1803,7 +1844,7 @@ export default function AiToolsPage() {
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  🏫 SMP (Fase D)
+                  <School className="w-4 h-4 inline-block align-middle" /> SMP (Fase D)
                 </button>
                 <button
                   type="button"
@@ -1816,7 +1857,7 @@ export default function AiToolsPage() {
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  🎨 SMK DKV (Fase E/F)
+                  <Palette className="w-4 h-4 inline-block align-middle" /> SMK DKV (Fase E/F)
                 </button>
               </div>
             </div>
@@ -2218,7 +2259,7 @@ export default function AiToolsPage() {
                             : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
                         }`}
                       >
-                        <span className="text-xs">{doc.icon}</span>
+                        <doc.icon className="w-4 h-4" />
                         <span className="truncate max-w-full">{doc.name.split(' ')[0]}</span>
                       </button>
                     ))}
@@ -2451,7 +2492,7 @@ export default function AiToolsPage() {
                     isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-indigo-50/70 border-indigo-200'
                   }`}
                 >
-                  <span className="text-sm">💬</span>
+                  <MessageSquare className="w-4 h-4" />
                   <p
                     className={`text-[11px] font-medium leading-snug ${
                       isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
@@ -2556,7 +2597,7 @@ export default function AiToolsPage() {
                         : 'bg-amber-50 border-amber-300 text-amber-900'
                     }`}
                   >
-                    <span>🎨</span>
+                    <Palette className="w-4 h-4" />
                     <span>
                       Mode SMK Jurusan DKV Aktif — AI otomatis menyesuaikan studi kasus desain
                       visual, teknis produksi media, &amp; client brief.
@@ -2719,7 +2760,7 @@ export default function AiToolsPage() {
                   onClick={() => setShowBankList(!showBankList)}
                   className="flex items-center gap-1.5 text-left cursor-pointer"
                 >
-                  <span>🗂️</span>
+                  <FolderOpen className="w-4 h-4" />
                   <span
                     className={`font-black text-xs uppercase ${
                       isDarkMode ? 'text-white' : 'text-slate-900'
@@ -2762,8 +2803,8 @@ export default function AiToolsPage() {
                       (savedBankSoal.some((s) => s.jenjang?.toUpperCase() !== 'SMK') &&
                         selectedJenjang === 'SMK') ? (
                         <p className="text-[10px] font-bold text-amber-500">
-                          💡 Anda punya paket{' '}
-                          {selectedJenjang === 'SMK' ? 'SMP (klik 🏫 SMP)' : 'SMK (klik 🎨 SMK DKV)'}{' '}
+                          <Lightbulb className="w-4 h-4 inline-block align-middle" /> Anda punya paket{' '}
+                          {selectedJenjang === 'SMK' ? (<><School className="w-4 h-4" /> SMP (klik SMP)</>) : (<><Palette className="w-4 h-4" /> SMK (klik SMK DKV)</>)}{' '}
                           — gunakan toggle jenjang di atas untuk menampilkannya.
                         </p>
                       ) : null}
@@ -2837,7 +2878,7 @@ export default function AiToolsPage() {
                                 title="Hapus paket"
                                 className="text-[10px] font-bold px-2 py-1 rounded-lg border hover:bg-rose-500 hover:text-white cursor-pointer"
                               >
-                                🗑️
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
@@ -2862,7 +2903,7 @@ export default function AiToolsPage() {
               }`}
             >
               <div className="flex items-center gap-1.5">
-                <span className="text-indigo-500 text-sm">✨</span>
+                <Sparkles className="w-4 h-4 text-indigo-500" />
                 <h4
                   className={`font-black text-xs uppercase ${
                     isDarkMode ? 'text-white' : 'text-slate-900'
@@ -2907,7 +2948,7 @@ export default function AiToolsPage() {
                         : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
                     }`}
                   >
-                    {isEditingVisual ? '✅ Selesai Edit' : '✏️ Edit Visual'}
+                    {isEditingVisual ? (<><CheckCircle2 className="w-4 h-4" /> Selesai Edit</>) : (<><Pencil className="w-4 h-4" /> Edit Visual</>)}
                   </button>
                 )}
 
@@ -2917,7 +2958,7 @@ export default function AiToolsPage() {
                     disabled={isSavingSoal}
                     className="flex-1 sm:flex-none bg-amber-500 hover:bg-amber-600 text-slate-950 px-2.5 py-1 rounded-lg text-[10px] font-black disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                   >
-                    💾 Simpan Bank Soal
+                    <Save className="w-4 h-4" /> Simpan Bank Soal
                   </button>
                 )}
 
@@ -2926,14 +2967,14 @@ export default function AiToolsPage() {
                   disabled={!generatedResults[currentResultKey]}
                   className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  🖨️ Cetak PDF {activeTool === 'soal' ? '(2 Kolom)' : ''}
+                  <Printer className="w-4 h-4" /> Cetak PDF {activeTool === 'soal' ? '(2 Kolom)' : ''}
                 </button>
                 <button
                   onClick={handleDownloadWord}
                   disabled={!generatedResults[currentResultKey]}
                   className="flex-1 sm:flex-none bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1 rounded-lg text-[10px] font-extrabold disabled:opacity-40 transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  📥 Word
+                  <Download className="w-4 h-4" /> Word
                 </button>
               </div>
             </div>
@@ -2948,7 +2989,7 @@ export default function AiToolsPage() {
                 }`}
               >
                 <div className="flex items-center gap-1.5 text-[11px] font-bold">
-                  <span>✍️</span>
+                  <PencilLine className="w-4 h-4" />
                   <span>
                     Mode Edit Langsung di Kertas Aktif — Klik langsung pada teks soal atau opsi
                     untuk mengubahnya:
@@ -3080,7 +3121,7 @@ export default function AiToolsPage() {
                       : 'bg-slate-50 border-indigo-200 text-indigo-700'
                   }`}
                 >
-                  🤖
+                  <Bot className="w-5 h-5" />
                 </div>
                 <div className="space-y-0.5">
                   <h5
@@ -3132,13 +3173,13 @@ export default function AiToolsPage() {
           >
             <div className="flex items-center justify-between border-b pb-2 dark:border-slate-800">
               <h3 className="font-extrabold text-xs flex items-center gap-1.5">
-                <span>💾</span> Simpan Soal ke Database
+                <Save className="w-4 h-4" /> Simpan Soal ke Database
               </h3>
               <button
                 onClick={() => setShowSaveModal(false)}
                 className="text-slate-400 hover:text-rose-500 font-bold text-sm cursor-pointer"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -3162,7 +3203,7 @@ export default function AiToolsPage() {
                         : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
                     }`}
                   >
-                    🏫 SMP
+                    <School className="w-4 h-4" /> SMP
                   </button>
                   <button
                     type="button"
@@ -3173,7 +3214,7 @@ export default function AiToolsPage() {
                         : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
                     }`}
                   >
-                    🎨 SMK (DKV)
+                    <Palette className="w-4 h-4" /> SMK (DKV)
                   </button>
                 </div>
               </div>
@@ -3261,7 +3302,7 @@ export default function AiToolsPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🕒</span>
+            <Clock className="w-5 h-5" />
             <span>Dashboard</span>
           </Link>
 
@@ -3274,7 +3315,7 @@ export default function AiToolsPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👥</span>
+              <Users className="w-5 h-5" />
               <span>Siswa</span>
             </Link>
           )}
@@ -3288,7 +3329,7 @@ export default function AiToolsPage() {
                   : 'text-slate-600 hover:text-slate-950'
               }`}
             >
-              <span className="text-base leading-none">👨‍🏫</span>
+              <GraduationCap className="w-5 h-5" />
               <span>Guru</span>
             </Link>
           )}
@@ -3301,7 +3342,7 @@ export default function AiToolsPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🎓</span>
+            <BookOpen className="w-5 h-5" />
             <span>Akademik</span>
           </Link>
 
@@ -3309,7 +3350,7 @@ export default function AiToolsPage() {
             href="/ai"
             className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition"
           >
-            <span className="text-base leading-none">✨</span>
+            <Sparkles className="w-5 h-5" />
             <span>AI Tools</span>
           </Link>
 
@@ -3321,7 +3362,7 @@ export default function AiToolsPage() {
                 : 'text-slate-600 hover:text-slate-950'
             }`}
           >
-            <span className="text-base leading-none">🖨️</span>
+            <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
         </div>

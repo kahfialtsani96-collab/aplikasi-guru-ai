@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Sparkles,
   History,
+  BookOpen,
 } from 'lucide-react'
 
 const getSupabaseUrl = () => {
@@ -1249,7 +1250,7 @@ export default function SmkPenilaianPage() {
 
                                 <div className="flex items-center justify-between text-[10px] mb-2">
                                   <span className="font-bold text-slate-300 truncate">
-                                    📖 {item.mata_pelajaran || '-'}
+                                    <BookOpen className="w-4 h-4 inline-block align-middle" /> {item.mata_pelajaran || '-'}
                                   </span>
                                   <span className="text-[9px] font-mono text-emerald-300 flex items-center gap-0.5 shrink-0">
                                     <CheckCircle2 className="w-2.5 h-2.5" /> Rata:{' '}
@@ -1350,10 +1351,10 @@ export default function SmkPenilaianPage() {
               </span>
               <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-slate-300">
                 {isAnimatingScene
-                  ? '🐻 Beruang menarik tali...'
+                  ? 'Beruang menarik tali...'
                   : activeTab === 'input'
-                  ? '💡 Klik lampu untuk Riwayat'
-                  : '💡 Klik lampu untuk Input'}
+                  ? 'Klik lampu untuk Riwayat'
+                  : 'Klik lampu untuk Input'}
               </span>
             </div>
 
@@ -1757,8 +1758,8 @@ export default function SmkPenilaianPage() {
               className="z-30 px-4 py-1.5 rounded-full border disabled:opacity-60 text-[11px] font-bold transition-all duration-700 cursor-pointer shrink-0"
             >
               {activeTab === 'input'
-                ? '🐻 Klik Lampu / Tali → Riwayat Nilai'
-                : '🐻 Klik Lampu / Tali → Input Nilai'}
+                ? 'Klik Lampu / Tali → Riwayat Nilai'
+                : 'Klik Lampu / Tali → Input Nilai'}
             </button>
           </div>
         </main>

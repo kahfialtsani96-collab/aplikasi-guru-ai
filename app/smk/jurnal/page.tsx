@@ -15,6 +15,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Star,
 } from 'lucide-react'
 
 const getSupabaseUrl = () => {
@@ -872,7 +873,7 @@ export default function SmkJurnalPage() {
                   {/* Header Minimalis Seperti di Video */}
                   <div className="mb-4">
                     <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-[#e7be8a] mb-1">
-                      <span>✦</span>
+                      <Star className="w-3.5 h-3.5" />
                       <span>JURNAL SMK DKV</span>
                     </div>
                     <h1 className="text-xl font-bold text-white tracking-tight">
@@ -1184,7 +1185,7 @@ export default function SmkJurnalPage() {
                   <div className="mb-3 shrink-0">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-[#e68490] mb-1">
-                        <span>✦</span>
+                        <Star className="w-3.5 h-3.5" />
                         <span>RIWAYAT STUDIO</span>
                       </div>
                       <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#e68490]/15 text-[#f2a2ac] border border-[#e68490]/30">
