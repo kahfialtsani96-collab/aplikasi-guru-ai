@@ -43,3 +43,11 @@ next-env.d.ts
 # local dev logs
 dev-server.log
 *.log
+
+# scratch / diagnostic local files
+eslint_out.txt
+lint_out.txt
+nip_check.txt
+nip_check2.txt
+nuptk_count.txt
+scan_depth.js

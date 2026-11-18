@@ -36,7 +36,7 @@ export default function DataGuruPage() {
   const [userDisplayName, setUserDisplayName] = useState('OPERATOR')
   const [guruList, setGuruList] = useState<any[]>([])
   const [nama, setNama] = useState('')
-  const [nip, setNip] = useState('')
+  const [nuptk, setNuptk] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('Guru123456!')
   const [jabatan, setJabatan] = useState('Guru Mata Pelajaran')
@@ -64,7 +64,7 @@ export default function DataGuruPage() {
 
   const resetForm = () => {
     setNama('')
-    setNip('')
+    setNuptk('')
     setEmail('')
     setPassword('Guru123456!')
     setJabatan('Guru Mata Pelajaran')
@@ -82,7 +82,7 @@ export default function DataGuruPage() {
           .from('guru')
           .update({ 
             nama_lengkap: nama.trim(), 
-            nip: nip.trim() ? nip.trim() : null, 
+            NUPTK: nuptk.trim() ? nuptk.trim() : null, 
             email: email.trim(), 
             jabatan 
           })
@@ -124,7 +124,7 @@ export default function DataGuruPage() {
         const { error: dbError } = await supabase.from('guru').insert([
           {
             nama_lengkap: nama.trim(),
-            nip: nip.trim() ? nip.trim() : null,
+            NUPTK: nuptk.trim() ? nuptk.trim() : null,
             email: email.trim(),
             jabatan,
           }
@@ -148,7 +148,7 @@ export default function DataGuruPage() {
   const handleEdit = (guru: any) => {
     setEditingId(guru.id)
     setNama(guru.nama_lengkap || '')
-    setNip(guru.nip || '')
+    setNuptk(guru.NUPTK || '')
     setEmail(guru.email || '')
     setJabatan(guru.jabatan || 'Guru Mata Pelajaran')
     // Scroll mulus ke atas jika di HP
@@ -287,15 +287,15 @@ export default function DataGuruPage() {
                 </div>
                 
                 <div>
-                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>NIP / NUPTK</label>
+                  <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900/80'}`}>NUPTK</label>
                   <input
                     type="text"
-                    value={nip}
-                    onChange={(e) => setNip(e.target.value)}
+                    value={nuptk}
+                    onChange={(e) => setNuptk(e.target.value)}
                     className={`w-full border rounded-xl px-3 py-2 text-xs font-mono font-medium focus:outline-none focus:border-indigo-600 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                     }`}
-                    placeholder="Nomor Induk Pegawai"
+                    placeholder="Nomor Unik Pendidik dan Tenaga Kependidikan"
                   />
                 </div>
 
@@ -421,13 +421,13 @@ export default function DataGuruPage() {
                         </span>
                       </div>
 
-                      {/* Middle Info: NIP & Email */}
+                      {/* Middle Info: NUPTK & Email */}
                       <div className={`flex flex-col gap-1 text-xs border-t border-b py-2 my-0.5 ${
                         isDarkMode ? 'border-slate-700/80 text-slate-300' : 'border-slate-100 text-slate-700'
                       }`}>
                         <div className="flex justify-between items-center">
-                          <span className={`text-[9px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>NIP / NUPTK:</span>
-                          <span className="font-mono font-bold">{g.nip || '-'}</span>
+                          <span className={`text-[9px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>NUPTK:</span>
+                          <span className="font-mono font-bold">{g.NUPTK || '-'}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className={`text-[9px] font-extrabold uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Email Login:</span>
@@ -468,7 +468,7 @@ export default function DataGuruPage() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                     <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
-                      <th className="py-2.5 px-3">NIP / NUPTK</th>
+                      <th className="py-2.5 px-3">NUPTK</th>
                       <th className="py-2.5 px-3">NAMA LENGKAP</th>
                       <th className="py-2.5 px-3">EMAIL LOGIN</th>
                       <th className="py-2.5 px-3">JABATAN</th>
@@ -485,7 +485,7 @@ export default function DataGuruPage() {
                     ) : (
                       guruList.map((g) => (
                         <tr key={g.id} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
-                          <td className={`py-2.5 px-3 font-mono font-bold whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{g.nip || '-'}</td>
+                          <td className={`py-2.5 px-3 font-mono font-bold whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{g.NUPTK || '-'}</td>
                           <td className={`py-2.5 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{g.nama_lengkap}</td>
                           <td className="py-2.5 px-3 font-bold text-indigo-400">{g.email || '-'}</td>
                           <td className="py-2.5 px-3 font-semibold whitespace-nowrap">

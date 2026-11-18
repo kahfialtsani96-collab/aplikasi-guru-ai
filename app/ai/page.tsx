@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, useEffect, useMemo, useRef, type ClipboardEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -163,6 +162,12 @@ export default function AiToolsPage() {
   const [saveTargetMapel, setSaveTargetMapel] = useState('')
   const [saveTargetKelas, setSaveTargetKelas] = useState('')
   const [saveNamaGuru, setSaveNamaGuru] = useState('')
+  const [saveTargetMapelId, setSaveTargetMapelId] = useState<number | null>(null)
+  const [saveTargetKodeMapel, setSaveTargetKodeMapel] = useState('')
+
+  // Flag ada/tidaknya kolom identitas mapel di tabel bank_soal (dideteksi saat init)
+  const [bankSoalHasKodeMapel, setBankSoalHasKodeMapel] = useState(false)
+  const [bankSoalHasMapelId, setBankSoalHasMapelId] = useState(false)
 
   // ====== PERSISTENSI BANK SOAL (Muat Lagi Setelah Refresh / Logout) ======
   const [savedBankSoal, setSavedBankSoal] = useState<BankSoalItem[]>([])
@@ -447,6 +452,17 @@ export default function AiToolsPage() {
         .select('id, nama_kelas, tingkat, jenjang, jurusan')
         .order('tingkat', { ascending: true })
         .order('nama_kelas', { ascending: true })
+      // Deteksi skema kolom identitas mapel pada tabel bank_soal (kode_mapel / mapel_id)
+      try {
+        const { data: bankSample } = await supabase.from('bank_soal').select('*').limit(1)
+        const cols = bankSample && bankSample.length > 0 ? Object.keys(bankSample[0]) : []
+        if (isMounted) {
+          setBankSoalHasKodeMapel(cols.includes('kode_mapel'))
+          setBankSoalHasMapelId(cols.includes('mapel_id'))
+        }
+      } catch {
+        // abaikan bila tabel belum tersedia / tidak punya izin
+      }
 
       if (isMounted) {
         if (dMapel) setMapelList(dMapel)
@@ -529,12 +545,14 @@ export default function AiToolsPage() {
       router.replace('/login')
     }
   }
-
   const handleMapelChange = (val: string) => {
     setFormData((prev) => ({ ...prev, mapel: val }))
     setAdminForm((prev) => ({ ...prev, mapel: val }))
     setModulForm((prev) => ({ ...prev, mapel: val }))
     setSaveTargetMapel(val)
+    const matched = filteredMapelList.find((m) => m.nama_mapel === val)
+    setSaveTargetMapelId(matched?.id ?? null)
+    setSaveTargetKodeMapel(matched?.kode_mapel ?? '')
   }
 
   const handleFaseKelasChange = (val: string) => {
@@ -626,8 +644,10 @@ export default function AiToolsPage() {
       return
     }
     setSaveMode(editingBankSoalId ? 'update' : 'create')
-    setSaveTargetJenjang(selectedJenjang)
     setSaveTargetMapel(formData.mapel)
+    const matchedMapel = filteredMapelList.find((m) => m.nama_mapel === formData.mapel)
+    setSaveTargetMapelId(matchedMapel?.id ?? null)
+    setSaveTargetKodeMapel(matchedMapel?.kode_mapel ?? '')
     const parts = formData.faseKelas.split('/')
     if (parts.length > 1) {
       setSaveTargetKelas(parts[1].trim())
@@ -642,8 +662,11 @@ export default function AiToolsPage() {
       return j === newJenjang || j === 'SEMUA' || j === 'SMP & SMK'
     })
     const kList = kelasList.filter((k) => (k.jenjang || 'SMP').toUpperCase().trim() === newJenjang)
-
-    if (mList.length > 0) setSaveTargetMapel(mList[0].nama_mapel)
+    if (mList.length > 0) {
+      setSaveTargetMapel(mList[0].nama_mapel)
+      setSaveTargetMapelId(mList[0].id)
+      setSaveTargetKodeMapel(mList[0].kode_mapel || '')
+    }
     if (kList.length > 0) setSaveTargetKelas(kList[0].nama_kelas)
   }
 
@@ -676,8 +699,7 @@ export default function AiToolsPage() {
       const normalizedSoalText = hasilSoal
         .replace('[[KUNCI_JAWABAN_START]]', '\n\n---\n')
         .replace(/([^\n])\s+([A-E][\.\)]\s+)/g, '$1\n$2')
-
-      const payload = {
+      const payload: any = {
         nama_guru: finalNamaGuru,
         jenjang: saveTargetJenjang,
         mapel: saveTargetMapel || formData.mapel,
@@ -689,6 +711,9 @@ export default function AiToolsPage() {
         isi_soal: normalizedSoalText,
         user_id: user?.id || null,
       }
+      // Simpan identitas mapel (kode_mapel / mapel_id) bila kolomnya tersedia di tabel bank_soal
+      if (bankSoalHasKodeMapel) payload.kode_mapel = saveTargetKodeMapel || null
+      if (bankSoalHasMapelId) payload.mapel_id = saveTargetMapelId
 
       if (editingBankSoalId && saveMode === 'update') {
         const { error } = await supabase
@@ -838,10 +863,16 @@ export default function AiToolsPage() {
     })
     setEditingBankSoalId(row.id ?? null)
     setSaveMode('update')
-
     if (row.mapel) {
       setFormData((prev) => ({ ...prev, mapel: row.mapel as string }))
       setSaveTargetMapel(row.mapel)
+      const matchedSaved = filteredMapelList.find(
+        (m) =>
+          m.nama_mapel === row.mapel &&
+          (row.jenjang || '').toUpperCase() === (m.jenjang || 'SMP').toUpperCase()
+      )
+      setSaveTargetMapelId(matchedSaved?.id ?? null)
+      setSaveTargetKodeMapel(matchedSaved?.kode_mapel ?? '')
     }
     if (row.fase_kelas) {
       setFormData((prev) => ({ ...prev, faseKelas: row.fase_kelas as string }))
@@ -3224,13 +3255,19 @@ export default function AiToolsPage() {
                   Mata Pelajaran ({saveTargetJenjang})
                 </label>
                 <select
-                  value={saveTargetMapel}
-                  onChange={(e) => setSaveTargetMapel(e.target.value)}
+                  value={saveTargetMapelId ? String(saveTargetMapelId) : ''}
+                  onChange={(e) => {
+                    const id = e.target.value ? Number(e.target.value) : null
+                    setSaveTargetMapelId(id)
+                    const matched = modalFilteredMapel.find((m) => Number(m.id) === Number(id))
+                    setSaveTargetMapel(matched?.nama_mapel ?? '')
+                    setSaveTargetKodeMapel(matched?.kode_mapel ?? '')
+                  }}
                   className="w-full border rounded-lg px-2.5 py-1.5 text-xs font-bold dark:bg-slate-800 dark:border-slate-700"
                 >
                   {modalFilteredMapel.map((m) => (
-                    <option key={m.id} value={m.nama_mapel}>
-                      {m.nama_mapel}
+                    <option key={m.id} value={m.id}>
+                      {m.nama_mapel} {m.kode_mapel ? `(${m.kode_mapel})` : ''}
                     </option>
                   ))}
                 </select>

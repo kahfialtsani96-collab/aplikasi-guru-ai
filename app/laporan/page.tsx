@@ -48,6 +48,7 @@ interface OptionItem {
   tingkat?: string
   jenjang?: string | null
   urutan?: number | null
+  kode_mapel?: string | null
   wali_kelas_id?: number | null
 }
 
@@ -108,6 +109,7 @@ export default function LaporanPage() {
   const [filterMapelBankSoal, setFilterMapelBankSoal] = useState('')
   const [filterKelasBankSoal, setFilterKelasBankSoal] = useState('')
 
+  const [filterMapelBankSoalId, setFilterMapelBankSoalId] = useState<number | null>(null)
   // Rapor Per Siswa & Modal Live Preview Editor
   const [filterKelasRapor, setFilterKelasRapor] = useState('')
   const [selectedSiswaRapor, setSelectedSiswaRapor] = useState('')
@@ -249,6 +251,7 @@ export default function LaporanPage() {
               id,
               nama_mapel,
               jenjang,
+              kode_mapel,
               urutan
             )
           `
@@ -264,6 +267,7 @@ export default function LaporanPage() {
               nama: m.nama_mapel,
               jenjang: m.jenjang || 'SMP',
               urutan: m.urutan ?? 999,
+              kode_mapel: m.kode_mapel || null,
             }))
             .sort((a: any, b: any) => {
               if (a.urutan !== b.urutan) return a.urutan - b.urutan
@@ -275,6 +279,7 @@ export default function LaporanPage() {
           if (formattedMapel.length > 0) {
             setFilterMapelBankSoal(formattedMapel[0].nama)
             setFilterMapelLeger(String(formattedMapel[0].id))
+            setFilterMapelBankSoalId(Number(formattedMapel[0].id) || null)
             setMapelNilai(String(formattedMapel[0].id))
           }
         } else {
@@ -283,7 +288,7 @@ export default function LaporanPage() {
       } else {
         const { data: dataMapel } = await supabase
           .from('mapel')
-          .select('id, nama_mapel, jenjang, urutan')
+          .select('id, nama_mapel, kode_mapel, jenjang, urutan')
           .order('urutan', { ascending: true })
           .order('nama_mapel', { ascending: true })
 
@@ -294,6 +299,7 @@ export default function LaporanPage() {
               nama: m.nama_mapel,
               jenjang: m.jenjang || 'SMP',
               urutan: m.urutan ?? 999,
+              kode_mapel: m.kode_mapel || null,
             }))
             .sort((a, b) => {
               if ((a.urutan ?? 999) !== (b.urutan ?? 999)) {
@@ -305,6 +311,7 @@ export default function LaporanPage() {
           setMapelList(formatted)
           if (formatted.length > 0) {
             setFilterMapelBankSoal(formatted[0].nama)
+            setFilterMapelBankSoalId(Number(formatted[0].id) || null)
           }
         }
       }
@@ -429,6 +436,29 @@ export default function LaporanPage() {
     </>
   )
 
+  // Dropdown khusus Bank Soal: value = id mapel, label menyertakan kode_mapel agar unik lintas jenjang
+  const renderMapelBankSoalOptGroups = () => (
+    <>
+      {groupedMapelOptions.smp.length > 0 && (
+        <optgroup label="── MAPEL SMP MUNA MUSTOFA ──">
+          {groupedMapelOptions.smp.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nama} {m.kode_mapel ? `(${m.kode_mapel})` : ''}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {groupedMapelOptions.smk.length > 0 && (
+        <optgroup label="── MAPEL SMK MUNA MUSTOFA ──">
+          {groupedMapelOptions.smk.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nama} {m.kode_mapel ? `(${m.kode_mapel})` : ''}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
+  )
   // HELPER MENGAMBIL WALI KELAS
   const resolveWaliKelasByKelasId = async (
     kelasId: number | string | null
@@ -474,6 +504,8 @@ export default function LaporanPage() {
     mode: 'mapel' | 'wali' | 'umum'
     mapelId?: number | string | null
     mapelNama?: string | null
+    kodeMapel?: string | null
+    jenjang?: 'SMP' | 'SMK' | null
     kelasId?: number | string | null
     guruEmail?: string | null
     namaGuruFallback?: string | null
@@ -483,11 +515,40 @@ export default function LaporanPage() {
     }
 
     let namaMapelTerpilih = ''
+    let resolvedMapelId: number | null = null
+
+    // 1) Resolve mapel_id — prioritas: mapelId → kode_mapel → nama+jenjang
     if (options.mapelId) {
+      resolvedMapelId = Number(options.mapelId)
       const mObj = mapelList.find((m) => String(m.id) === String(options.mapelId))
       if (mObj) namaMapelTerpilih = mObj.nama
-    } else if (options.mapelNama) {
-      namaMapelTerpilih = options.mapelNama.trim()
+    }
+
+    if (!resolvedMapelId && options.kodeMapel) {
+      const kodeClean = String(options.kodeMapel || '').trim().toUpperCase()
+      const mObj = mapelList.find(
+        (m) => String(m.kode_mapel || '').trim().toUpperCase() === kodeClean
+      )
+      if (mObj) {
+        resolvedMapelId = Number(mObj.id)
+        namaMapelTerpilih = mObj.nama
+      }
+    }
+    if (!resolvedMapelId && options.mapelNama) {
+      const namaClean = options.mapelNama.trim().toLowerCase()
+      const jenjangClean = (options.jenjang || '').toUpperCase()
+      let candidates = mapelList.filter((m) => (m.nama || '').toLowerCase() === namaClean)
+      if (jenjangClean === 'SMK') {
+        candidates = candidates.filter((m) => (m.jenjang || '').toUpperCase() === 'SMK')
+      } else if (jenjangClean === 'SMP') {
+        candidates = candidates.filter((m) => (m.jenjang || 'SMP').toUpperCase() !== 'SMK')
+      }
+      if (candidates.length >= 1 && candidates[0]) {
+        resolvedMapelId = Number(candidates[0].id)
+        namaMapelTerpilih = candidates[0].nama
+      } else {
+        namaMapelTerpilih = options.mapelNama.trim()
+      }
     }
 
     const buildJabatanLabel = (): string => {
@@ -496,15 +557,26 @@ export default function LaporanPage() {
       }
       return 'Guru Mata Pelajaran'
     }
+    // Prioritas 1: Guru Pengampu dari relasi guru_mapel (berdasarkan mapel_id hasil pencocokan)
+    if (resolvedMapelId) {
+      const { data: gmData } = await supabase
+        .from('guru_mapel')
+        .select('guru:guru_id(nama_lengkap, NUPTK)')
+        .eq('mapel_id', resolvedMapelId)
+        .limit(1)
+        .maybeSingle()
 
-    if (!isStrictOperatorRole && namaGuru && namaGuru !== 'Guru Pengampu') {
-      return {
-        nama: namaGuru,
-        nuptk: nuptkGuru,
-        jabatanLabel: buildJabatanLabel(),
+      const guruObj: any = gmData?.guru
+      if (guruObj && guruObj.nama_lengkap) {
+        return {
+          nama: guruObj.nama_lengkap.trim(),
+          nuptk: formatNuptk(guruObj.NUPTK),
+          jabatanLabel: buildJabatanLabel(),
+        }
       }
     }
 
+    // Prioritas 2: guru via email akun login
     if (options.guruEmail) {
       const { data: gByEmail } = await supabase
         .from('guru')
@@ -520,48 +592,7 @@ export default function LaporanPage() {
         }
       }
     }
-
-    if (options.mapelId) {
-      const { data: gmData } = await supabase
-        .from('guru_mapel')
-        .select('guru:guru_id(nama_lengkap, NUPTK)')
-        .eq('mapel_id', Number(options.mapelId))
-        .limit(1)
-        .maybeSingle()
-
-      const guruObj: any = gmData?.guru
-      if (guruObj && guruObj.nama_lengkap) {
-        return {
-          nama: guruObj.nama_lengkap.trim(),
-          nuptk: formatNuptk(guruObj.NUPTK),
-          jabatanLabel: buildJabatanLabel(),
-        }
-      }
-    }
-
-    if (namaMapelTerpilih) {
-      const targetMapel = mapelList.find(
-        (m) => m.nama.toLowerCase() === namaMapelTerpilih.toLowerCase()
-      )
-      if (targetMapel) {
-        const { data: gmData } = await supabase
-          .from('guru_mapel')
-          .select('guru:guru_id(nama_lengkap, NUPTK)')
-          .eq('mapel_id', targetMapel.id)
-          .limit(1)
-          .maybeSingle()
-
-        const guruObj: any = gmData?.guru
-        if (guruObj && guruObj.nama_lengkap) {
-          return {
-            nama: guruObj.nama_lengkap.trim(),
-            nuptk: formatNuptk(guruObj.NUPTK),
-            jabatanLabel: buildJabatanLabel(),
-          }
-        }
-      }
-    }
-
+    // Prioritas 3: fallback nama guru yang tersimpan di bank soal
     if (options.namaGuruFallback) {
       const { data: gByName } = await supabase
         .from('guru')
@@ -584,6 +615,7 @@ export default function LaporanPage() {
       }
     }
 
+    // Prioritas 4: jatuh ke nama akun login
     return {
       nama: namaGuru,
       nuptk: nuptkGuru,
@@ -854,6 +886,24 @@ export default function LaporanPage() {
     })
   }
 
+  // Filter Bank Soal berdasarkan pilihan mapel yang spesifik (kode_mapel / mapel_id / nama+jenjang)
+  const filterSoalByMapelBankSoal = (soalList: any[], selectedMapel: OptionItem | null) => {
+    if (!selectedMapel) return soalList
+    const kode = (selectedMapel.kode_mapel || '').trim().toUpperCase()
+    const selNama = (selectedMapel.nama || '').trim().toLowerCase()
+    const selJenjang = (selectedMapel.jenjang || '').trim().toUpperCase()
+    return soalList.filter((s) => {
+      const sKode = String(s.kode_mapel ?? '').trim().toUpperCase()
+      if (kode && sKode) return sKode === kode
+      const sMapelId = s.mapel_id != null ? Number(s.mapel_id) : null
+      if (sMapelId != null) return sMapelId === Number(selectedMapel.id)
+      const sNama = (s.mapel || '').trim().toLowerCase()
+      if (sNama !== selNama) return false
+      const sJenjang = (s.jenjang || '').trim().toUpperCase()
+      if (selJenjang && sJenjang && sJenjang !== selJenjang) return false
+      return true
+    })
+  }
   // DOWNLOAD WORD STANDAR UJIAN (FONT 10PT LEGA UNTUK 30-40+ SOAL HINGGA ±4 HALAMAN A4)
   const triggerDownloadWord = (filename: string, htmlBody: string) => {
     const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -1011,13 +1061,11 @@ export default function LaporanPage() {
   }
 
   const handlePrintBankSoal = async () => {
-    let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
-    if (filterMapelBankSoal) {
-      query = query.eq('mapel', filterMapelBankSoal)
-    }
-
+    const selectedMapel = mapelList.find((m) => Number(m.id) === Number(filterMapelBankSoalId)) || null
+    const query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
     const { data: rawSoalData, error } = await query
-    const soalData = filterSoalByKelasExact(rawSoalData || [], filterKelasBankSoal)
+    const filteredByMapel = filterSoalByMapelBankSoal(rawSoalData || [], selectedMapel)
+    const soalData = filterSoalByKelasExact(filteredByMapel, filterKelasBankSoal)
 
     if (error || !soalData || soalData.length === 0) {
       alert(
@@ -1085,13 +1133,11 @@ export default function LaporanPage() {
   }
 
   const handlePrintKunciJawaban = async () => {
-    let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
-    if (filterMapelBankSoal) {
-      query = query.eq('mapel', filterMapelBankSoal)
-    }
-
+    const selectedMapel = mapelList.find((m) => Number(m.id) === Number(filterMapelBankSoalId)) || null
+    const query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
     const { data: rawSoalData } = await query
-    const soalData = filterSoalByKelasExact(rawSoalData || [], filterKelasBankSoal)
+    const filteredByMapel = filterSoalByMapelBankSoal(rawSoalData || [], selectedMapel)
+    const soalData = filterSoalByKelasExact(filteredByMapel, filterKelasBankSoal)
 
     if (!soalData || soalData.length === 0) {
       alert('Tidak ada data bank soal untuk melihat kunci jawaban.')
@@ -1118,7 +1164,10 @@ export default function LaporanPage() {
 
     const guruPengampu = await resolvePenandatanganPDF({
       mode: 'mapel',
-      mapelNama: filterMapelBankSoal || firstSoal?.mapel,
+      mapelId: selectedMapel?.id ?? null,
+      kodeMapel: selectedMapel?.kode_mapel ?? null,
+      jenjang: (selectedMapel?.jenjang as 'SMP' | 'SMK' | null) || null,
+      mapelNama: selectedMapel?.nama || filterMapelBankSoal || firstSoal?.mapel,
       namaGuruFallback: firstSoal?.nama_guru,
     })
 
@@ -1206,13 +1255,11 @@ export default function LaporanPage() {
   }
 
   const handlePrintBankSoalPdf = async () => {
-    let query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
-    if (filterMapelBankSoal) {
-      query = query.eq('mapel', filterMapelBankSoal)
-    }
-
+    const selectedMapel = mapelList.find((m) => Number(m.id) === Number(filterMapelBankSoalId)) || null
+    const query = supabase.from('bank_soal').select('*').order('created_at', { ascending: false })
     const { data: rawSoalData } = await query
-    const soalData = filterSoalByKelasExact(rawSoalData || [], filterKelasBankSoal)
+    const filteredByMapel = filterSoalByMapelBankSoal(rawSoalData || [], selectedMapel)
+    const soalData = filterSoalByKelasExact(filteredByMapel, filterKelasBankSoal)
 
     if (!soalData || soalData.length === 0) {
       alert(
@@ -1270,7 +1317,10 @@ export default function LaporanPage() {
 
     const guruPengampu = await resolvePenandatanganPDF({
       mode: 'mapel',
-      mapelNama: filterMapelBankSoal || soalData[0]?.mapel,
+      mapelId: selectedMapel?.id ?? null,
+      kodeMapel: selectedMapel?.kode_mapel ?? null,
+      jenjang: (selectedMapel?.jenjang as 'SMP' | 'SMK' | null) || null,
+      mapelNama: selectedMapel?.nama || filterMapelBankSoal || soalData[0]?.mapel,
     })
 
     // Tentukan Kepala Sekolah sesuai jenjang soal (SMK vs SMP)
@@ -2512,14 +2562,19 @@ export default function LaporanPage() {
                       1. MAPEL
                     </label>
                     <select
-                      value={filterMapelBankSoal}
-                      onChange={(e) => setFilterMapelBankSoal(e.target.value)}
+                      value={filterMapelBankSoalId ? String(filterMapelBankSoalId) : ''}
+                      onChange={(e) => {
+                        const id = e.target.value ? Number(e.target.value) : null
+                        setFilterMapelBankSoalId(id)
+                        const matched = mapelList.find((m) => Number(m.id) === Number(id))
+                        setFilterMapelBankSoal(matched?.nama || '')
+                      }}
                       className="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none"
                     >
                       {mapelList.length === 0 ? (
                         <option value="">(Belum Ada Mapel Terdaftar)</option>
                       ) : (
-                        renderMapelOptGroups(true)
+                        renderMapelBankSoalOptGroups()
                       )}
                     </select>
                   </div>

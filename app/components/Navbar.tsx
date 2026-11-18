@@ -20,6 +20,7 @@ import {
   Globe,
   X,
   ChevronRight,
+  Wallet,
 } from 'lucide-react'
 
 export default function Navbar() {
@@ -203,6 +204,17 @@ export default function Navbar() {
           >
             <Printer className="w-5 h-5" />
             <span>Laporan</span>
+          </Link>
+
+          {/* 7. HONORARIUM (Semua Pengguna) */}
+          <Link
+            href="/honorarium"
+            className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
+              pathname === '/honorarium' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            <Wallet className="w-5 h-5" />
+            <span>Honorarium</span>
           </Link>
         </div>
 

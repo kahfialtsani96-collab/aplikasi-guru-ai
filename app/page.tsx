@@ -30,6 +30,7 @@ import {
   Sun,
   Moon,
   BarChart3,
+  Wallet,
 } from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
@@ -1218,6 +1219,62 @@ export default function DashboardPage() {
                 </div>
                 <Link
                   href="/laporan"
+                  className={`inline-flex items-center gap-1.5 text-xs font-bold transition ${
+                    isDarkMode
+                      ? 'text-indigo-400 hover:text-indigo-300'
+                      : 'text-indigo-800 hover:text-indigo-950'
+                  }`}
+                >
+                  <span>Buka Fitur</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              <div
+                className={`backdrop-blur-md border rounded-2xl p-5 sm:p-6 space-y-4 hover:shadow-md transition ${
+                  isDarkMode
+                    ? 'bg-slate-900/80 border-slate-800 hover:border-indigo-600'
+                    : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80 hover:border-indigo-400'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div
+                    className={`w-10 h-10 rounded-xl border flex items-center justify-center text-xl shadow-xs ${
+                      isDarkMode
+                        ? 'bg-slate-800 border-slate-700 text-indigo-400'
+                        : 'bg-white/80 border-indigo-200 text-indigo-700'
+                    }`}
+                  >
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <span
+                    className={`border px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${
+                      isDarkMode
+                        ? 'bg-slate-800 text-indigo-300 border-slate-700'
+                        : 'bg-white/80 text-indigo-900 border-indigo-200'
+                    }`}
+                  >
+                    HONORARIUM
+                  </span>
+                </div>
+                <div>
+                  <h4
+                    className={`font-extrabold text-base ${
+                      isDarkMode ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    Honorarium Guru &amp; Staf
+                  </h4>
+                  <p
+                    className={`text-xs font-medium mt-1.5 leading-relaxed ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                    }`}
+                  >
+                    Rekap honorarium bulanan SMP &amp; SMK, tarif, potongan, dan riwayat pembayaran.
+                  </p>
+                </div>
+                <Link
+                  href="/honorarium"
                   className={`inline-flex items-center gap-1.5 text-xs font-bold transition ${
                     isDarkMode
                       ? 'text-indigo-400 hover:text-indigo-300'
