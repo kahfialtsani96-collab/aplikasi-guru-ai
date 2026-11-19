@@ -552,9 +552,7 @@ export default function LaporanPage() {
     }
 
     const buildJabatanLabel = (): string => {
-      if (namaMapelTerpilih) {
-        return `Guru Mata Pelajaran ${namaMapelTerpilih}`
-      }
+      void namaMapelTerpilih
       return 'Guru Mata Pelajaran'
     }
     // Prioritas 1: Guru Pengampu dari relasi guru_mapel (berdasarkan mapel_id hasil pencocokan)
@@ -1045,10 +1043,15 @@ export default function LaporanPage() {
     if (isSmkSoal) {
       return `
         <div style="border-bottom: 3px double #000; padding-bottom: 4px; margin-bottom: 4px; text-align: center;">
-          <p style="margin: 0; font-size: 9.5pt; font-weight: bold;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
-          <h2 style="margin: 1px 0; font-size: 13.5pt; font-weight: bold;">SMK MUNA MUSTOFA</h2>
-          <p style="margin: 0; font-size: 9pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
-          <p style="margin: 1px 0 0 0; font-size: 8.5pt;">Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+          <div style="display: inline-block; vertical-align: middle;">
+            <img src="/logo-smk.png" alt="Logo SMK" style="width: 64px; height: 64px; object-fit: contain; margin-right: 10px;" onerror="this.style.display='none';" />
+          </div>
+          <div style="display: inline-block; vertical-align: middle; text-align: center;">
+            <p style="margin: 0; font-size: 9.5pt; font-weight: bold;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
+            <h2 style="margin: 1px 0; font-size: 13.5pt; font-weight: bold;">SMK MUNA MUSTOFA</h2>
+            <p style="margin: 0; font-size: 9pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
+            <p style="margin: 1px 0 0 0; font-size: 8.5pt;">Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+          </div>
         </div>
       `
     }

@@ -472,10 +472,15 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
     ? `<img src="${originUrl}/kop-surat.png" alt="Kop Surat SMP" style="width: 100%; height: auto; display: block;" />`
     : `
       <div style="border-bottom: 3px double #000; padding-bottom: 6px; margin-bottom: 4px; text-align: center;">
-        <p style="margin: 0; font-size: 10pt; font-weight: bold; letter-spacing: 0.5px;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
-        <h2 style="margin: 2px 0; font-size: 14pt; font-weight: bold; letter-spacing: 0.8px;">SMK MUNA MUSTOFA</h2>
-        <p style="margin: 0; font-size: 9pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
-        <p style="margin: 2px 0 0 0; font-size: 8.5pt;">Alamat: Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+        <div style="display: inline-block; vertical-align: middle;">
+          <img src="${originUrl}/logo-smk.png" alt="Logo SMK" style="width: 72px; height: 72px; object-fit: contain; margin-right: 12px;" onerror="this.style.display='none';" />
+        </div>
+        <div style="display: inline-block; vertical-align: middle; text-align: center;">
+          <p style="margin: 0; font-size: 10pt; font-weight: bold; letter-spacing: 0.5px;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
+          <h2 style="margin: 2px 0; font-size: 14pt; font-weight: bold; letter-spacing: 0.8px;">SMK MUNA MUSTOFA</h2>
+          <p style="margin: 0; font-size: 9pt; font-weight: bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>
+          <p style="margin: 2px 0 0 0; font-size: 8.5pt;">Alamat: Jl. PPTQ Muna Mustofa Kecamatan Gisting Kabupaten Tanggamus 35376</p>
+        </div>
       </div>
     `
 
