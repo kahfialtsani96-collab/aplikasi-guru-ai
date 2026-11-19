@@ -47,6 +47,7 @@ aplikasi-guru-ai/
     ├── globals.css
     ├── favicon.ico
     ├── login/page.tsx       ← Halaman login
+    ├── honorarium/page.tsx  ← Manajemen honorarium guru & staf (lihat docs/schema-honorarium.sql)
     ├── components/          ← Komponen bersama
     │   ├── Navbar.tsx
     │   ├── InactivityHandler.tsx
@@ -85,6 +86,7 @@ aplikasi-guru-ai/
 | `/guru` | `app/guru/page.tsx` | Master data guru + pembuatan akun login (CRUD) memakai `guru`. Khusus operator. |
 | `/kartu` | `app/kartu/page.tsx` | Cetak kartu (pelajar/ujian/guru) memakai `siswa`, `guru`. |
 | `/administrasi` | `app/administrasi/page.tsx` | Surat administrasi (CRUD, kode surat, cetak/unduh) memakai `surat_administrasi`. |
+| `/honorarium` | `app/honorarium/page.tsx` | Manajemen honorarium guru & staf: pengaturan tarif, potongan dinamis, penerima, tugas tambahan, rekap/gaji per periode, riwayat, dan audit log. Cetak daftar honorarium & slip tanda terima (F4/A4) dengan TTD dinamis dari `guru.jabatan`. Memakai `honorarium_pengaturan`, `honorarium_potongan`, `honorarium_penerima`, `honorarium_tugas_tambahan`, `honorarium_rekap`, `honorarium_audit_log`. Skema: `docs/schema-honorarium.sql`. |
 | `/laporan` | `app/laporan/page.tsx` | Laporan rapor: bangun dokumen rapor via `utils/raporBuilder.ts`, pratinjau via `components/RaporPreviewModal.tsx`; membaca `nilai`, `jurnal_agenda`, `siswa`, `kelas`, `mapel`, `guru`. |
 | `/ai` | `app/ai/page.tsx` | Pusat **Tool AI** (generator dokumen): KBC, Perangkat Ajar, Modul Ajar, Kokurikuler, Chatbot, LKPD, Soal, Multi-tool. Kirim ke `/api/gemini`, render hasil Markdown. |
 | `/cek-struktur` | `app/cek-struktur/page.tsx` | Utilitas diagnostik: memeriksa skema/kolom semua tabel Supabase (daftar `ALL_TABLES`). |
@@ -156,7 +158,7 @@ Kodebase menggunakan **lebih dari satu pola** untuk bikin client Supabase. Saat 
 > Peringatan: Jangan inisialisasi client Supabase di **top-level file yang di-prerender** tanpa helper yang aman — bisa memicu error build. Gunakan pola helper atau init di dalam `useEffect`/fungsi.
 
 ### Tabel dalam database (dari `app/cek-struktur/page.tsx`)
-Daftar tabel `ALL_TABLES`: `absensi`, `bank_soal`, `bimbingan_wali`, `guru`, `guru_mapel`, `jadwal`, `jurnal_agenda`, `kelas`, `mapel`, `master_jam`, `nilai`, `profiles`, `siswa`, `surat_administrasi`.
+Daftar tabel `ALL_TABLES`: `absensi`, `bank_soal`, `bimbingan_wali`, `guru`, `guru_mapel`, `honorarium_pengaturan`, `honorarium_potongan`, `honorarium_penerima`, `honorarium_tugas_tambahan`, `honorarium_rekap`, `honorarium_audit_log`, `jadwal`, `jurnal_agenda`, `kelas`, `mapel`, `master_jam`, `nilai`, `profiles`, `siswa`, `surat_administrasi`.
 
 Kolom penting yang teramati di kode:
 - **`guru`**: `id`, `nama_lengkap`, `email`, `password`, `role` (`'operator' | 'guru'`), `NUPTK`, `nip`, `jabatan`, `unit_mengajar`.
@@ -164,6 +166,7 @@ Kolom penting yang teramati di kode:
 - **`siswa`**: `id`, `nisn`, `nama_lengkap`, `jenis_kelamin`, `kelas_id` (FK → `kelas.id`), `jenjang`, plus data identitas (TTL, agama, alamat, ortu, dll.).
 - **`mapel`**: `id`, `kode_mapel`, `nama_mapel`, `kelompok`, `tingkat`, `jumlah_jp`, `semester`, `tahun_ajaran`, `urutan`, `jenjang`.
 - **`absensi`**, **`jadwal`** (hari, jam, guru_id, mapel_id, kelas_id), **`jurnal_agenda`**, **`nilai`** (siswa_id, mata_pelajaran, semester, dst.), **`bimbingan_wali`**, **`surat_administrasi`** (nomor_surat, jenis_surat, penerima, keterangan, semester, tahun_ajaran), **`master_jam`** (hari, jam_ke, waktu_mulai, waktu_selesai, keterangan, jenjang), **`bank_soal`**, **`profiles`**, **`guru_mapel`** (relasi guru↔mapel).
+- **Tabel honorarium** (`/honorarium`): **`honorarium_pengaturan`** (tarif_jp, tarif_transport_harian, tarif_piket, tunjangan_wali_kelas — satu baris global), **`honorarium_potongan`** (nama, aktif, tipe `nominal`/`persen`, nilai, urutan), **`honorarium_penerima`**, **`honorarium_tugas_tambahan`** (periode, tanggal, kegiatan, guru_id, nominal), **`honorarium_rekap`** (rekap gaji per periode guru), **`honorarium_audit_log`** (kategori `master`/`rekap`/`riwayat`, catat perubahan nilai lama → baru). Skema lengkap di `docs/schema-honorarium.sql`.
 
 ### Relasi utama
 - `kelas.wali_kelas_id` → `guru.id`.

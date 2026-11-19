@@ -13,6 +13,7 @@ export async function POST(req: Request) {
       faseKelas,
       materiTopik,
       spesifikData,
+      chatHistory,
       ...kbcData
     } = body
 
@@ -41,6 +42,16 @@ export async function POST(req: Request) {
       sanitize(kbcData.nipKepala) || (isSmk ? '-' : '6337763664131233')
     const kotaTtdResmi = sanitize(kbcData.kotaTtd) || 'Gisting'
 
+    // Riwayat percakapan chatbot (multi-turn) - disanitasi & dibatasi
+    const sanitizedHistory = (Array.isArray(chatHistory) ? chatHistory : [])
+      .filter(
+        (m: any) =>
+          m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
+      )
+      .map((m: any) => ({ role: m.role, content: m.content.trim() }))
+      .filter((m: any) => m.content)
+      .slice(-20)
+
     const formatNuptk = (val: string) => {
       if (!val || val === '-' || val.trim() === '') return 'NUPTK: -'
       const cleanNumber = val.replace(/^(NIP\/NUPTK|NUPTK|NIP)\.?:?\s*/i, '').trim()
@@ -56,7 +67,8 @@ export async function POST(req: Request) {
       systemPrompt: string,
       userPrompt: string,
       maxTokens: number,
-      temperature: number
+      temperature: number,
+      history: { role: string; content: string }[] = []
     ) => {
       const endpointUrl = 'https://api.inceptionlabs.ai/v1/chat/completions'
       const modelsToTry = ['mercury-2', 'mercury-coder-small']
@@ -74,6 +86,7 @@ export async function POST(req: Request) {
             model: modelName,
             messages: [
               { role: 'system', content: systemPrompt },
+              ...history,
               { role: 'user', content: userPrompt },
             ],
             max_tokens: maxTokens,
@@ -176,17 +189,35 @@ Aturan Penulisan WAJIB:
     // LOGIKA CHATBOT VS GENERATOR DOKUMEN RESMI (AI TOOLS)
     // =========================================================================
     if (activeTool === 'chatbot') {
-      systemPrompt = `Anda adalah Asisten Guru AI dan Konsultan Pedagogi Kurikulum Merdeka (SMP & SMK Kejuruan) serta KBC Kemenag RI yang ramah, komunikatif, solutif, dan praktis.`
+      systemPrompt = `Anda adalah Asisten Perancang Prompt Soal Kurikulum Merdeka (SMP & SMK Kejuruan). Tugas utama Anda adalah mengubah judul bab singkat yang diketik guru dari LKS menjadi MASTER PROMPT SOAL yang terstruktur, siap ditempel ke Generator Bank Soal. Anda ahli pedagogi, penyusun soal LOTS-MOTS-HOTS, dan memahami CP & TP Kurikulum Merdeka.`
 
-      userPrompt = `Pertanyaan / Diskusi Guru:
+      const jumlahSoalChat = sanitize(spesifikData?.soalJumlah) || '10'
+      const bentukSoalChat = sanitize(spesifikData?.soalTipe) || 'Pilihan Ganda'
+      const opsiChat = isSmk ? 'A-E' : 'A-D'
+
+      userPrompt = `Tugas: Racik Master Prompt Soal untuk materi berikut.
+
+Judul Bab / Pokok Bahasan:
 ${materiTopik}
 
-(Konteks Pembelajaran: Satuan Pendidikan: ${namaSekolahResmi}, ${konteksJenjangPrompt}, Mapel: ${mapel || '-'}, Fase/Kelas: ${faseKelas || '-'})
+Konteks Pembelajaran:
+- Satuan Pendidikan: ${namaSekolahResmi}
+- ${konteksJenjangPrompt}
+- Mata Pelajaran: ${mapel || '-'}
+- Fase/Kelas: ${faseKelas || '-'}
+- Bentuk Soal yang diminta: ${bentukSoalChat}
+- Jumlah Butir: ${jumlahSoalChat} butir
+- Format Opsi Jawaban: ${opsiChat}
 
-Instruksi Penjawab Chatbot:
-1. Jawablah pertanyaan guru secara langsung pada inti masalah, lugas, dan praktis.
-2. DILARANG MEMBUAT struktur dokumen formal seperti "1. Identitas Dokumen", "2. Latar Belakang", atau bagian tanda tangan di akhir.
-3. Gunakan format Markdown yang rapi (bullet points, bold, dan paragraf singkat) agar mudah dibaca.`
+Instruksi Peracikan Master Prompt Soal (WAJIB):
+1. Pecah topik menjadi 3-5 sub-bab (sub-tema) logis sesuai urutan pembelajaran.
+2. Untuk setiap sub-bab, tuliskan:
+   - Heading "Sub-Bab N: <judul>".
+   - Daftar indikator materi (3-5 butir) yang dapat dijadikan dasar pembuatan soal.
+   - Sebaran level kognitif: LOTS (C1-C2), MOTS (C3-C4), HOTS (C5-C6) dalam persen.
+   - Contoh konteks/stimulus relevan (kearifan lokal untuk SMP; studi kasus industri kreatif/DKV untuk SMK).
+3. Akhiri dengan blok "ATURAN FORMAT" berisi: penomoran soal dimulai dari "1." menaik, opsi jawaban A sampai ${opsiChat} (SMP: A-D; SMK: A-E), dan satu kunci jawaban per soal.
+4. Gunakan Markdown rapi (bold, bullet) agar mudah disalin. Jangan membuat dokumen formal/tanda tangan.`
     } else if (activeTool === 'soal') {
       // =======================================================================
       // KHUSUS GENERATOR NASKAH SOAL UJIAN RESMI (2 KOLOM SIAP CETAK)
@@ -287,7 +318,13 @@ Instruksi Format WAJIB:
 
     // Gunakan temperature lebih rendah (0.35) untuk soal agar presisi tinggi & tidak halusinasi
     const tempToUse = activeTool === 'soal' ? 0.35 : 0.7
-    const apiRes = await callMercuryAPI(systemPrompt, userPrompt, 8192, tempToUse)
+    const apiRes = await callMercuryAPI(
+      systemPrompt,
+      userPrompt,
+      8192,
+      tempToUse,
+      activeTool === 'chatbot' ? sanitizedHistory : []
+    )
 
     if (!apiRes.ok) {
       return NextResponse.json(

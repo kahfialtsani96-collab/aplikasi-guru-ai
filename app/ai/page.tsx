@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import ChatAssistant from './components/ChatAssistant'
 import {
   Clock,
   Users,
@@ -44,6 +45,7 @@ import {
   PencilLine,
   Pencil,
   CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
@@ -150,6 +152,8 @@ export default function AiToolsPage() {
 
   const { isDarkMode } = useDarkMode()
   const [isSavingSoal, setIsSavingSoal] = useState(false)
+  const [racikLoading, setRacikLoading] = useState(false)
+  const [racikMsg, setRacikMsg] = useState<{ type: 'warn' | 'success'; text: string } | null>(null)
 
   // State untuk Visual Preview & Direct Click-to-Edit
   const [isEditingVisual, setIsEditingVisual] = useState(false)
@@ -909,6 +913,72 @@ export default function AiToolsPage() {
     document.execCommand('insertText', false, text)
   }
 
+  // Dipanggil tombol "Gunakan di Bank Soal" dari gelembung balasan AI di tab Chatbot.
+  // Menempelkan prompt hasil racikan ke kolom materi, lalu berpindah ke tab Bank Soal.
+  const handleUseChatPrompt = (content: string) => {
+    setFormData((prev) => ({ ...prev, materiTopik: content.trim() }))
+    setSaveTargetMapel(formData.mapel)
+    setActiveTool('soal')
+  }
+
+  // Smart Guardrail "Racik Prompt dari Judul Bab (AI)" di tab Bank Soal:
+  // kirim judul bab singkat ke Asisten Chatbot agar diperluas menjadi prompt lengkap,
+  // lalu tempel kembali otomatis ke kolom materi.
+  const handleRacikPrompt = async () => {
+    const shortTitle = formData.materiTopik.trim()
+    if (!shortTitle) {
+      setRacikMsg({
+        type: 'warn',
+        text: 'Ketik dulu judul bab singkat (mis. "Bab 1 Ekosistem") di kolom materi di atas.',
+      })
+      return
+    }
+    setRacikLoading(true)
+    if (shortTitle.length < 40) {
+      setRacikMsg({
+        type: 'warn',
+        text: 'Judul masih pendek (<40 karakter). AI tetap akan memperluasnya menjadi prompt lengkap.',
+      })
+    } else {
+      setRacikMsg(null)
+    }
+    try {
+      const activeSatuan = selectedJenjang === 'SMK' ? 'SMK MUNA MUSTOFA' : kopSekolah.namaSekolah
+      const activeKepala = selectedJenjang === 'SMK' ? kepalaSmk : kepalaSmp
+      const payload = {
+        tool: 'Asisten Guru AI',
+        activeTool: 'chatbot',
+        selectedDoc: null,
+        jenjang: selectedJenjang,
+        jurusan: selectedJenjang === 'SMK' ? 'Desain Komunikasi Visual (DKV)' : null,
+        satuanPendidikan: activeSatuan,
+        namaKepala: adminForm.namaKepala || activeKepala.nama,
+        nipKepala: adminForm.nipKepala || activeKepala.nuptk,
+        mapel: formData.mapel,
+        faseKelas: formData.faseKelas,
+        materiTopik: shortTitle,
+        spesifikData: formData,
+        chatHistory: [],
+      }
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP Error ${res.status}`)
+      setFormData((prev) => ({ ...prev, materiTopik: (data.result || '').trim() }))
+      setRacikMsg({
+        type: 'success',
+        text: 'Prompt lengkap berhasil ditempel ke kolom "Topik Ujian / Indikator Materi" di atas.',
+      })
+    } catch (err: any) {
+      setRacikMsg({ type: 'warn', text: `Gagal meracik prompt: ${err.message}` })
+    } finally {
+      setRacikLoading(false)
+    }
+  }
+
   const aiToolsConfig: Record<
     string,
     {
@@ -1467,9 +1537,11 @@ export default function AiToolsPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-16 relative overflow-x-hidden transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-200 text-slate-800'
-      }`}
+      className={`font-sans selection:bg-indigo-500 selection:text-white pb-16 relative transition-colors duration-300 flex flex-col ${
+        activeTool === 'chatbot'
+          ? 'h-screen overflow-hidden'
+          : 'min-h-screen overflow-y-auto overflow-x-hidden justify-between'
+      } ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-200 text-slate-800'}`}
     >
       {/* WATERMARK LOGO */}
       <div
@@ -1484,7 +1556,7 @@ export default function AiToolsPage() {
         />
       </div>
 
-      <div className="relative z-10">
+      <div className={`relative z-10 ${activeTool === 'chatbot' ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
         {/* 1. SUPER-COMPACT HEADER TOPBAR */}
         <header
           className={`border-b px-3 py-1.5 flex items-center justify-between gap-2 sticky top-0 z-40 shadow-xs transition-colors duration-300 ${
@@ -1643,8 +1715,9 @@ export default function AiToolsPage() {
         </div>
 
         {/* MAIN CONTENT CONTAINER COMPACT */}
-        <main className="max-w-6xl mx-auto p-2 sm:p-4 space-y-2.5">
+        <main className={`max-w-6xl mx-auto p-2 sm:p-4 space-y-2.5 ${activeTool === 'chatbot' ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
           {/* BANNER TOOL COMPACT */}
+          {activeTool !== 'chatbot' && (
           <div
             className={`${currentToolData.bgBanner} rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-sm relative overflow-hidden text-white border transition-all duration-300`}
           >
@@ -1659,15 +1732,18 @@ export default function AiToolsPage() {
                 {currentToolData.subtitle}
               </p>
             </div>
-            <button
-              onClick={handleStartGenerate}
-              disabled={isGenerating}
-              className="w-full sm:w-auto bg-white hover:bg-slate-100 text-indigo-950 font-black px-3.5 py-2 rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 cursor-pointer shrink-0"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>{isGenerating ? 'AI Memproses...' : currentToolData.buttonText}</span>
-            </button>
+            {activeTool !== 'chatbot' && (
+              <button
+                onClick={handleStartGenerate}
+                disabled={isGenerating}
+                className="w-full sm:w-auto bg-white hover:bg-slate-100 text-indigo-950 font-black px-3.5 py-2 rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 cursor-pointer shrink-0"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{isGenerating ? 'AI Memproses...' : currentToolData.buttonText}</span>
+              </button>
+            )}
           </div>
+          )}
 
           {/* ACCORDION KOP SURAT COMPACT */}
           {activeTool !== 'chatbot' && (
@@ -1839,6 +1915,7 @@ export default function AiToolsPage() {
           )}
 
           {/* PARAMETER INPUT AI COMPACT */}
+          {activeTool !== 'chatbot' && (
           <div
             className={`backdrop-blur-md border rounded-xl p-2.5 sm:p-3.5 space-y-2.5 shadow-xs ${
               isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
@@ -2534,19 +2611,8 @@ export default function AiToolsPage() {
                     kelas, atau narasi rapor siswa.
                   </p>
                 </div>
-                <div>
-                  <textarea
-                    rows={3}
-                    value={formData.materiTopik}
-                    onChange={(e) => setFormData({ ...formData, materiTopik: e.target.value })}
-                    placeholder="Ketik pertanyaan atau studi kasus guru di sini..."
-                    className={`w-full border rounded-lg p-2.5 focus:outline-none text-xs leading-relaxed font-medium resize-none ${
-                      isDarkMode
-                        ? 'bg-slate-800 border-slate-700 text-white'
-                        : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
-                  />
-                </div>
+
+
               </div>
             )}
 
@@ -2702,13 +2768,30 @@ export default function AiToolsPage() {
                   </div>
                 </div>
                 <div>
-                  <label
-                    className={`block text-[10px] font-bold mb-0.5 ${
-                      isDarkMode ? 'text-indigo-300' : 'text-slate-700'
-                    }`}
-                  >
-                    Topik Ujian / Indikator Materi
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 mb-0.5">
+                    <label
+                      className={`block text-[10px] font-bold ${
+                        isDarkMode ? 'text-indigo-300' : 'text-slate-700'
+                      }`}
+                    >
+                      Topik Ujian / Indikator Materi
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleRacikPrompt}
+                      disabled={racikLoading}
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-lg border inline-flex items-center gap-1 cursor-pointer transition disabled:opacity-50 ${
+                        racikLoading
+                          ? 'bg-purple-500 text-white border-purple-400'
+                          : isDarkMode
+                          ? 'bg-purple-900/40 border-purple-700 text-purple-300 hover:bg-purple-800/60'
+                          : 'bg-purple-50 border-purple-300 text-purple-800 hover:bg-purple-100'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {racikLoading ? 'Meracik...' : 'Racik Prompt dari Judul Bab (AI)'}
+                    </button>
+                  </div>
                   <textarea
                     rows={2}
                     value={formData.materiTopik}
@@ -2724,6 +2807,22 @@ export default function AiToolsPage() {
                         : 'bg-slate-50 border-slate-300 text-slate-900'
                     }`}
                   />
+                  {racikMsg && (
+                    <div
+                      className={`mt-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold flex items-start gap-1.5 ${
+                        racikMsg.type === 'success'
+                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600'
+                          : 'bg-amber-500/15 border-amber-500/40 text-amber-600'
+                      }`}
+                    >
+                      {racikMsg.type === 'success' ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-px" />
+                      ) : (
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                      )}
+                      <span>{racikMsg.text}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2778,6 +2877,7 @@ export default function AiToolsPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* BANK SOAL SAYA — MUAT & LANJUTKAN EDIT */}
           {activeTool === 'soal' && (
@@ -2924,9 +3024,9 @@ export default function AiToolsPage() {
 
           {/* HASIL OUTPUT AI DENGAN LIVE VISUAL PREVIEW & DIRECT CLICK-TO-EDIT */}
           <div
-            className={`backdrop-blur-md border rounded-xl p-2.5 sm:p-4 space-y-3 min-h-[260px] shadow-xs ${
-              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
-            }`}
+            className={`backdrop-blur-md border rounded-xl p-2.5 sm:p-4 space-y-3 shadow-xs ${
+              activeTool === 'chatbot' ? 'flex-1 min-h-0 flex flex-col' : 'min-h-[260px]'
+            } ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'}`}
           >
             <div
               className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-2.5 gap-2 ${
@@ -2940,7 +3040,9 @@ export default function AiToolsPage() {
                     isDarkMode ? 'text-white' : 'text-slate-900'
                   }`}
                 >
-                  Hasil - {currentToolData.title} ({selectedJenjang})
+                  {activeTool === 'chatbot'
+                    ? 'Asisten Guru AI — Percakapan'
+                    : `Hasil - ${currentToolData.title} (${selectedJenjang})`}
                 </h4>
                 {editedPlainTextMap[currentResultKey] && !isEditingVisual && (
                   <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
@@ -2968,7 +3070,7 @@ export default function AiToolsPage() {
                   </label>
                 )}
 
-                {generatedResults[currentResultKey] && (
+                {activeTool !== 'chatbot' && generatedResults[currentResultKey] && (
                   <button
                     onClick={handleToggleVisualEdit}
                     className={`flex-1 sm:flex-none px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition shadow-xs flex items-center justify-center gap-1 cursor-pointer border ${
@@ -2993,6 +3095,7 @@ export default function AiToolsPage() {
                   </button>
                 )}
 
+                {(activeTool !== 'chatbot') && (
                 <button
                   onClick={handlePrintPDF}
                   disabled={!generatedResults[currentResultKey]}
@@ -3000,6 +3103,8 @@ export default function AiToolsPage() {
                 >
                   <Printer className="w-4 h-4" /> Cetak PDF {activeTool === 'soal' ? '(2 Kolom)' : ''}
                 </button>
+                )}
+                {(activeTool !== 'chatbot') && (
                 <button
                   onClick={handleDownloadWord}
                   disabled={!generatedResults[currentResultKey]}
@@ -3007,7 +3112,9 @@ export default function AiToolsPage() {
                 >
                   <Download className="w-4 h-4" /> Word
                 </button>
+                )}
               </div>
+
             </div>
 
             {/* FLOATING TOOLBAR SAAT MODE EDIT VISUAL AKTIF */}
@@ -3071,7 +3178,23 @@ export default function AiToolsPage() {
               </div>
             )}
 
-            {isGenerating ? (
+            {activeTool === 'chatbot' ? (
+              <ChatAssistant
+                jenjang={selectedJenjang}
+                mapel={formData.mapel}
+                faseKelas={formData.faseKelas}
+                jurusan={selectedJenjang === 'SMK' ? 'Desain Komunikasi Visual (DKV)' : null}
+                namaSekolah={selectedJenjang === 'SMK' ? 'SMK MUNA MUSTOFA' : kopSekolah.namaSekolah}
+                namaKepala={adminForm.namaKepala || (selectedJenjang === 'SMK' ? kepalaSmk.nama : kepalaSmp.nama)}
+                nipKepala={adminForm.nipKepala || (selectedJenjang === 'SMK' ? kepalaSmk.nuptk : kepalaSmp.nuptk)}
+                isDarkMode={isDarkMode}
+                userName={userDisplayName}
+                mapelOptions={filteredMapelList.map((m) => m.nama_mapel)}
+                onJenjangChange={handleJenjangSwitch}
+                onMapelChange={handleMapelChange}
+                onUsePrompt={handleUseChatPrompt}
+              />
+            ) : isGenerating ? (
               <div className="py-12 flex flex-col items-center justify-center text-center space-y-2.5">
                 <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                 <p
