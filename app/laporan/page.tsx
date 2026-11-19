@@ -42,6 +42,441 @@ const getSupabaseAnonKey = () =>
 
 const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
+const BULAN_INDONESIA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const HARI_INDONESIA = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+interface JamRange {
+  start: number
+  end: number
+}
+
+// Ekstrak rentang angka jam dari teks seperti "Jam Ke-1 s/d 4 (07:30 - 09:30)"
+function parseJamRangeText(jamKe: unknown): JamRange {
+  // Buang lebih dulu teks di dalam tanda kurung (mis. keterangan waktu
+  // "07:30 - 08:30") agar angka jam tidak ikut terbaca sebagai batas akhir
+  // rentang. Tanpa ini, "Jam Ke-5 (10:00 - 10:30)" bisa salah di-parse
+  // menjadi {5..10} dan menutupi slot mapel lain (mis. IPA jam 7-8).
+  const str = String(jamKe ?? '').replace(/\([^)]*\)/g, '')
+  const m = str.match(/jam\s*ke[-\s]*(\d+)(?:[^0-9]+(\d+))?/i)
+  if (!m) return { start: 1, end: 1 }
+  const start = parseInt(m[1], 10) || 1
+  const rawEnd = m[2] ? parseInt(m[2], 10) : NaN
+  const end = Number.isFinite(rawEnd) ? rawEnd : start
+  return { start: Math.min(start, end), end: Math.max(start, end) }
+}
+
+// Format "Kamis, 19/11/2026"
+function formatHariTanggal(tanggal: unknown): string {
+  const raw = String(tanggal ?? '').slice(0, 10)
+  if (!raw) return '-'
+  const d = new Date(`${raw}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return raw
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${HARI_INDONESIA[d.getDay()]}, ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+}
+
+// Normalisasi nama mapel: buang awalan kelas ("VII A - ") & rapikan Title Case
+function normalizeMapelNama(raw: unknown, namaKelas?: string): string {
+  let s = String(raw ?? '').trim()
+  if (!s) return ''
+  s = s.replace(/^([IVX]+(?:\/\d+)?|\d+)\s+[A-Z0-9]*\s*[-–—]\s*/i, '')
+  if (namaKelas) {
+    const prefix = `${namaKelas.trim()} -`
+    if (s.toUpperCase().startsWith(prefix.toUpperCase())) s = s.slice(prefix.length).trim()
+  }
+  return s
+    .split(/\s+/)
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(' ')
+}
+
+// Ekstrak jumlah per status absensi
+function parseAbsenCounts(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = { SAKIT: 0, IZIN: 0, ALPA: 0 }
+  String(raw ?? '').replace(/(SAKIT|IZIN|ALPA)\s*[:]\s*(\d+)/gi, (_, k, v) => {
+    out[k.toUpperCase()] = (out[k.toUpperCase()] || 0) + (parseInt(v, 10) || 0)
+    return _
+  })
+  return out
+}
+
+function formatAbsenFromCounts(c: Record<string, number>, hadEmpty: boolean): string {
+  if (hadEmpty && c.SAKIT === 0 && c.IZIN === 0 && c.ALPA === 0) return 'Nihil'
+  return `SAKIT: ${c.SAKIT}, IZIN: ${c.IZIN}, ALPA: ${c.ALPA}`
+}
+
+// Format tanggal panjang untuk header hari blok jurnal: "SENIN, 09 NOVEMBER 2026"
+function formatHariTanggalPanjang(tanggal: unknown): string {
+  const raw = String(tanggal ?? '').slice(0, 10)
+  if (!raw) return '-'
+  const d = new Date(`${raw}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return raw
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const tgl = pad(d.getDate())
+  const bulan = BULAN_INDONESIA[d.getMonth()] || ''
+  return `${HARI_INDONESIA[d.getDay()]}, ${tgl} ${bulan} ${d.getFullYear()}`.toUpperCase()
+}
+
+// Parse nama-nama siswa yang tidak hadir dari teks `absen_siswa`.
+// Format tersimpan: "SAKIT: Budi, Siti | IZIN: Andi | ALPA: Rohman" (atau "Nihil").
+interface AbsenGroup {
+  status: string
+  nama: string[]
+}
+function parseAbsenGroups(raw: unknown): AbsenGroup[] {
+  const str = String(raw ?? '').trim()
+  if (!str || /nihil/i.test(str)) return []
+  const groups: AbsenGroup[] = []
+  for (const seg of str.split('|')) {
+    const m = seg.match(/^\s*([A-Za-z]+)\s*:\s*(.*)$/)
+    if (m && m[1] && m[2]) {
+      const nama = m[2].split(',').map((s) => s.trim()).filter(Boolean)
+      groups.push({ status: m[1].toUpperCase(), nama })
+    } else {
+      const nama = seg.split(',').map((s) => s.trim()).filter(Boolean)
+      if (nama.length) groups.push({ status: 'KETERANGAN', nama })
+    }
+  }
+  return groups
+}
+
+// Gabungkan & deduplikasi nama siswa tidak hadir dalam satu hari (Sakit/Izin/Alpa).
+// Mengembalikan string HTML multiline (dipisah <br/>), atau "NIHIL" bila kosong.
+function formatAbsenHarian(items: { absenRaw: unknown }[]): string {
+  const byStatus = new Map<string, Map<string, string>>() // status -> lowerName -> displayName
+  let totalNama = 0
+  for (const it of items) {
+    for (const g of parseAbsenGroups(it.absenRaw)) {
+      if (!byStatus.has(g.status)) byStatus.set(g.status, new Map())
+      const m = byStatus.get(g.status)!
+      for (const nm of g.nama) {
+        const key = nm.toLowerCase()
+        if (!m.has(key)) {
+          m.set(key, nm)
+          totalNama++
+        }
+      }
+    }
+  }
+  if (totalNama === 0) return 'NIHIL'
+  const urutan = ['SAKIT', 'IZIN', 'ALPA']
+  const keys = Array.from(byStatus.keys()).sort((a, b) => {
+    const ia = urutan.indexOf(a)
+    const ib = urutan.indexOf(b)
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+  })
+  return keys
+    .map((k) => `${k}: ${Array.from(byStatus.get(k)!.values()).join(', ')}`)
+    .join('<br/>')
+}
+
+interface JurnalGridCell {
+  n: number
+  isStart: boolean
+  isCovered: boolean
+  span: number
+  mapel: string
+  materi: string
+  guruNama: string
+  status: string
+}
+
+// Nama hari Indonesia dari sebuah tanggal (mis. "Kamis")
+function getNamaHariFromTanggal(tanggal: unknown): string {
+  const raw = String(tanggal ?? '').slice(0, 10)
+  if (!raw) return ''
+  const d = new Date(`${raw}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  return HARI_INDONESIA[d.getDay()] || ''
+}
+
+// Parse rentang jam resmi entri jadwal (kolom `jam` / `jam_ke`)
+function parseJadwalJamRange(item: any): JamRange {
+  const str = String(item?.jam || '')
+  if (/\d/.test(str)) return parseJamRangeText(str)
+  const s = Number(item?.jam_ke || 1)
+  return { start: s, end: s }
+}
+
+// Bangun grid slot Jam Ke-1 s/d 8 berdasarkan matriks jadwal resmi kelas,
+// lalu tempelkan materi/status jurnal_agenda ke slot berdasarkan mapel_id
+// (utama) lalu jam_ke (cadangan). Status slot kosong mengikuti data absensi.
+function buildJurnalGridCells(opts: {
+  tanggal: string
+  jadwalRows: any[]
+  jurnalRows: any[]
+  absensiRowsTanggal: any[]
+  namaKelasClean: string
+  guruNamaMap: Map<string, string>
+}): JurnalGridCell[] {
+  const {
+    tanggal,
+    jadwalRows,
+    jurnalRows,
+    absensiRowsTanggal,
+    namaKelasClean,
+    guruNamaMap,
+  } = opts
+
+  const hariName = getNamaHariFromTanggal(tanggal)
+
+  interface GridSlot {
+    jamStart: number
+    jamEnd: number
+    mapelId: number | null
+    mapelNama: string
+    guruNama: string
+    materi: string
+    status: string
+    matchedJurnal: boolean
+  }
+
+  const slots: GridSlot[] = []
+
+  // ============================================================================
+  // LANGKAH A — Kerangka grid dari tabel `jadwal` resmi kelas (merge per-jam)
+  // ============================================================================
+  const dayJadwal = jadwalRows
+    .filter((j) => String(j?.hari || '').trim().toLowerCase() === hariName.toLowerCase())
+    .map((j) => {
+      const rg = parseJadwalJamRange(j)
+      return {
+        jamStart: rg.start,
+        jamEnd: rg.end,
+        mapelId: j.mapel_id != null ? Number(j.mapel_id) : null,
+        guruEmail: String(j.guru_email || '').trim().toLowerCase(),
+        mapelNama: normalizeMapelNama(j.mapel || '', namaKelasClean) || '-',
+      }
+    })
+    .sort((a, b) => a.jamStart - b.jamStart)
+
+  // Gabungkan baris jadwal per-jam yang berurutan (mapel_id & guru_email sama)
+  const jadwalBlocks: {
+    jamStart: number
+    jamEnd: number
+    mapelId: number | null
+    guruEmail: string
+    mapelNama: string
+  }[] = []
+  for (const item of dayJadwal) {
+    const last = jadwalBlocks[jadwalBlocks.length - 1]
+    if (
+      last &&
+      last.mapelId === item.mapelId &&
+      last.guruEmail === item.guruEmail &&
+      item.jamStart <= last.jamEnd + 1
+    ) {
+      last.jamEnd = Math.max(last.jamEnd, item.jamEnd)
+      if (item.mapelNama && item.mapelNama !== '-') last.mapelNama = item.mapelNama
+      continue
+    }
+    jadwalBlocks.push(item)
+  }
+
+  const usedBlockIndexes = new Set<number>()
+
+  // ============================================================================
+  // LANGKAH B — Tempelkan `jurnal_agenda`: cocokkan via `mapel_id` KE JADWAL
+  //             DULU (entri lama yang salah input jam menempel ke slot resminya);
+  //             jika mapel_id tidak ada di jadwal hari itu, pakai jam_ke sendiri.
+  // ============================================================================
+  for (const r of jurnalRows) {
+    const rMapel = r.mapel_id != null ? Number(r.mapel_id) : null
+    const jr = parseJamRangeText(r.jam_ke)
+    const rEmail = String(r.guru_email || '').trim().toLowerCase()
+    const guruNama = guruNamaMap.get(rEmail) || '-'
+    const materi = String(r.materi || '').trim()
+    const status = String(r.status || 'Terlaksana')
+
+    let attached = false
+    if (rMapel != null) {
+      const idx = jadwalBlocks.findIndex((b, i) => !usedBlockIndexes.has(i) && b.mapelId === rMapel)
+      if (idx >= 0) {
+        usedBlockIndexes.add(idx)
+        const b = jadwalBlocks[idx]
+        slots.push({
+          jamStart: b.jamStart,
+          jamEnd: b.jamEnd,
+          mapelId: rMapel,
+          mapelNama: b.mapelNama,
+          guruNama,
+          materi,
+          status,
+          matchedJurnal: true,
+        })
+        attached = true
+      }
+    }
+
+    if (!attached) {
+      const mapelNama = normalizeMapelNama(r.mapel, namaKelasClean) || '-'
+      // JANGAN biarkan entri jurnal meluber ke jam milik mapel lain.
+      // Jika mapel ini punya blok jadwal resmi di hari yang sama (tapi bloknya
+      // sudah terpakai oleh jurnal lain ber-mapel sama), batasi rentang slot ke
+      // batas blok tersebut — mis. Bahasa Inggris (Jam 5–6) tidak boleh
+      // menutupi slot IPA (Jam 7–8) walau teks jam_ke jurnal melebar.
+      let fbStart = jr.start
+      let fbEnd = jr.end
+      const ownBlock = rMapel != null
+        ? jadwalBlocks.find((b) => b.mapelId === rMapel)
+        : undefined
+      if (ownBlock) {
+        fbStart = ownBlock.jamStart
+        fbEnd = ownBlock.jamEnd
+      }
+      slots.push({
+        jamStart: fbStart,
+        jamEnd: fbEnd,
+        mapelId: rMapel,
+        mapelNama,
+        guruNama,
+        materi,
+        status,
+        matchedJurnal: true,
+      })
+    }
+  }
+
+  // ============================================================================
+  // LANGKAH C — Lengkapi slot `jadwal` yang belum punya jurnal: cek `absensi`
+  //             (mapel_id SAMA / guru_email SAMA — JANGAN andalkan absensi.jam_ke)
+  // ============================================================================
+  for (let i = 0; i < jadwalBlocks.length; i++) {
+    if (usedBlockIndexes.has(i)) continue
+    const b = jadwalBlocks[i]
+    const adaAbsen =
+      absensiRowsTanggal.length > 0 &&
+      absensiRowsTanggal.some(
+        (a) =>
+          (b.mapelId != null && a.mapel_id != null && Number(a.mapel_id) === b.mapelId) ||
+          (b.guruEmail && String(a.guru_email || '').trim().toLowerCase() === b.guruEmail)
+      )
+    slots.push({
+      jamStart: b.jamStart,
+      jamEnd: b.jamEnd,
+      mapelId: b.mapelId,
+      mapelNama: b.mapelNama,
+      guruNama: guruNamaMap.get(b.guruEmail) || '-',
+      materi: adaAbsen ? '(SUDAH ABSEN — MATERI BELUM DIINPUT)' : '-',
+      status: adaAbsen ? 'Terlaksana' : 'Belum Absen/Jurnal',
+      matchedJurnal: false,
+    })
+  }
+
+  // Prioritaskan slot berisi data nyata (jurnal) di atas kerangka kosong
+  slots.sort((a, b) => {
+    if (a.jamStart !== b.jamStart) return a.jamStart - b.jamStart
+    if (a.matchedJurnal !== b.matchedJurnal) return a.matchedJurnal ? -1 : 1
+    return 0
+  })
+
+  const cells: JurnalGridCell[] = []
+  for (let n = 1; n <= 8; n++) {
+    const slot = slots.find((s) => n >= s.jamStart && n <= s.jamEnd)
+    if (!slot) {
+      cells.push({ n, isStart: false, isCovered: false, span: 0, mapel: '', materi: '', guruNama: '', status: '' })
+      continue
+    }
+    const isStart = n === slot.jamStart
+    const span = Math.max(1, Math.min(slot.jamEnd, 8) - slot.jamStart + 1)
+    cells.push({
+      n,
+      isStart,
+      isCovered: !isStart && span > 0,
+      span,
+      mapel: slot.mapelNama,
+      materi: slot.materi || '-',
+      guruNama: slot.guruNama || '-',
+      status: slot.status || 'Terlaksana',
+    })
+  }
+
+  return cells
+}
+
+// Rekap absen harian kolom kanan: gabungkan absensi (SAKIT/IZIN/ALPA,
+// JOIN nama via nama_siswa) + teks absen_siswa dari jurnal, deduplikasi.
+function formatAbsenHarianGabungan(
+  jurnalItems: { absenRaw: unknown }[],
+  absensiRecords: any[]
+): string {
+  const byStatus = new Map<string, Map<string, string>>()
+  let totalNama = 0
+  const addName = (status: string, nm: string) => {
+    const st = status.toUpperCase()
+    const clean = String(nm || '').trim()
+    if (!clean) return
+    if (!byStatus.has(st)) byStatus.set(st, new Map())
+    const m = byStatus.get(st)!
+    const key = clean.toLowerCase()
+    if (!m.has(key)) {
+      m.set(key, clean)
+      totalNama++
+    }
+  }
+  for (const it of jurnalItems) {
+    for (const g of parseAbsenGroups(it.absenRaw)) {
+      for (const nm of g.nama) addName(g.status, nm)
+    }
+  }
+  for (const a of absensiRecords) {
+    const st = String(a.status || '').toUpperCase()
+    if (st === 'SAKIT' || st === 'IZIN' || st === 'ALPA') {
+      addName(st, a.nama_siswa)
+    }
+  }
+  if (totalNama === 0) return 'NIHIL'
+  const urutan = ['SAKIT', 'IZIN', 'ALPA']
+  const keys = Array.from(byStatus.keys()).sort((a, b) => {
+    const ia = urutan.indexOf(a)
+    const ib = urutan.indexOf(b)
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+  })
+  return keys
+    .map((k) => `${k}: ${Array.from(byStatus.get(k)!.values()).join(', ')}`)
+    .join('<br/>')
+}
+
+// "2026-11" -> "November 2026"
+// "2026-11" -> "November 2026"
+function formatBulanIndonesia(monthValue: unknown): string {
+  const raw = String(monthValue ?? '')
+  const m = raw.match(/(\d{4})-(\d{1,2})/)
+  if (!m) return raw
+  const idx = parseInt(m[2], 10) - 1
+  const nama = BULAN_INDONESIA[idx] || raw
+  return `${nama} ${m[1]}`
+}
+
+// Kop surat teks resmi (SMP/SMK) — konsisten berbahasa Indonesia
+function buildKopJurnalHtml(unit: string): string {
+  const isSmk = unit.toUpperCase() === 'SMK'
+  const sekolah = isSmk ? 'SMK MUNA MUSTOFA' : 'SMP MUNA MUSTOFA'
+  const logo = isSmk ? '/logo-smk.png' : '/logo-smp.jpg'
+  const program = isSmk
+    ? '<p style="margin:0; font-size:9pt; font-weight:bold;">Kompetensi Keahlian: Desain Komunikasi Visual (DKV)</p>'
+    : ''
+  const alamat = isSmk
+    ? 'Jl. PPTQ Muna Mustofa, Kecamatan Gisting, Kabupaten Tanggamus, Provinsi Lampung 35376'
+    : 'Jl. PPTQ Muna Mustofa, Campang, Kecamatan Gisting, Kabupaten Tanggamus, Provinsi Lampung 35376'
+  const surel = isSmk ? 'smk.munamustofa@gmail.com' : 'smp.munamustofa@gmail.com'
+  const laman = isSmk ? 'www.smkmunamustofa.sch.id' : 'www.smpmunamustofa.sch.id'
+  return `
+    <div class="jurnal-kop">
+      <div style="display:inline-block; vertical-align:middle;">
+        <img src="${logo}" alt="Logo" style="width:58px; height:58px; margin-right:10px;" onerror="this.style.display='none';" />
+      </div>
+      <div style="display:inline-block; vertical-align:middle; text-align:center;">
+        <p style="margin:0; font-size:9.5pt; font-weight:bold;">YAYASAN PONDOK PESANTREN MUNA MUSTOFA LAMPUNG</p>
+        <h2 style="margin:1px 0; font-size:13.5pt; font-weight:bold;">${sekolah}</h2>
+        ${program}
+        <p style="margin:1px 0 0; font-size:8.5pt;">Alamat: ${alamat}</p>
+        <p style="margin:0; font-size:8.5pt;">Surel / Email: ${surel} &nbsp;|&nbsp; Laman / Website: ${laman}</p>
+      </div>
+    </div>
+  `
+}
+
 interface OptionItem {
   id: number
   nama: string
@@ -101,6 +536,7 @@ export default function LaporanPage() {
   const [filterKelasJurnal, setFilterKelasJurnal] = useState('')
   const [filterTanggalJurnal, setFilterTanggalJurnal] = useState('')
   const [filterBulanJurnal, setFilterBulanJurnal] = useState('')
+  const [filterMapelJurnal, setFilterMapelJurnal] = useState('')
 
   const [filterKelasBimbingan, setFilterKelasBimbingan] = useState('')
   const [filterBulanBimbingan, setFilterBulanBimbingan] = useState('')
@@ -643,12 +1079,12 @@ export default function LaporanPage() {
             <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
               ${
                 pakaiCapKepsek
-                  ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
+                  ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; width: auto; object-fit: contain; opacity: 0.9; z-index: 1;" />'
                   : ''
               }
               ${
                 pakaiTtdKepsek
-                  ? '<img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />'
+                  ? '<img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; width: auto; object-fit: contain; z-index: 2;" />'
                   : ''
               }
               ${!pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
@@ -1674,86 +2110,511 @@ export default function LaporanPage() {
       `
     } else if (jenis === 'jurnal') {
       const selectedK = kelasList.find((k) => k.id === Number(filterKelasJurnal))
-      judulDoc = `JURNAL AGENDA MENGAJAR HARIAN GURU ${
-        selectedK ? `(${selectedK.nama.toUpperCase()})` : '(SEMUA KELAS)'
-      }`
+      const selectedM = filterMapelJurnal
+        ? mapelList.find((m) => Number(m.id) === Number(filterMapelJurnal))
+        : null
+
+      // Mode cetak: per Mapel/Guru (berbasis mapel_id) vs per Kelas
+      const isGuruMode = Boolean(filterMapelJurnal)
 
       let queryAgenda = supabase
         .from('jurnal_agenda')
         .select('*')
         .eq('semester', selectedSemester)
         .eq('tahun_ajaran', selectedTahunAjaran)
-        .order('created_at', { ascending: false })
+        .order('tanggal', { ascending: true })
       if (filterKelasJurnal) queryAgenda = queryAgenda.eq('kelas_id', Number(filterKelasJurnal))
+      if (filterMapelJurnal) queryAgenda = queryAgenda.eq('mapel_id', Number(filterMapelJurnal))
+      if (filterTanggalJurnal) queryAgenda = queryAgenda.eq('tanggal', filterTanggalJurnal)
+      else if (filterBulanJurnal) queryAgenda = queryAgenda.ilike('tanggal', `${filterBulanJurnal}%`)
 
-      if (filterTanggalJurnal) {
-        queryAgenda = queryAgenda.eq('tanggal', filterTanggalJurnal)
-      } else if (filterBulanJurnal) {
-        queryAgenda = queryAgenda.ilike('tanggal', `${filterBulanJurnal}%`)
+      const { data: agendaRaw } = await queryAgenda
+      const rawRows: any[] = agendaRaw || []
+
+      const unitUtama = selectedK
+        ? detectUnitByKelas(selectedK.nama, selectedK.jenjang, selectedK.tingkat)
+        : selectedM?.jenjang && String(selectedM.jenjang).toUpperCase() === 'SMK'
+        ? 'SMK'
+        : rawRows.some((r) => String(r.jenjang).toUpperCase() === 'SMK')
+        ? 'SMK'
+        : 'SMP'
+
+      judulDoc = isGuruMode
+        ? `JURNAL AGENDA MENGAJAR GURU${
+            selectedM ? ` (${(selectedM.nama || '').toUpperCase()})` : ''
+          }`
+        : `JURNAL AGENDA HARIAN KELAS${
+            selectedK ? ` (${selectedK.nama.toUpperCase()})` : ' (SEMUA KELAS)'
+          }`
+
+      let guruCetakJurnal: RaporGuruInfo
+      let faseLabel = ''
+      if (isGuruMode) {
+        guruCetakJurnal = await resolvePenandatanganPDF({
+          mode: 'mapel',
+          mapelId: filterMapelJurnal || null,
+          mapelNama: selectedM?.nama || null,
+          kodeMapel: selectedM?.kode_mapel || null,
+        })
+      } else {
+        const waliInfo = await resolveWaliKelasByKelasId(filterKelasJurnal || null)
+        const jabatanWali = `Wali Kelas ${selectedK?.nama ? selectedK.nama.toUpperCase() : ''}`.trim()
+        guruCetakJurnal = { ...waliInfo, jabatanLabel: jabatanWali }
+        if (selectedK) {
+          if (unitUtama === 'SMP') faseLabel = 'D'
+          else faseLabel = getKelasGradeWeight(selectedK.nama, selectedK.tingkat) === 10 ? 'E' : 'F'
+        }
       }
 
-      const { data: agendaData } = await queryAgenda
+      const emailSet = Array.from(new Set(rawRows.map((r) => r.guru_email).filter(Boolean))) as string[]
+      const guruNamaMap = new Map<string, string>()
+      if (emailSet.length) {
+        const { data: guruData } = await supabase
+          .from('guru')
+          .select('email, nama_lengkap')
+          .in('email', emailSet)
+        ;(guruData || []).forEach((g: any) => {
+          guruNamaMap.set(String(g.email).trim().toLowerCase(), String(g.nama_lengkap || '').trim())
+        })
+      }
 
-      const uniqueMapels = Array.from(
-        new Set((agendaData || []).map((a: any) => a.mapel).filter(Boolean))
-      )
-      const singleMapelJurnal = uniqueMapels.length === 1 ? String(uniqueMapels[0]) : null
-      const firstAgenda = (agendaData || [])[0]
+      if (!isGuruMode && filterKelasJurnal) {
+        // ============================================================================
+        // MODE KELAS — SINKRONISASI MATRIKS JADWAL (MASTER GRID) + REKAP ABSENSI
+        // Bangun slot Jam Ke-1 s/d 8 dari tabel `jadwal` resmi kelas, cocokkan
+        // materi/status `jurnal_agenda` via mapel_id (utama) lalu jam_ke
+        // (cadangan), dan gabungkan rekap absen dari `absensi` + jurnal.
+        // ============================================================================
+        const { data: jadwalData } = await supabase
+          .from('jadwal')
+          .select('*')
+          .eq('kelas_id', Number(filterKelasJurnal))
+        const jadwalRows: any[] = jadwalData || []
 
-      guruCetak = await resolvePenandatanganPDF({
-        mode: 'umum',
-        guruEmail: firstAgenda?.guru_email,
-        mapelId: firstAgenda?.mapel_id,
-        mapelNama: singleMapelJurnal,
+        let qAbsensi = supabase
+          .from('absensi')
+          .select('*')
+          .eq('kelas_id', Number(filterKelasJurnal))
+        if (filterTanggalJurnal) qAbsensi = qAbsensi.eq('tanggal', filterTanggalJurnal)
+        else if (filterBulanJurnal)
+          qAbsensi = qAbsensi.ilike('tanggal', `${filterBulanJurnal}%`)
+        const { data: absensiData } = await qAbsensi
+        const absensiRows: any[] = absensiData || []
+
+        // Ambil SELURUH baris `guru` (email, nama_lengkap) agar setiap `guru_email`
+        // dari `jurnal_agenda`, `jadwal`, maupun `absensi` selalu tampil sebagai
+        // `nama_lengkap` — tidak pernah menampilkan alamat email mentah.
+        {
+          const { data: guruSemua } = await supabase
+            .from('guru')
+            .select('email, nama_lengkap')
+          ;(guruSemua || []).forEach((g: any) => {
+            const em = String(g?.email || '').trim().toLowerCase()
+            if (em) guruNamaMap.set(em, String(g?.nama_lengkap || '').trim())
+          })
+        }
+
+        const absenByTanggal = new Map<string, any[]>()
+        for (const a of absensiRows) {
+          const tgl = a.tanggal ? String(a.tanggal).slice(0, 10) : ''
+          if (!tgl) continue
+          if (!absenByTanggal.has(tgl)) absenByTanggal.set(tgl, [])
+          absenByTanggal.get(tgl)!.push(a)
+        }
+
+        const jurnalByTanggal = new Map<string, any[]>()
+        for (const r of rawRows) {
+          const tgl = r.tanggal ? String(r.tanggal).slice(0, 10) : ''
+          if (!tgl) continue
+          if (!jurnalByTanggal.has(tgl)) jurnalByTanggal.set(tgl, [])
+          jurnalByTanggal.get(tgl)!.push(r)
+        }
+
+        const namaKelasClean = (selectedK?.nama || '')
+          .replace(/\s*-\s*$/, '')
+          .trim()
+
+        // Hari Jumat adalah hari libur Pondok Pesantren -> disaring keluar agar tidak dicetak.
+        const activeTanggal = Array.from(
+          new Set([...jurnalByTanggal.keys(), ...absenByTanggal.keys()])
+        ).filter((tgl) => new Date(`${tgl}T00:00:00`).getDay() !== 5)
+        const sortedTanggal = activeTanggal.sort()
+
+        const dayGridMap = new Map<string, JurnalGridCell[]>()
+        const dayAbsenHtmlMap = new Map<string, string>()
+        for (const tgl of sortedTanggal) {
+          dayGridMap.set(
+            tgl,
+            buildJurnalGridCells({
+              tanggal: tgl,
+              jadwalRows,
+              jurnalRows: jurnalByTanggal.get(tgl) || [],
+              absensiRowsTanggal: absenByTanggal.get(tgl) || [],
+              namaKelasClean,
+              guruNamaMap,
+            })
+          )
+          dayAbsenHtmlMap.set(
+            tgl,
+            formatAbsenHarianGabungan(
+              (jurnalByTanggal.get(tgl) || []).map((x) => ({ absenRaw: x.absen_siswa })),
+              absenByTanggal.get(tgl) || []
+            )
+          )
+        }
+
+        let totalPertemuan = 0
+        let totalTerlaksana = 0
+        for (const cells of dayGridMap.values()) {
+          for (const c of cells) {
+            if (c.isStart) {
+              totalPertemuan++
+              if ((c.status || '').toLowerCase().includes('terlaksana')) totalTerlaksana++
+            }
+          }
+        }
+        const totalTertunda = totalPertemuan - totalTerlaksana
+
+        const sekarang2 = new Date()
+        const bulanLabel2 = filterBulanJurnal
+          ? formatBulanIndonesia(filterBulanJurnal)
+          : filterTanggalJurnal
+          ? formatBulanIndonesia(String(filterTanggalJurnal).slice(0, 7))
+          : `${BULAN_INDONESIA[sekarang2.getMonth()]} ${sekarang2.getFullYear()}`
+
+        const identitasLeft2 = `
+          <tr><td style="width:36%;"><b>Satuan Pendidikan</b></td><td>: ${unitUtama} Muna Mustofa</td></tr>
+          <tr><td><b>Kelas / Fase</b></td><td>: ${selectedK?.nama || 'Semua Kelas'} / ${faseLabel || '-'}</td></tr>
+          <tr><td><b>Wali Kelas</b></td><td>: ${guruCetakJurnal.nama}</td></tr>
+        `
+        const identitasRight2 = `
+          <tr><td style="width:30%;"><b>Tahun Ajaran</b></td><td>: ${selectedTahunAjaran}</td></tr>
+          <tr><td><b>Semester</b></td><td>: ${selectedSemester}</td></tr>
+          <tr><td><b>Bulan</b></td><td>: ${bulanLabel2}</td></tr>
+        `
+        const headerRows2 = `
+          <tr>
+            <th style="width:6%; background:#e5e7eb;">Jam Ke-</th>
+            <th style="width:17%; background:#e5e7eb;">Mata Pelajaran</th>
+            <th style="width:31%; background:#e5e7eb;">Materi Pokok / Kegiatan KBM</th>
+            <th style="width:18%; background:#e5e7eb;">Nama Guru Pengampu</th>
+            <th style="width:10%; background:#e5e7eb;">Status</th>
+            <th style="width:18%; background:#e5e7eb;">Absen Siswa<br/>(Sakit/Izin/Alpa)</th>
+          </tr>
+        `
+
+        const bodyRows2 =
+          sortedTanggal.length > 0
+            ? sortedTanggal
+                .map((tgl) => {
+                  const cells = dayGridMap.get(tgl)!
+                  const absenHtml = dayAbsenHtmlMap.get(tgl) || 'NIHIL'
+                  const rowsHtml = cells
+                    .map((cell) => {
+                      const n = cell.n
+                      let cols = `<td class="c jam-no">${n}</td>`
+                      if (cell.isStart) {
+                        cols += `<td rowspan="${cell.span}" class="upper">${String(cell.mapel).toUpperCase()}</td>`
+                        cols += `<td rowspan="${cell.span}" class="upper">${String(cell.materi).toUpperCase()}</td>`
+                        cols += `<td rowspan="${cell.span}">${cell.guruNama}</td>`
+                        cols += `<td rowspan="${cell.span}" class="c b status-cell">${cell.status}</td>`
+                      } else if (!cell.isCovered) {
+                        // slot benar-benar kosong -> cetak 4 sel kosong
+                        cols += '<td>-</td><td>-</td><td>-</td><td>-</td>'
+                      }
+                      // ketika cell.isCovered === true: JANGAN cetak <td> untuk 4 kolom tengah
+                      // (sudah terisi oleh rowspan dari baris isStart di atasnya)
+                      if (n === 1) cols += `<td rowspan="8" class="absen-cell">${absenHtml}</td>`
+                      return `<tr>${cols}</tr>`
+                    })
+                    .join('')
+                  return `
+                    <tbody style="break-inside: avoid; page-break-inside: avoid;">
+                      <tr class="hari-header"><td colspan="6">HARI / TANGGAL: ${formatHariTanggalPanjang(tgl)}</td></tr>
+                      ${rowsHtml}
+                    </tbody>
+                  `
+                })
+                .join('')
+            : `<tbody><tr><td class="c" colspan="6">Belum ada data agenda mengajar tersimpan.</td></tr></tbody>`
+        const rekapBox2 = `
+          <table class="rekap-box">
+            <tr>
+              <th>Total Pertemuan</th>
+              <th>Terlaksana</th>
+              <th>Tertunda / Izin</th>
+            </tr>
+            <tr>
+              <td class="c b">${totalPertemuan}</td>
+              <td class="c b">${totalTerlaksana}</td>
+              <td class="c b">${totalTertunda}</td>
+            </tr>
+          </table>
+        `
+
+        const contentBody2 = `
+          ${buildKopJurnalHtml(unitUtama)}
+          <h3 class="jurnal-judul">${judulDoc}</h3>
+          <table class="identitas-table">
+            <tr>
+              <td style="width:50%; vertical-align:top;">${identitasLeft2}</td>
+              <td style="width:50%; vertical-align:top;">${identitasRight2}</td>
+            </tr>
+          </table>
+          <div class="jurnal-body-wrap">
+            <table class="data-table">
+              <thead>${headerRows2}</thead>
+              <tbody>${bodyRows2}</tbody>
+            </table>
+          </div>
+          <div class="rekap-wrap">
+            <div class="rekap-left">${rekapBox2}</div>
+            <div style="clear:both;"></div>
+          </div>
+          ${getFooterTtdHTML(guruCetakJurnal)}
+        `
+
+        executePrintJurnal(judulDoc, contentBody2)
+        return
+      }
+
+
+
+
+      interface JurnalRowItem {
+        hariTanggal: string
+        tanggal: string
+        kelas: string
+        mapel: string
+        guruNama: string
+        jenjang: string
+        jamStart: number
+        jamEnd: number
+        materi: string
+        absenC: Record<string, number>
+        hadEmptyAbsen: boolean
+        status: string
+      }
+
+      const byKey = new Map<string, any[]>()
+      for (const r of rawRows) {
+        const tgl = r.tanggal ? String(r.tanggal).slice(0, 10) : ''
+        const kelasId = r.kelas_id != null ? Number(r.kelas_id) : null
+        const mapelId = r.mapel_id != null ? Number(r.mapel_id) : null
+        const key = `${tgl}|${kelasId ?? 'null'}|${mapelId ?? 'null'}`
+        if (!byKey.has(key)) byKey.set(key, [])
+        byKey.get(key)!.push(r)
+      }
+
+      const finalRows: JurnalRowItem[] = []
+      for (const group of byKey.values()) {
+        const intervals = group
+          .map((r) => parseJamRangeText(r.jam_ke))
+          .sort((a, b) => a.start - b.start)
+        const mergedIntervals: JamRange[] = []
+        for (const iv of intervals) {
+          const last = mergedIntervals[mergedIntervals.length - 1]
+          if (last && iv.start <= last.end + 1) last.end = Math.max(last.end, iv.end)
+          else mergedIntervals.push({ start: iv.start, end: iv.end })
+        }
+        for (const mi of mergedIntervals) {
+          const members = group.filter((r) => {
+            const j = parseJamRangeText(r.jam_ke)
+            return j.start <= mi.end && j.end >= mi.start
+          })
+          const first = members[0]
+          const kelasId = first?.kelas_id != null ? Number(first.kelas_id) : null
+          let namaKelas = String(first?.kelas || '')
+          if (kelasId != null) {
+            const kEl = kelasList.find((k) => Number(k.id) === kelasId)
+            if (kEl?.nama) namaKelas = String(kEl.nama)
+          }
+          const namaKelasClean = namaKelas.replace(/\s*-\s*$/, '').trim()
+          const mapelClean = normalizeMapelNama(first?.mapel, namaKelasClean)
+
+          const materiSet = Array.from(new Set(members.map((r) => String(r.materi || '').trim()).filter(Boolean)))
+          const absenC = { SAKIT: 0, IZIN: 0, ALPA: 0 }
+          let hadEmptyAbsen = false
+          let status = String(first?.status || 'Terlaksana')
+          let guruEmail = String(first?.guru_email || '').trim().toLowerCase()
+          for (const r of members) {
+            const ac = parseAbsenCounts(r.absen_siswa)
+            absenC.SAKIT += ac.SAKIT
+            absenC.IZIN += ac.IZIN
+            absenC.ALPA += ac.ALPA
+            if (/nihil/i.test(String(r.absen_siswa || ''))) hadEmptyAbsen = true
+            status = String(r.status || 'Terlaksana')
+            if (r.guru_email) guruEmail = String(r.guru_email).trim().toLowerCase()
+          }
+
+          finalRows.push({
+            hariTanggal: formatHariTanggal(first?.tanggal),
+            tanggal: first?.tanggal ? String(first.tanggal).slice(0, 10) : '',
+            kelas: namaKelasClean || '-',
+            mapel: mapelClean || '-',
+            guruNama: guruNamaMap.get(guruEmail) || '',
+            jenjang: String(first?.jenjang || unitUtama),
+            jamStart: mi.start,
+            jamEnd: mi.end,
+            materi: materiSet.length ? materiSet.join('; ') : '-',
+            absenC,
+            hadEmptyAbsen,
+            status,
+          })
+        }
+      }
+
+      finalRows.sort((a, b) => {
+        if (a.tanggal !== b.tanggal) return a.tanggal < b.tanggal ? -1 : 1
+        return a.jamStart - b.jamStart
       })
 
-      contentBody = `
-        <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 5px;">${judulDoc}</h3>
-        <p style="text-align: center; font-size: 10pt; margin-bottom: 15px;">
-          Semester: <b>${selectedSemester}</b> | Tahun Ajaran: <b>${selectedTahunAjaran}</b>
-          ${
-            filterTanggalJurnal
-              ? ` | Tanggal: <b>${filterTanggalJurnal}</b>`
-              : filterBulanJurnal
-              ? ` | Bulan: <b>${filterBulanJurnal}</b>`
-              : ''
+      const totalPertemuan = finalRows.length
+      const totalTerlaksana = finalRows.filter((r) => (r.status || '').toLowerCase().includes('terlaksana')).length
+      const totalTertunda = totalPertemuan - totalTerlaksana
+
+      const sekarang = new Date()
+      const bulanLabel = filterBulanJurnal
+        ? formatBulanIndonesia(filterBulanJurnal)
+        : filterTanggalJurnal
+        ? formatBulanIndonesia(String(filterTanggalJurnal).slice(0, 7))
+        : `${BULAN_INDONESIA[sekarang.getMonth()]} ${sekarang.getFullYear()}`
+
+      const identitasLeft = isGuruMode
+        ? `
+            <tr><td style="width:36%;"><b>Nama Guru</b></td><td>: ${guruCetakJurnal.nama}</td></tr>
+            <tr><td><b>NUPTK</b></td><td>: ${guruCetakJurnal.nuptk}</td></tr>
+            <tr><td><b>Mata Pelajaran &amp; Kode</b></td><td>: ${selectedM?.nama || '-'} (${selectedM?.kode_mapel || '-'})</td></tr>
+          `
+        : `
+            <tr><td style="width:36%;"><b>Satuan Pendidikan</b></td><td>: ${unitUtama} Muna Mustofa</td></tr>
+            <tr><td><b>Kelas / Fase</b></td><td>: ${selectedK?.nama || 'Semua Kelas'} / ${faseLabel || '-'}</td></tr>
+            <tr><td><b>Wali Kelas</b></td><td>: ${guruCetakJurnal.nama}</td></tr>
+          `
+
+      const identitasRight = `
+        <tr><td style="width:30%;"><b>Tahun Ajaran</b></td><td>: ${selectedTahunAjaran}</td></tr>
+        <tr><td><b>Semester</b></td><td>: ${selectedSemester}</td></tr>
+        <tr><td><b>Bulan</b></td><td>: ${bulanLabel}</td></tr>
+        ${isGuruMode ? `<tr><td><b>Jenjang / Unit</b></td><td>: ${unitUtama}</td></tr>` : ''}
+      `
+
+      const labelPihak = isGuruMode ? 'Kelas' : 'Nama Guru Pengampu'
+
+      // --- Peta mentah per tanggal untuk rekap absen harian (nama siswa) ---
+      const rawByTanggal = new Map<string, any[]>()
+      for (const rr of rawRows) {
+        const tgl = rr.tanggal ? String(rr.tanggal).slice(0, 10) : ''
+        if (!tgl) continue
+        if (!rawByTanggal.has(tgl)) rawByTanggal.set(tgl, [])
+        rawByTanggal.get(tgl)!.push(rr)
+      }
+
+      // --- Kelompokkan baris akhir per hari (sudah terurut kronologis ASC) ---
+      const dayBlocks: { tanggal: string; rows: JurnalRowItem[] }[] = []
+      let i0 = 0
+      while (i0 < finalRows.length) {
+        const tgl = finalRows[i0].tanggal
+        const rows: JurnalRowItem[] = []
+        while (i0 < finalRows.length && finalRows[i0].tanggal === tgl) {
+          rows.push(finalRows[i0])
+          i0++
+        }
+        dayBlocks.push({ tanggal: tgl, rows })
+      }
+
+      const renderDayBlock = (tanggal: string, rows: JurnalRowItem[]): string => {
+        const slotToRow = new Map<number, JurnalRowItem>()
+        for (const r of rows) {
+          for (let n = r.jamStart; n <= Math.min(r.jamEnd, 8); n++) {
+            if (!slotToRow.has(n)) slotToRow.set(n, r)
           }
-        </p>
-        <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
-          <thead>
-            <tr style="background-color: #f2f2f2;">
-              <th style="border: 1px solid #000; padding: 6px;">No</th>
-              <th style="border: 1px solid #000; padding: 6px;">Tanggal</th>
-              <th style="border: 1px solid #000; padding: 6px;">Jam Mengajar</th>
-              <th style="border: 1px solid #000; padding: 6px;">Kelas & Mapel</th>
-              <th style="border: 1px solid #000; padding: 6px;">Materi Pembelajaran</th>
-              <th style="border: 1px solid #000; padding: 6px;">Absen Siswa</th>
-              <th style="border: 1px solid #000; padding: 6px;">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              (agendaData || []).length > 0
-                ? agendaData!
-                    .map(
-                      (a, idx) => `
-                    <tr>
-                      <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
-                      <td style="border: 1px solid #000; padding: 6px; text-align: center;">${a.tanggal || '-'}</td>
-                      <td style="border: 1px solid #000; padding: 6px; text-align: center;">${a.jam_ke || '-'}</td>
-                      <td style="border: 1px solid #000; padding: 6px;"><b>${a.kelas || ''}</b> ${a.mapel ? `- ${a.mapel}` : ''}</td>
-                      <td style="border: 1px solid #000; padding: 6px;">${a.materi || '-'}</td>
-                      <td style="border: 1px solid #000; padding: 6px; font-family: monospace; font-size: 9pt;">${a.absen_siswa || 'Nihil'}</td>
-                      <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${a.status || 'SELESAI'}</td>
-                    </tr>
-                  `
-                    )
-                    .join('')
-                : `<tr><td colspan="7" style="border: 1px solid #000; padding: 10px; text-align: center;">Belum ada data agenda mengajar tersimpan.</td></tr>`
+        }
+        const absenText = formatAbsenHarian(
+          (rawByTanggal.get(tanggal) || []).map((x) => ({ absenRaw: x.absen_siswa }))
+        )
+        const rowsHtml = [1, 2, 3, 4, 5, 6, 7, 8]
+          .map((n) => {
+            const r = slotToRow.get(n)
+            const isStart = !!r && r.jamStart === n
+            const span = r ? Math.min(r.jamEnd, 8) - r.jamStart + 1 : 0
+            let cols = `<td class="c jam-no">${n}</td>`
+            if (isStart) {
+              cols += `<td rowspan="${span}" class="upper">${String(r!.mapel).toUpperCase()}</td>`
+              cols += `<td rowspan="${span}" class="upper">${String(r!.materi).toUpperCase()}</td>`
+              cols += `<td rowspan="${span}">${isGuruMode ? r!.kelas : r!.guruNama || '-'}</td>`
+              cols += `<td rowspan="${span}" class="c b status-cell">${r!.status}</td>`
+            } else if (r) {
+              // baris sedang tercakup rowspan dari jam awal kesempatan mengajar
+            } else {
+              cols += '<td>&nbsp;</td>'
+              cols += '<td>&nbsp;</td>'
+              cols += '<td>&nbsp;</td>'
+              cols += '<td>&nbsp;</td>'
             }
-          </tbody>
+            if (n === 1) cols += `<td rowspan="8" class="absen-cell">${absenText}</td>`
+            return `<tr>${cols}</tr>`
+          })
+          .join('')
+        return `
+          <tr class="hari-header"><td colspan="6">HARI / TANGGAL: ${formatHariTanggalPanjang(tanggal)}</td></tr>
+          ${rowsHtml}
+        `
+      }
+
+      const headerRows = `
+        <tr>
+          <th style="width:6%; background:#e5e7eb;">Jam Ke-</th>
+          <th style="width:15%; background:#e5e7eb;">Mata Pelajaran</th>
+          <th style="width:26%; background:#e5e7eb;">Materi Pokok / Kegiatan KBM</th>
+          <th style="width:15%; background:#e5e7eb;">${labelPihak}</th>
+          <th style="width:9%; background:#e5e7eb;">Status</th>
+          <th style="width:29%; background:#e5e7eb;">Absen Siswa<br/>(Sakit/Izin/Alpa)</th>
+        </tr>
+      `
+
+      const bodyRows =
+        dayBlocks.length > 0
+          ? dayBlocks.map((b) => renderDayBlock(b.tanggal, b.rows)).join('')
+          : `<tr><td class="c" colspan="6">Belum ada data agenda mengajar tersimpan.</td></tr>`
+
+      const rekapBox = `
+        <table class="rekap-box">
+          <tr>
+            <th>Total Pertemuan</th>
+            <th>Terlaksana</th>
+            <th>Tertunda / Izin</th>
+          </tr>
+          <tr>
+            <td class="c b">${totalPertemuan}</td>
+            <td class="c b">${totalTerlaksana}</td>
+            <td class="c b">${totalTertunda}</td>
+          </tr>
         </table>
       `
+
+      contentBody = `
+        ${buildKopJurnalHtml(unitUtama)}
+        <h3 class="jurnal-judul">${judulDoc}</h3>
+        <table class="identitas-table">
+          <tr>
+            <td style="width:50%; vertical-align:top;">${identitasLeft}</td>
+            <td style="width:50%; vertical-align:top;">${identitasRight}</td>
+          </tr>
+        </table>
+        <table class="data-table">
+          <thead>${headerRows}</thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+        <div class="rekap-wrap">
+          <div class="rekap-left">${rekapBox}</div>
+          <div style="clear:both;"></div>
+        </div>
+        ${getFooterTtdHTML(guruCetakJurnal)}
+      `
+
+      executePrintJurnal(judulDoc, contentBody)
+      return
     } else if (jenis === 'bimbingan') {
       const selectedK = kelasList.find((k) => k.id === Number(filterKelasBimbingan))
       judulDoc = `LAPORAN CATATAN BIMBINGAN GURU WALI ${
@@ -2270,6 +3131,57 @@ export default function LaporanPage() {
         printWindow.print()
       }, 500)
     }
+  }
+
+  // Cetak khusus Jurnal Agenda — A4 Landscape & tata letak resmi administrasi
+  const executePrintJurnal = (judulDoc: string, contentBody: string) => {
+    const originUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    printWindow.document.write(
+      `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${judulDoc} - MUNA MUSTOFA</title>
+          <style>
+            @media print { @page { size: A4 landscape !important; margin: 10mm 12mm !important; } }
+            html, body { width: 100%; max-width: 100%; }
+            body { margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 10pt; color: #000; line-height: 1.35; padding: 0 !important; }
+            .jurnal-kop { border-bottom: 3px double #000; padding-bottom: 4px; margin-bottom: 6px; text-align: center; }
+            .jurnal-kop img { object-fit: contain; }
+            .jurnal-judul { text-align: center; text-transform: uppercase; font-weight: bold; font-size: 11pt; margin: 4px 0 2px; }
+            .identitas-table { width: 100%; border-collapse: collapse; margin: 4px 0 6px; font-size: 11pt; }
+            .identitas-table td { border: none; padding: 2px 4px; vertical-align: top; }
+            .jurnal-body-wrap { width: 100%; max-width: 100%; }
+            .data-table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: 10pt; table-layout: fixed; }
+            .data-table th { border: 1px solid #000; padding: 4px 3px; font-size: 8.5pt; vertical-align: middle; }
+            .data-table td { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; overflow-wrap: break-word; }
+            .data-table thead { display: table-header-group; }
+            .data-table tr { break-inside: avoid; page-break-inside: avoid; }
+            .data-table .c { text-align: center; }
+            .data-table .b { font-weight: bold; }
+            .data-table .hari-header td { background: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; padding: 5px 4px; }
+            .data-table .upper { text-transform: uppercase; }
+            .data-table .jam-no { font-weight: bold; }
+            .data-table .status-cell { white-space: nowrap; min-width: 9%; text-align: center; }
+            .data-table .absen-cell { font-size: 8.5pt; text-align: left; line-height: 1.4; vertical-align: middle; }
+            .jam-filled { background-color: #334155 !important; }
+            .rekap-wrap { margin-top: 12px; }
+            .rekap-left { float: left; width: 50%; padding-right: 22px; }
+            .rekap-box { width: 100%; border-collapse: collapse; font-size: 10pt; }
+            .rekap-box th, .rekap-box td { border: 1px solid #000; padding: 4px 8px; }
+            .rekap-box th { background: #f1f5f9; }
+          </style>
+        </head>
+        <body>
+          ${contentBody}
+        </body>
+      </html>
+      `.replace(/src="\//g, `src="${originUrl}/`)
+    )
+    printWindow.document.close()
+    setTimeout(() => printWindow.print(), 500)
   }
 
   const handleSimpanPengaturan = () => {
@@ -2917,7 +3829,7 @@ export default function LaporanPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label
                       className={`block text-[9px] font-extrabold uppercase mb-1 ${
@@ -2937,6 +3849,33 @@ export default function LaporanPage() {
                     >
                       <option value="">Semua Kelas</option>
                       {renderKelasOptGroups(false)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      className={`block text-[9px] font-extrabold uppercase mb-1 ${
+                        isDarkMode ? 'text-indigo-300' : 'text-indigo-950'
+                      }`}
+                    >
+                      MAPEL (MODE GURU)
+                    </label>
+                    <select
+                      value={filterMapelJurnal}
+                      onChange={(e) => setFilterMapelJurnal(e.target.value)}
+                      className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      <option value="">Semua Mapel</option>
+                      {mapelList.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nama}
+                          {m.kode_mapel ? ` (${m.kode_mapel})` : ''}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

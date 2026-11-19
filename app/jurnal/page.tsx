@@ -71,6 +71,21 @@ interface JurnalRecord {
   jenjang?: string | null
 }
 
+// Parse rentang angka jam dari teks jadwal (mis. "Jam Ke-1 s/d 2" atau "Jam Ke-3 s/d 4")
+function parseJadwalJamRangeText(item: { jam?: string | null; jam_ke?: number | string | null }): { start: number; end: number } {
+  const str = String(item?.jam || '')
+  const m = str.match(/jam\s*ke[-:\s]*(\d+)(?:[^0-9]+(\d+))?/i)
+  if (m) {
+    const s = parseInt(m[1], 10) || 1
+    const rawE = m[2] ? parseInt(m[2], 10) : NaN
+    const e = Number.isFinite(rawE) ? rawE : s
+    return { start: Math.min(s, e), end: Math.max(s, e) }
+  }
+  const num = Number(item?.jam_ke ?? 1)
+  const v = Number.isFinite(num) && num > 0 ? Math.floor(num) : 1
+  return { start: v, end: v }
+}
+
 export default function AgendaMengajarPage() {
   const router = useRouter()
   const { isOperator, canAccessBimbingan } = useAuthRole()
@@ -132,6 +147,9 @@ export default function AgendaMengajarPage() {
   const [filterTanggal, setFilterTanggal] = useState('')
   const [searchMateri, setSearchMateri] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
+  const [jadwalAutoList, setJadwalAutoList] = useState<any[]>([])
+  const [replaceMode, setReplaceMode] = useState(false)
+  const [hariWarning, setHariWarning] = useState('')
 
   useEffect(() => {
     let isMounted = true
@@ -343,6 +361,62 @@ export default function AgendaMengajarPage() {
     }
   }, [tanggal, selectedKelasId, selectedMapelId])
 
+  // Peringatan libur Jumat (Pondok Pesantren)
+  useEffect(() => {
+    if (tanggal) {
+      const p = tanggal.split('-').map(Number)
+      const d = new Date(p[0], p[1] - 1, p[2])
+      const nHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
+      if (nHari === 'Jumat') {
+        setHariWarning('⚠ Hari Jumat adalah libur Pondok Pesantren — tidak ada kegiatan belajar mengajar.')
+      } else {
+        setHariWarning('')
+      }
+    } else {
+      setHariWarning('')
+    }
+  }, [tanggal])
+
+  // OTOMATISASI Jam & Mapel berdasarkan Jadwal Mengajar resmi
+  useEffect(() => {
+    let isMounted = true
+    async function detectJadwal() {
+      setJadwalAutoList([])
+      if (!tanggal || !selectedKelasId || selectedKelasId === 'GABUNGAN' || isOperator || !userEmail) return
+      const p = tanggal.split('-').map(Number)
+      const d = new Date(p[0], p[1] - 1, p[2])
+      const nHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
+      if (nHari === 'Jumat') return
+      try {
+        const { data, error } = await supabase
+          .from('jadwal')
+          .select('id, mapel_id, jam, jam_ke, guru_email, hari')
+          .or('jenjang.eq.SMP,jenjang.is.null')
+          .eq('kelas_id', Number(selectedKelasId))
+          .ilike('guru_email', userEmail.trim())
+        if (error) return
+        const matched = (data || []).filter((j: any) =>
+          String(j.hari || '').trim().toLowerCase() === nHari.toLowerCase()
+        )
+        if (!isMounted) return
+        setJadwalAutoList(matched)
+        if (matched.length === 1 && !replaceMode) {
+          const item = matched[0]
+          if (item.mapel_id != null) setSelectedMapelId(String(item.mapel_id))
+          const range = parseJadwalJamRangeText(item)
+          setJamMulai(String(range.start))
+          setJamSelesai(String(range.end))
+        }
+      } catch (err) {
+        console.error('Error deteksi otomatis jadwal:', err)
+      }
+    }
+    detectJadwal()
+    return () => {
+      isMounted = false
+    }
+  }, [tanggal, selectedKelasId, userEmail, isOperator, replaceMode])
+
   const handleMapelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
     setSelectedMapelId(val)
@@ -428,6 +502,7 @@ export default function AgendaMengajarPage() {
   }, [isOperator, userEmail])
 
   const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
+  const isPenerapanOtomatis = !isOperator && !replaceMode && jadwalAutoList.length === 1
 
   const handleSimpanJurnal = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -470,12 +545,65 @@ export default function AgendaMengajarPage() {
         ? 'Gabungan (Semua Kelas)' 
         : selectedKelasObj?.nama || ''
 
+      const mapelIdNum = Number(selectedMapelId)
+      const kelaskIdSimpan = selectedKelasId === 'GABUNGAN' ? null : Number(selectedKelasId)
+
+      // CEGAH DUPLIKASI: cek apakah sudah ada entri (tanggal + kelas_id + mapel_id)
+      let queryDup = supabase
+        .from('jurnal_agenda')
+        .select('id')
+        .eq('tanggal', tanggal)
+        .eq('mapel_id', mapelIdNum)
+      queryDup = kelaskIdSimpan == null ? queryDup.is('kelas_id', null) : queryDup.eq('kelas_id', kelaskIdSimpan)
+      const { data: dupRows, error: dupErr } = await queryDup.maybeSingle()
+
+      if (dupErr) throw dupErr
+      if (dupRows?.id) {
+        const okUpdate = confirm(
+          `Sudah ada jurnal "${selectedMapelObj?.nama || ''}" untuk tanggal ${tanggal}. Perbarui catatan yang sudah ada? (OK = perbarui, Batal = batalkan simpan)`
+        )
+        if (!okUpdate) {
+          setSaving(false)
+          return
+        }
+        const payload = {
+          jam_ke: jamFormattedText,
+          kelas_id: kelaskIdSimpan,
+          mapel_id: mapelIdNum,
+          kelas: namaKelasSimpan,
+          mapel: selectedMapelObj?.nama || '',
+          materi: materi.trim(),
+          status,
+          absen_siswa: absenSiswa.trim() || 'Nihil',
+          keterangan: keterangan.trim(),
+          guru_email: userEmail.trim().toLowerCase(),
+          jenjang: 'SMP',
+        }
+        const { error: updErr } = await supabase
+          .from('jurnal_agenda')
+          .update(payload)
+          .eq('id', dupRows.id)
+        if (updErr) {
+          alert('Gagal memperbarui jurnal: ' + updErr.message)
+        } else {
+          alert('Jurnal berhasil diperbarui (entri untuk tanggal tersebut ternyata sudah ada).')
+          setMateri('')
+          setKeterangan('')
+          setSelectedKelasId('')
+          setSelectedMapelId('')
+          setAbsenSiswa('Nihil')
+          fetchJurnal(userEmail, todayStr)
+        }
+        setSaving(false)
+        return
+      }
+
       const { error } = await supabase.from('jurnal_agenda').insert([
         {
           tanggal,
           jam_ke: jamFormattedText,
-          kelas_id: selectedKelasId === 'GABUNGAN' ? null : Number(selectedKelasId),
-          mapel_id: Number(selectedMapelId),
+          kelas_id: kelaskIdSimpan,
+          mapel_id: mapelIdNum,
           kelas: namaKelasSimpan,
           mapel: selectedMapelObj?.nama || '',
           materi: materi.trim(),
@@ -725,6 +853,7 @@ export default function AgendaMengajarPage() {
                   <div className="col-span-6 flex gap-1">
                     <select
                       value={jamMulai}
+                      disabled={isPenerapanOtomatis}
                       onChange={(e) => {
                         const val = e.target.value
                         setJamMulai(val)
@@ -747,6 +876,7 @@ export default function AgendaMengajarPage() {
 
                     <select
                       value={jamSelesai}
+                      disabled={isPenerapanOtomatis}
                       onChange={(e) => setJamSelesai(e.target.value)}
                       className={`w-full border rounded-lg px-1 py-1 text-xs font-bold focus:outline-none ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
@@ -768,6 +898,12 @@ export default function AgendaMengajarPage() {
                     </select>
                   </div>
                 </div>
+
+                {hariWarning && (
+                  <div className="text-[10px] font-black text-rose-500 bg-rose-950/10 border border-rose-400/40 rounded-lg px-2 py-1">
+                    {hariWarning}
+                  </div>
+                )}
 
                 {/* ROW 2: KELAS & MAPEL */}
                 <div className="grid grid-cols-12 gap-1.5">
@@ -791,6 +927,7 @@ export default function AgendaMengajarPage() {
                   <div className="col-span-6">
                     <select
                       value={selectedMapelId}
+                      disabled={isPenerapanOtomatis}
                       onChange={handleMapelChange}
                       className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
                         isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
@@ -804,6 +941,33 @@ export default function AgendaMengajarPage() {
                     </select>
                   </div>
                 </div>
+
+                {/* ROW 2.b: INDIKATOR OTOMATISASI JADWAL MENGAJAR */}
+                {(isPenerapanOtomatis || jadwalAutoList.length > 0) && (
+                  <div
+                    className={`flex flex-wrap items-center gap-2 rounded-lg px-2 py-1 border text-[10px] font-bold ${
+                      isPenerapanOtomatis
+                        ? isDarkMode
+                          ? 'bg-emerald-950/40 border-emerald-700 text-emerald-300'
+                          : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : isDarkMode
+                        ? 'bg-slate-800 border-slate-700 text-slate-300'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {isPenerapanOtomatis ? (
+                      <span className="flex items-center gap-1">
+                        <Star className="w-3 h-3" /> Terkunci sesuai Jadwal resmi (Jam {jamMulai}-{jamSelesai})
+                      </span>
+                    ) : (
+                      <span>Jadwal resmi terdeteksi ({jadwalAutoList.length}) — pilih kelas & biarkan terkunci.</span>
+                    )}
+                    <label className="flex items-center gap-1 cursor-pointer select-none">
+                      <input type="checkbox" checked={replaceMode} onChange={(e) => setReplaceMode(e.target.checked)} />
+                      Mode Jadwal Pengganti / Tukar Jam
+                    </label>
+                  </div>
+                )}
 
                 {/* ROW 3: MATERI PEMBELAJARAN */}
                 <div>
