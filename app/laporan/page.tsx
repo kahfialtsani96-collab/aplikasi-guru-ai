@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import {
   buildRaporDocument,
   detectUnitByKelas,
@@ -3637,6 +3638,7 @@ export default function LaporanPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <DarkModeToggle />
             <div
               className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
                 isDarkMode
@@ -4758,78 +4760,6 @@ export default function LaporanPage() {
         onDownloadWordHtml={downloadRaporWordBlob}
       />
 
-      {/* FIXED BOTTOM NAVIGATION BAR */}
-      <div
-        className={`border-t fixed bottom-0 left-0 right-0 z-40 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
-          isDarkMode
-            ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
-            : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-        }`}
-      >
-        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link
-            href="/"
-            className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-white'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-
-          {isOperator && (
-            <Link
-              href="/siswa"
-              className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-                isDarkMode
-                  ? 'text-slate-400 hover:text-white'
-                  : 'text-slate-600 hover:text-slate-950'
-              }`}
-            >
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-
-          {isOperator && (
-            <Link
-              href="/guru"
-              className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-                isDarkMode
-                  ? 'text-slate-400 hover:text-white'
-                  : 'text-slate-600 hover:text-slate-950'
-              }`}
-            >
-              <GraduationCap className="w-5 h-5" />
-              <span>Guru</span>
-            </Link>
-          )}
-
-          <Link
-            href="/jadwal"
-            className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-white'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-
-          <Link
-            href="/laporan"
-            className={`flex flex-col items-center gap-0.5 text-[11px] font-bold transition ${
-              isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
-            }`}
-          >
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
-      </div>
     </motion.div>
   )
 }

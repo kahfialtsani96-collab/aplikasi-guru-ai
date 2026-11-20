@@ -44,7 +44,7 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const isRedirectingRef = useRef(false)
 
-  const { isDarkMode, setIsDarkMode } = useDarkMode()
+  const { isDarkMode } = useDarkMode()
 
   useEffect(() => {
     // Pastikan setiap kali halaman /login dibuka (termasuk setelah Logout), state animasi bersih
@@ -53,18 +53,6 @@ export default function LoginPage() {
     isRedirectingRef.current = false
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('just_logged_in')
-    }
-
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'light') {
-      setIsDarkMode(false)
-      document.documentElement.classList.remove('dark')
-    } else if (savedTheme === 'dark') {
-      setIsDarkMode(true)
-      document.documentElement.classList.add('dark')
-    } else {
-      const isHtmlDark = document.documentElement.classList.contains('dark')
-      setIsDarkMode(isHtmlDark)
     }
   }, [])
 

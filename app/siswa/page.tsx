@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import { sortKelas } from '@/lib/utils'
 import {
   Trash2,
@@ -91,6 +92,7 @@ export default function MasterSiswaPage() {
       .from('kelas')
       .select('id, nama_kelas, tingkat')
       .order('nama_kelas', { ascending: true })
+      .or('jenjang.eq.SMP,jenjang.is.null')
 
     const kelasMap = new Map<number, string>()
     if (dataKelas) {
@@ -103,6 +105,7 @@ export default function MasterSiswaPage() {
       .from('siswa')
       .select('*')
       .order('nama_lengkap', { ascending: true })
+      .or('jenjang.eq.SMP,jenjang.is.null')
 
     if (error) {
       console.error('Error fetch siswa:', error.message)
@@ -159,6 +162,7 @@ export default function MasterSiswaPage() {
       nama_lengkap: namaLengkap.trim(),
       jenis_kelamin: jenisKelamin,
       kelas_id: kelasId ? Number(kelasId) : null,
+      jenjang: 'SMP',
     }
 
     try {
@@ -223,7 +227,7 @@ export default function MasterSiswaPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
+      className={`h-screen overflow-hidden font-sans flex flex-col selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
@@ -261,6 +265,7 @@ export default function MasterSiswaPage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <DarkModeToggle />
             <div className={`hidden sm:flex border text-xs font-semibold px-3 py-1.5 rounded-full items-center gap-2 ${
               isDarkMode 
                 ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
@@ -303,8 +308,7 @@ export default function MasterSiswaPage() {
           </div>
         </header>
 
-        {/* MAIN CONTENT AREA - EXTRA BOTTOM PADDING UTK DOCK HP */}
-        <main className="max-w-6xl w-full mx-auto p-3 sm:p-4 flex-1 flex flex-col space-y-4 pb-28 sm:pb-16">
+        <main className="max-w-6xl w-full mx-auto px-3 sm:px-4 pt-3 sm:pt-4 pb-1 flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
           
           {/* PANEL FORM INPUT */}
           <form onSubmit={handleSubmit} className={`backdrop-blur-md border rounded-2xl p-3.5 sm:p-4 shadow-xs shrink-0 ${
@@ -439,7 +443,7 @@ export default function MasterSiswaPage() {
             </div>
 
             {/* 1. TAMPILAN MOBILE: CARD SYSTEM (KHUSUS HP - md:hidden) */}
-            <div className="block md:hidden space-y-2.5 overflow-y-auto pr-1 max-h-[60vh]">
+            <div className="block md:hidden flex-1 min-h-0 space-y-2.5 overflow-y-auto pr-1">
               {loading ? (
                 <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                   Memuat data siswa...
@@ -499,7 +503,6 @@ export default function MasterSiswaPage() {
                       </div>
                     </div>
 
-                    {/* Bottom Actions: Tombol Edit & Hapus */}
                     <div className="flex justify-end gap-2 pt-0.5">
                       <button
                         onClick={() => handleEdit(siswa)}
@@ -528,13 +531,13 @@ export default function MasterSiswaPage() {
             </div>
 
             {/* 2. TAMPILAN DESKTOP/TABLET: TABEL HTML (hidden md:block) */}
-            <div className={`hidden md:block flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
-              <table className="w-full text-left border-collapse text-xs">
+            <div className={`hidden md:block flex-1 min-h-0 overflow-y-auto overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+              <table className="w-full text-left border-collapse text-xs min-w-[760px]">
                 <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                   <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-400 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                     <th className="py-2.5 px-3 w-12 text-center">NO</th>
                     <th className="py-2.5 px-3">NISN</th>
-                    <th className="py-2.5 px-3">NAMA LENGKAP</th>
+                    <th className={`py-2.5 px-3 sticky left-0 z-20 ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>NAMA LENGKAP</th>
                     <th className="py-2.5 px-3 text-center">JK</th>
                     <th className="py-2.5 px-3">KELAS / ROMBEL</th>
                     <th className="py-2.5 px-3 text-center w-20">AKSI</th>
@@ -554,7 +557,7 @@ export default function MasterSiswaPage() {
                       <tr key={siswa.id} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
                         <td className={`py-2 px-3 text-center font-bold ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>{idx + 1}</td>
                         <td className={`py-2 px-3 font-mono font-bold whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{siswa.nisn || '-'}</td>
-                        <td className={`py-2 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{siswa.nama_lengkap}</td>
+                        <td className={`py-2 px-3 font-extrabold sticky left-0 z-20 ${isDarkMode ? 'text-white bg-slate-900' : 'text-slate-900 bg-white'}`}>{siswa.nama_lengkap}</td>
                         <td className="py-2 px-3 text-center font-bold">
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
                             siswa.jenis_kelamin === 'P' 
@@ -603,48 +606,6 @@ export default function MasterSiswaPage() {
           </div>
         </div>
 
-      </div>
-
-      {/* BOTTOM NAVIGATION DOCK */}
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
-        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-          {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-bold transition ${
-              isDarkMode ? 'text-indigo-400' : 'text-indigo-600'
-            }`}>
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-          {isOperator && (
-            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <GraduationCap className="w-5 h-5" />
-              <span>Guru</span>
-            </Link>
-          )}
-          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
       </div>
 
     </motion.div>

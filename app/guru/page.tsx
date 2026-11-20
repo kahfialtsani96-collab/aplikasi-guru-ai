@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import {
   GraduationCap,
   ClipboardList,
@@ -180,12 +181,11 @@ export default function DataGuruPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
+      className={`h-screen overflow-hidden font-sans flex flex-col selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
       
-      {/* 1. FIXED BACKGROUND WATERMARK LOGO SCHOOL */}
       <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
         isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
       }`}>
@@ -226,6 +226,7 @@ export default function DataGuruPage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            <DarkModeToggle />
             <div className={`hidden sm:flex border text-xs font-semibold px-3 py-1.5 rounded-full items-center gap-2 ${
               isDarkMode 
                 ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
@@ -268,9 +269,8 @@ export default function DataGuruPage() {
           </div>
         </header>
 
-        {/* 3. MAIN CONTENT AREA (EXTRA BOTTOM PADDING UTK NAVIGATION DOCK) */}
-        <main className="max-w-6xl w-full mx-auto p-3.5 sm:p-5 flex-1 flex flex-col pb-28 sm:pb-16">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-1">
+        <main className="max-w-6xl w-full mx-auto px-3.5 sm:px-5 pt-3.5 sm:pt-5 pb-1 flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-3 max-lg:grid-rows-[auto_minmax(0,1fr)] gap-5 flex-1 min-h-0">
             
             {/* FORM INPUT GURU */}
             <form onSubmit={handleSubmit} className={`p-4 sm:p-5 backdrop-blur-md border rounded-2xl flex flex-col justify-between shadow-xs ${
@@ -383,7 +383,7 @@ export default function DataGuruPage() {
             </form>
 
             {/* PANEL DAFTAR GURU */}
-            <div className={`lg:col-span-2 backdrop-blur-md border rounded-2xl p-4 sm:p-5 flex flex-col shadow-xs h-full ${
+            <div className={`lg:col-span-2 backdrop-blur-md border rounded-2xl p-4 sm:p-5 flex flex-col shadow-xs h-full min-h-0 ${
               isDarkMode 
                 ? 'bg-slate-900/90 border-slate-800' 
                 : 'bg-gradient-to-br from-[#c7d2fe]/90 via-[#dbe2fe]/90 to-[#edf2ff]/90 border-indigo-200/80'
@@ -394,7 +394,7 @@ export default function DataGuruPage() {
               </div>
 
               {/* 1. TAMPILAN MOBILE: KARTU LIST (KHUSUS HP - lg:hidden) */}
-              <div className="block lg:hidden space-y-3 mt-3 overflow-y-auto max-h-[60vh] pr-1">
+              <div className="block lg:hidden flex-1 min-h-0 space-y-3 mt-3 overflow-y-auto pr-1">
                 {guruList.length === 0 ? (
                   <div className={`p-6 text-center text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                     Belum ada data guru terdaftar.
@@ -435,7 +435,6 @@ export default function DataGuruPage() {
                         </div>
                       </div>
 
-                      {/* Bottom Actions: Tombol Edit & Hapus */}
                       <div className="flex justify-end gap-2 pt-0.5">
                         <button
                           onClick={() => handleEdit(g)}
@@ -464,12 +463,12 @@ export default function DataGuruPage() {
               </div>
 
               {/* 2. TAMPILAN DESKTOP: TABEL HTML (hidden lg:block) */}
-              <div className={`hidden lg:block mt-3 flex-1 overflow-y-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
-                <table className="w-full text-left border-collapse text-xs">
+              <div className={`hidden lg:block mt-3 flex-1 min-h-0 overflow-y-auto overflow-x-auto rounded-xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-indigo-200/80'}`}>
+                <table className="w-full text-left border-collapse text-xs min-w-[760px]">
                   <thead className={`sticky top-0 z-10 shadow-xs ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>
                     <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${isDarkMode ? 'text-indigo-300 border-slate-700' : 'text-indigo-950 border-indigo-200'}`}>
                       <th className="py-2.5 px-3">NUPTK</th>
-                      <th className="py-2.5 px-3">NAMA LENGKAP</th>
+                      <th className={`py-2.5 px-3 sticky left-0 z-20 ${isDarkMode ? 'bg-slate-800' : 'bg-indigo-100'}`}>NAMA LENGKAP</th>
                       <th className="py-2.5 px-3">EMAIL LOGIN</th>
                       <th className="py-2.5 px-3">JABATAN</th>
                       <th className="py-2.5 px-3 text-center w-24">AKSI</th>
@@ -486,7 +485,7 @@ export default function DataGuruPage() {
                       guruList.map((g) => (
                         <tr key={g.id} className={`transition ${isDarkMode ? 'hover:bg-slate-800/60' : 'hover:bg-indigo-50/60'}`}>
                           <td className={`py-2.5 px-3 font-mono font-bold whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{g.NUPTK || '-'}</td>
-                          <td className={`py-2.5 px-3 font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{g.nama_lengkap}</td>
+                          <td className={`py-2.5 px-3 font-extrabold sticky left-0 z-20 ${isDarkMode ? 'text-white bg-slate-900' : 'text-slate-900 bg-white'}`}>{g.nama_lengkap}</td>
                           <td className="py-2.5 px-3 font-bold text-indigo-400">{g.email || '-'}</td>
                           <td className="py-2.5 px-3 font-semibold whitespace-nowrap">
                             <span className={`px-2 py-1 rounded-md text-[10px] font-extrabold border inline-block ${
@@ -536,49 +535,6 @@ export default function DataGuruPage() {
         </div>
       </div>
 
-      {/* 4. BOTTOM NAVIGATION DOCK */}
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
-        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-
-          {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-
-          {isOperator && (
-            <Link href="/guru" className="flex flex-col items-center gap-0.5 text-[11px] font-bold text-indigo-500 transition">
-              <GraduationCap className="w-5 h-5" />
-              <span>Guru</span>
-            </Link>
-          )}
-
-          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
-      </div>
     </motion.div>
   )
 }

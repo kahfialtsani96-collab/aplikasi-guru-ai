@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import { sortKelas } from '@/lib/utils'
 import {
   CreditCard,
@@ -737,6 +738,7 @@ export default function CetakKartuPage() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-3">
+            <DarkModeToggle />
             <div className={`border text-xs font-bold px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>
@@ -1403,45 +1405,6 @@ export default function CetakKartuPage() {
         )}
       </AnimatePresence>
 
-      {/* BOTTOM NAVIGATION BAR */}
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
-        <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-          {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-          <Link href="/jadwal" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-          <Link href="/ai" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Sparkles className="w-5 h-5" />
-            <span>AI Tools</span>
-          </Link>
-          <Link href="/laporan" className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
-      </div>
     </motion.div>
   )
 }

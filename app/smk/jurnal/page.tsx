@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useSmkColor, SMK_COLOR_KEYS, type SmkColorKey } from '../smkTheme'
 import {
   ArrowLeft,
   Save,
@@ -76,10 +77,167 @@ interface JurnalRecord {
   tahun_ajaran?: string
 }
 
-// 2 Mode persis seperti di video saat lampu menyala:
-// 'warm' = Warm Gold (Input Agenda)
-// 'coral' = Coral Rose (Riwayat Jurnal)
-type StudioMode = 'warm' | 'coral'
+// Palet warna lampu jurnal per warna bersama SMK
+const JURNAL_PALETTE: Record<
+  SmkColorKey,
+  {
+    glowGrad: string
+    floorGrad: string
+    haloBg: string
+    coneTop: string
+    coneMid: string
+    shadeStop0: string
+    shadeStop38: string
+    shadeStop72: string
+    shadeStop100: string
+    woodStop0: string
+    woodStop50: string
+    woodStop100: string
+    floorEllipseFill: string
+    legStroke: string
+    collarFill: string
+    bulbInnerFill: string
+    bulbFilter: string
+    shadeStroke: string
+    cordStroke: string
+    knobFill: string
+    labelFill: string
+    cardBorder: string
+    cardShadow: string
+    cardGlow: string
+  }
+> = {
+  white: {
+    glowGrad: 'radial-gradient(circle at 32% 38%, rgba(226, 232, 240, 0.22) 0%, rgba(148, 163, 184, 0.08) 42%, rgba(10, 11, 13, 1) 78%)',
+    floorGrad: 'linear-gradient(180deg, rgba(10,11,13,0) 0%, rgba(226, 232, 240, 0.06) 40%, rgba(13, 15, 18, 0.95) 100%)',
+    haloBg: 'rgba(226, 232, 240, 0.28)',
+    coneTop: '#f1f5f9',
+    coneMid: '#cbd5e1',
+    shadeStop0: '#e2e8f0',
+    shadeStop38: '#f8fafc',
+    shadeStop72: '#e2e8f0',
+    shadeStop100: '#94a3b8',
+    woodStop0: '#475569',
+    woodStop50: '#94a3b8',
+    woodStop100: '#334155',
+    floorEllipseFill: 'rgba(226, 232, 240, 0.15)',
+    legStroke: '#1e293b',
+    collarFill: '#94a3b8',
+    bulbInnerFill: '#ffffff',
+    bulbFilter: 'drop-shadow(0 4px 16px rgba(255,255,255,0.8))',
+    shadeStroke: '#f1f5f9',
+    cordStroke: '#cbd5e1',
+    knobFill: '#e2e8f0',
+    labelFill: '#cbd5e1',
+    cardBorder: 'rgba(226, 232, 240, 0.22)',
+    cardShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(226, 232, 240, 0.14)',
+    cardGlow: 'rgba(226, 232, 240, 0.10)',
+  },
+  green: {
+    glowGrad: 'radial-gradient(circle at 32% 38%, rgba(52, 211, 153, 0.24) 0%, rgba(5, 150, 105, 0.08) 42%, rgba(7, 11, 10, 1) 78%)',
+    floorGrad: 'linear-gradient(180deg, rgba(7,11,10,0) 0%, rgba(52, 211, 153, 0.07) 40%, rgba(9, 15, 13, 0.95) 100%)',
+    haloBg: 'rgba(52, 211, 153, 0.30)',
+    coneTop: '#a7f3d0',
+    coneMid: '#34d399',
+    shadeStop0: '#6ee7b7',
+    shadeStop38: '#d1fae5',
+    shadeStop72: '#a7f3d0',
+    shadeStop100: '#059669',
+    woodStop0: '#065f46',
+    woodStop50: '#10b981',
+    woodStop100: '#064e3b',
+    floorEllipseFill: 'rgba(52, 211, 153, 0.16)',
+    legStroke: '#022c22',
+    collarFill: '#059669',
+    bulbInnerFill: '#d1fae5',
+    bulbFilter: 'drop-shadow(0 4px 16px rgba(52,211,153,0.85))',
+    shadeStroke: '#a7f3d0',
+    cordStroke: '#a7f3d0',
+    knobFill: '#34d399',
+    labelFill: '#6ee7b7',
+    cardBorder: 'rgba(52, 211, 153, 0.25)',
+    cardShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(52, 211, 153, 0.16)',
+    cardGlow: 'rgba(52, 211, 153, 0.12)',
+  },
+  red: {
+    glowGrad: 'radial-gradient(circle at 32% 38%, rgba(226, 112, 126, 0.25) 0%, rgba(158, 62, 78, 0.09) 42%, rgba(11, 9, 8, 1) 78%)',
+    floorGrad: 'linear-gradient(180deg, rgba(11,9,8,0) 0%, rgba(196, 92, 108, 0.07) 40%, rgba(18, 12, 14, 0.95) 100%)',
+    haloBg: 'rgba(235, 118, 132, 0.34)',
+    coneTop: '#e57b88',
+    coneMid: '#c45a68',
+    shadeStop0: '#b85a66',
+    shadeStop38: '#df8490',
+    shadeStop72: '#cf6f7b',
+    shadeStop100: '#96434e',
+    woodStop0: '#7a5256',
+    woodStop50: '#b88488',
+    woodStop100: '#4f3336',
+    floorEllipseFill: 'rgba(229, 123, 136, 0.16)',
+    legStroke: '#4a3033',
+    collarFill: '#9c666c',
+    bulbInnerFill: '#ffd1d7',
+    bulbFilter: 'drop-shadow(0 4px 16px rgba(229,123,136,0.85))',
+    shadeStroke: '#f4a4ae',
+    cordStroke: '#eab6bd',
+    knobFill: '#e57b88',
+    labelFill: '#cfa0a6',
+    cardBorder: 'rgba(229, 123, 136, 0.25)',
+    cardShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(229, 123, 136, 0.18)',
+    cardGlow: 'rgba(229, 123, 136, 0.13)',
+  },
+  cyan: {
+    glowGrad: 'radial-gradient(circle at 32% 38%, rgba(34, 211, 238, 0.24) 0%, rgba(8, 145, 178, 0.09) 42%, rgba(7, 10, 13, 1) 78%)',
+    floorGrad: 'linear-gradient(180deg, rgba(7,10,13,0) 0%, rgba(34, 211, 238, 0.07) 40%, rgba(8, 14, 18, 0.95) 100%)',
+    haloBg: 'rgba(34, 211, 238, 0.30)',
+    coneTop: '#a5f3fc',
+    coneMid: '#22d3ee',
+    shadeStop0: '#67e8f9',
+    shadeStop38: '#cffafe',
+    shadeStop72: '#a5f3fc',
+    shadeStop100: '#0891b2',
+    woodStop0: '#155e75',
+    woodStop50: '#06b6d4',
+    woodStop100: '#164e63',
+    floorEllipseFill: 'rgba(34, 211, 238, 0.16)',
+    legStroke: '#083344',
+    collarFill: '#0891b2',
+    bulbInnerFill: '#cffafe',
+    bulbFilter: 'drop-shadow(0 4px 16px rgba(34,211,238,0.85))',
+    shadeStroke: '#a5f3fc',
+    cordStroke: '#a5f3fc',
+    knobFill: '#22d3ee',
+    labelFill: '#67e8f9',
+    cardBorder: 'rgba(34, 211, 238, 0.25)',
+    cardShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(34, 211, 238, 0.16)',
+    cardGlow: 'rgba(34, 211, 238, 0.12)',
+  },
+  amber: {
+    glowGrad: 'radial-gradient(circle at 32% 38%, rgba(235, 178, 112, 0.24) 0%, rgba(168, 114, 58, 0.08) 42%, rgba(11, 9, 8, 1) 78%)',
+    floorGrad: 'linear-gradient(180deg, rgba(11,9,8,0) 0%, rgba(196, 146, 92, 0.07) 40%, rgba(18, 14, 11, 0.95) 100%)',
+    haloBg: 'rgba(246, 196, 134, 0.34)',
+    coneTop: '#f5c78e',
+    coneMid: '#d49b5c',
+    shadeStop0: '#d8b48a',
+    shadeStop38: '#f5dec0',
+    shadeStop72: '#e8caa3',
+    shadeStop100: '#b99368',
+    woodStop0: '#8c6d4e',
+    woodStop50: '#cfa97e',
+    woodStop100: '#5c442e',
+    floorEllipseFill: 'rgba(245, 199, 142, 0.16)',
+    legStroke: '#5a432d',
+    collarFill: '#b99368',
+    bulbInnerFill: '#fff3d6',
+    bulbFilter: 'drop-shadow(0 4px 16px rgba(245,199,142,0.85))',
+    shadeStroke: '#fae6c8',
+    cordStroke: '#e7d2b5',
+    knobFill: '#f5c78e',
+    labelFill: '#cbb79c',
+    cardBorder: 'rgba(245, 199, 142, 0.22)',
+    cardShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(245, 199, 142, 0.16)',
+    cardGlow: 'rgba(245, 199, 142, 0.12)',
+  },
+}
 
 const HARI_INDONESIA_SMK = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
 
@@ -94,6 +252,19 @@ interface GuruOption {
   nama: string
 }
 
+function getTodayStrDefault(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function getHariTodayDefault(): string {
+  const nama = HARI_INDONESIA_SMK[new Date().getDay()]
+  return nama !== 'Jumat' ? nama : 'Sabtu'
+}
+
 export default function SmkJurnalPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
@@ -102,7 +273,8 @@ export default function SmkJurnalPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
   // Default langsung menyala Warm Gold (Input Agenda)
-  const [studioMode, setStudioMode] = useState<StudioMode>('warm')
+  const [showHistory, setShowHistory] = useState(false)
+  const { color: lampColor, setColor: setLampColor } = useSmkColor()
   const [isPulling, setIsPulling] = useState(false)
 
   // Master Data SMK
@@ -134,9 +306,18 @@ export default function SmkJurnalPage() {
   // State Riwayat Jurnal SMK
   const [rekapList, setRekapList] = useState<JurnalRecord[]>([])
   const [filterKelasId, setFilterKelasId] = useState('')
-  const [filterTanggal, setFilterTanggal] = useState('')
+  const [filterTanggal] = useState('')
   const [searchMateri, setSearchMateri] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
+
+  // Isi tanggal hari ini hanya di browser setelah mount (hindari SSR/hydration mismatch).
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setTanggal(getTodayStrDefault())
+    setTodayStr(getTodayStrDefault())
+    setHari(getHariTodayDefault())
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const fetchMasterJamSmk = useCallback(async () => {
     const { data } = await supabase
@@ -189,25 +370,25 @@ export default function SmkJurnalPage() {
             .order('jam_ke', { ascending: true }),
         ])
 
-        const allSmkKelas: OptionItem[] = (resKelas.data || []).map((k: any) => ({
+        const allSmkKelas: OptionItem[] = (resKelas.data || []).map((k: { id: number; nama_kelas: string }) => ({
           id: k.id,
           nama: k.nama_kelas,
         }))
-        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: any) => ({
+        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: { id: number; nama_mapel: string }) => ({
           id: m.id,
           nama: m.nama_mapel,
         }))
 
         const rawJadwal = resJadwal.data || []
-        const formattedJadwal: JadwalSlotSmk[] = rawJadwal.map((j: any) => {
+        const formattedJadwal: JadwalSlotSmk[] = rawJadwal.map((j: { id: number; hari?: string | null; jam_ke?: number | null; kelas_id?: number | null; mapel_id?: number | null; guru_email?: string | null; jenjang?: string | null; kelas?: { id?: number; nama_kelas?: string } | Array<{ id?: number; nama_kelas?: string }> | null; mapel?: { id?: number; nama_mapel?: string } | Array<{ id?: number; nama_mapel?: string }> | null }) => {
           const kObj = Array.isArray(j.kelas) ? j.kelas[0] : j.kelas
           const mObj = Array.isArray(j.mapel) ? j.mapel[0] : j.mapel
           return {
             id: j.id,
-            hari: j.hari,
+            hari: j.hari || '',
             jam_ke: Number(j.jam_ke),
-            kelas_id: j.kelas_id,
-            mapel_id: j.mapel_id,
+            kelas_id: j.kelas_id ?? null,
+            mapel_id: j.mapel_id ?? null,
             guru_email: (j.guru_email || '').trim().toLowerCase(),
             nama_kelas: kObj?.nama_kelas || 'Semua Kelas DKV',
             nama_mapel: mObj?.nama_mapel || '-',
@@ -304,25 +485,6 @@ export default function SmkJurnalPage() {
 
   useEffect(() => {
     let isMounted = true
-
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    const currentDateStr = `${year}-${month}-${day}`
-
-    setTodayStr(currentDateStr)
-    setTanggal(currentDateStr)
-    setFilterTanggal('')
-
-    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][
-      now.getDay()
-    ]
-    if (namaHari !== 'Jumat') {
-      setHari(namaHari)
-    } else {
-      setHari('Sabtu')
-    }
 
     async function initUser() {
       const {
@@ -429,19 +591,26 @@ export default function SmkJurnalPage() {
 
   useEffect(() => {
     if (tanggal && selectedKelasId) {
+      // Memuat absensi otomatis saat jadwal dipilih
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchAbsensiOtomatisSmk(tanggal, selectedKelasId, selectedMapelId)
     }
   }, [tanggal, selectedKelasId, selectedMapelId, fetchAbsensiOtomatisSmk])
 
   useEffect(() => {
     if (userEmail) {
+      // Memuat rekap saat kondisi berubah
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchRekapSmk(userEmail)
     }
   }, [filterKelasId, filterTanggal, searchMateri, userEmail, fetchRekapSmk])
 
   useEffect(() => {
-    if (isOperator) fetchGuruListSmk()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (isOperator) {
+      // fetchGuruListSmk dideklarasikan di bawah (function declaration di-hoist), jadi aman diakses
+      // eslint-disable-next-line react-hooks/immutability
+      fetchGuruListSmk()
+    }
   }, [isOperator])
 
   const handleSelectJadwalPreset = (slots: JadwalSlotSmk[]) => {
@@ -465,7 +634,7 @@ export default function SmkJurnalPage() {
       .select('email, nama_lengkap, unit_mengajar')
       .order('nama_lengkap', { ascending: true })
     if (!data) return
-    const list = (data as any[])
+    const list = (data as Array<{ email?: string | null; nama_lengkap?: string | null; unit_mengajar?: string | null }>)
       .map((r) => ({
         email: (r.email || '').trim(),
         nama: (r.nama_lengkap || '').trim(),
@@ -498,11 +667,11 @@ export default function SmkJurnalPage() {
       if (!data || data.length === 0) return null
 
       const uniq = Array.from(
-        new Set((data as any[]).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+        new Set((data as Array<{ guru_email?: string | null }>).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
       )
       if (uniq.length === 1) return uniq[0]
 
-      const overlapped = (data as any[]).filter((r) => {
+      const overlapped = (data as Array<{ guru_email?: string | null; jam?: string | number | null; jam_ke?: number | null }>).filter((r) => {
         const str = String(r.jam || r.jam_ke || '')
         const m = str.match(/jam\s*ke[-:\s]*(\d+)(?:[^0-9]+(\d+))?/i)
         const s = m ? parseInt(m[1], 10) || 1 : 1
@@ -609,10 +778,12 @@ export default function SmkJurnalPage() {
         setAbsenSiswa('Nihil')
         await fetchRekapSmk(cleanEmail)
         // Otomatis tarik tali lampu lembut ke mode Coral (Riwayat) setelah tersimpan
-        setStudioMode('coral')
+        setShowHistory(true)
+        setLampColor('red')
       }
-    } catch (err: any) {
-      alert('Terjadi kesalahan: ' + err.message)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error tidak diketahui'
+      alert('Terjadi kesalahan: ' + message)
     } finally {
       setSaving(false)
     }
@@ -634,7 +805,8 @@ export default function SmkJurnalPage() {
   const handlePullCord = () => {
     if (isPulling) return
     setIsPulling(true)
-    setStudioMode((prev) => (prev === 'warm' ? 'coral' : 'warm'))
+    setShowHistory((prev) => !prev)
+    setLampColor(SMK_COLOR_KEYS[(SMK_COLOR_KEYS.indexOf(lampColor) + 1) % SMK_COLOR_KEYS.length])
     setTimeout(() => setIsPulling(false), 450)
   }
 
@@ -652,7 +824,8 @@ export default function SmkJurnalPage() {
     return Array.from(mapGroup.values())
   })()
 
-  const isWarm = studioMode === 'warm'
+  const isWarm = !showHistory
+  const JP = JURNAL_PALETTE[lampColor]
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#0b0908] text-stone-100 font-sans relative flex items-center justify-center select-none">
@@ -668,9 +841,7 @@ export default function SmkJurnalPage() {
       {/* AMBIENT STUDIO GLOW & FLOOR GRADIENT (BERUBAH HALUS SAAT TALI DITARIK) */}
       <motion.div
         animate={{
-          background: isWarm
-            ? 'radial-gradient(circle at 32% 38%, rgba(235, 178, 112, 0.24) 0%, rgba(168, 114, 58, 0.08) 42%, rgba(11, 9, 8, 1) 78%)'
-            : 'radial-gradient(circle at 32% 38%, rgba(226, 112, 126, 0.25) 0%, rgba(158, 62, 78, 0.09) 42%, rgba(11, 9, 8, 1) 78%)',
+          background: JP.glowGrad,
         }}
         transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
         className="fixed inset-0 pointer-events-none z-0"
@@ -679,9 +850,7 @@ export default function SmkJurnalPage() {
       {/* LANTAI STUDIO HALUS */}
       <motion.div
         animate={{
-          background: isWarm
-            ? 'linear-gradient(180deg, rgba(11,9,8,0) 0%, rgba(196, 146, 92, 0.07) 40%, rgba(18, 14, 11, 0.95) 100%)'
-            : 'linear-gradient(180deg, rgba(11,9,8,0) 0%, rgba(196, 92, 108, 0.07) 40%, rgba(18, 12, 14, 0.95) 100%)',
+          background: JP.floorGrad,
         }}
         transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
         className="fixed bottom-0 left-0 right-0 h-[34vh] pointer-events-none z-0 border-t border-white/[0.03]"
@@ -696,9 +865,7 @@ export default function SmkJurnalPage() {
           {/* Cahaya Halo Lembut di Belakang Kap Lampu */}
           <motion.div
             animate={{
-              backgroundColor: isWarm
-                ? 'rgba(246, 196, 134, 0.34)'
-                : 'rgba(235, 118, 132, 0.34)',
+              backgroundColor: JP.haloBg,
               scale: isPulling ? 0.96 : 1,
             }}
             transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
@@ -714,17 +881,17 @@ export default function SmkJurnalPage() {
               <linearGradient id="lampV5Cone" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="0%"
-                  stopColor={isWarm ? '#f5c78e' : '#e57b88'}
+                  stopColor={JP.coneTop}
                   stopOpacity="0.34"
                 />
                 <stop
                   offset="55%"
-                  stopColor={isWarm ? '#d49b5c' : '#c45a68'}
+                  stopColor={JP.coneMid}
                   stopOpacity="0.11"
                 />
                 <stop
                   offset="100%"
-                  stopColor={isWarm ? '#d49b5c' : '#c45a68'}
+                  stopColor={JP.coneMid}
                   stopOpacity="0"
                 />
               </linearGradient>
@@ -733,27 +900,27 @@ export default function SmkJurnalPage() {
               <linearGradient id="lampV5Shade" x1="0" y1="0" x2="1" y2="0">
                 <stop
                   offset="0%"
-                  stopColor={isWarm ? '#d8b48a' : '#b85a66'}
+                  stopColor={JP.shadeStop0}
                 />
                 <stop
                   offset="38%"
-                  stopColor={isWarm ? '#f5dec0' : '#df8490'}
+                  stopColor={JP.shadeStop38}
                 />
                 <stop
                   offset="72%"
-                  stopColor={isWarm ? '#e8caa3' : '#cf6f7b'}
+                  stopColor={JP.shadeStop72}
                 />
                 <stop
                   offset="100%"
-                  stopColor={isWarm ? '#b99368' : '#96434e'}
+                  stopColor={JP.shadeStop100}
                 />
               </linearGradient>
 
               {/* Gradien Kaki Tripod Kayu Hangat */}
               <linearGradient id="lampV5WoodLeg" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor={isWarm ? '#8c6d4e' : '#7a5256'} />
-                <stop offset="50%" stopColor={isWarm ? '#cfa97e' : '#b88488'} />
-                <stop offset="100%" stopColor={isWarm ? '#5c442e' : '#4f3336'} />
+                <stop offset="0%" stopColor={JP.woodStop0} />
+                <stop offset="50%" stopColor={JP.woodStop50} />
+                <stop offset="100%" stopColor={JP.woodStop100} />
               </linearGradient>
             </defs>
 
@@ -766,9 +933,7 @@ export default function SmkJurnalPage() {
               cy="474"
               rx="92"
               ry="13"
-              fill={
-                isWarm ? 'rgba(245, 199, 142, 0.16)' : 'rgba(229, 123, 136, 0.16)'
-              }
+              fill={JP.floorEllipseFill}
             />
 
             {/* 3 KAKI TRIPOD TINGGI MENYILANG */}
@@ -778,7 +943,7 @@ export default function SmkJurnalPage() {
               y1="148"
               x2="140"
               y2="470"
-              stroke={isWarm ? '#5a432d' : '#4a3033'}
+              stroke={JP.legStroke}
               strokeWidth="4.5"
               strokeLinecap="round"
             />
@@ -810,7 +975,7 @@ export default function SmkJurnalPage() {
               width="36"
               height="6"
               rx="3"
-              fill={isWarm ? '#b99368' : '#9c666c'}
+              fill={JP.collarFill}
             />
 
             {/* Kabel Listrik Melengkung Halus ke Lantai */}
@@ -827,11 +992,9 @@ export default function SmkJurnalPage() {
               cy="148"
               rx="62"
               ry="10"
-              fill={isWarm ? '#fff3d6' : '#ffd1d7'}
+              fill={JP.bulbInnerFill}
               style={{
-                filter: isWarm
-                  ? 'drop-shadow(0 4px 16px rgba(245,199,142,0.85))'
-                  : 'drop-shadow(0 4px 16px rgba(229,123,136,0.85))',
+                filter: JP.bulbFilter,
               }}
             />
 
@@ -839,7 +1002,7 @@ export default function SmkJurnalPage() {
             <path
               d="M96 42 L184 42 L208 148 L72 148 Z"
               fill="url(#lampV5Shade)"
-              stroke={isWarm ? '#fae6c8' : '#f4a4ae'}
+              stroke={JP.shadeStroke}
               strokeWidth="0.9"
               strokeOpacity="0.45"
             />
@@ -885,7 +1048,7 @@ export default function SmkJurnalPage() {
                 y1="148"
                 x2="178"
                 y2="235"
-                stroke={isWarm ? '#e7d2b5' : '#eab6bd'}
+                stroke={JP.cordStroke}
                 strokeWidth="1.7"
               />
 
@@ -894,7 +1057,7 @@ export default function SmkJurnalPage() {
                 cx="178"
                 cy="240"
                 r="5.5"
-                fill={isWarm ? '#f5c78e' : '#e57b88'}
+                fill={JP.knobFill}
                 stroke="#fff7ed"
                 strokeWidth="1.3"
               />
@@ -903,7 +1066,7 @@ export default function SmkJurnalPage() {
               <text
                 x="190"
                 y="222"
-                fill={isWarm ? '#cbb79c' : '#cfa0a6'}
+                fill={JP.labelFill}
                 fontSize="8.5"
                 fontFamily="monospace"
                 letterSpacing="1.2"
@@ -932,12 +1095,8 @@ export default function SmkJurnalPage() {
 
           <motion.div
             animate={{
-              borderColor: isWarm
-                ? 'rgba(245, 199, 142, 0.22)'
-                : 'rgba(229, 123, 136, 0.25)',
-              boxShadow: isWarm
-                ? '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(245, 199, 142, 0.16)'
-                : '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 40px -12px rgba(229, 123, 136, 0.18)',
+              borderColor: JP.cardBorder,
+              boxShadow: JP.cardShadow,
             }}
             transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
             className="w-full rounded-[26px] border bg-white/[0.045] backdrop-blur-2xl p-6 sm:p-7 overflow-hidden relative"
@@ -945,9 +1104,7 @@ export default function SmkJurnalPage() {
             {/* Pendaran cahaya dalam kartu di pojok kiri atas */}
             <motion.div
               animate={{
-                backgroundColor: isWarm
-                  ? 'rgba(245, 199, 142, 0.12)'
-                  : 'rgba(229, 123, 136, 0.13)',
+                backgroundColor: JP.cardGlow,
               }}
               transition={{ duration: 0.85 }}
               className="absolute -top-20 -left-20 w-56 h-56 rounded-full blur-3xl pointer-events-none"

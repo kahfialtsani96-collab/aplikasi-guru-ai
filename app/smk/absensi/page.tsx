@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useSmkColor, SMK_COLOR_KEYS, type SmkColorKey } from '../smkTheme'
 import {
   QrCode,
   Sparkles,
@@ -47,13 +49,49 @@ const getSupabaseClient = () => {
 
 const supabase = getSupabaseClient()
 
+interface KelasRef {
+  id?: number | null
+  nama_kelas?: string | null
+  jenjang?: string | null
+}
+interface MapelRef {
+  id?: number | null
+  nama_mapel?: string | null
+  jenjang?: string | null
+}
+interface JadwalRowSmk {
+  id: number
+  hari?: string | null
+  jam_ke?: number | null
+  kelas_id?: number | null
+  mapel_id?: number | null
+  guru_email?: string | null
+  jenjang?: string | null
+  kelas?: KelasRef | KelasRef[] | null
+  mapel?: MapelRef | MapelRef[] | null
+}
+interface GuruDropdownRow {
+  email?: string | null
+  nama_lengkap?: string | null
+  unit_mengajar?: string | null
+}
+interface SiswaRowAbsensi {
+  id: number
+  nisn: string
+  nama_lengkap: string
+  jenis_kelamin?: string | null
+  kelas_id?: number
+  jenjang?: string | null
+  kelas?: KelasRef | KelasRef[] | null
+}
+
 interface Siswa {
   id: number
   nisn: string
   nama_lengkap: string
   kelas_id?: number
   jenjang?: string | null
-  kelas?: any
+  kelas?: KelasRef | KelasRef[] | null
 }
 
 interface OptionItem {
@@ -100,8 +138,77 @@ interface StatusAbsensiMap {
   [siswaId: string]: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA'
 }
 
-// Mode cahaya lampu persis seperti di video Lamp V5: Warm Gold -> Coral Red -> Dim/Off
-type LampState = 'warm' | 'coral' | 'dim'
+// Palet warna lampu per warna bersama (plus fallback merah saat alert ALPA)
+const ABS_PALETTE: Record<
+  SmkColorKey,
+  {
+    label: string
+    shadeFill: string
+    shadeStroke: string
+    bulbGlowColor: string
+    coneStopColor: string
+    softGlow: string
+    floorEllipse: string
+    ringFill: string
+    knobColor: string
+  }
+> = {
+  white: {
+    label: 'Studio White Glow',
+    shadeFill: '#cfd6df',
+    shadeStroke: '#f1f5f9',
+    bulbGlowColor: 'rgba(255, 255, 255, 0.28)',
+    coneStopColor: '#e2e8f0',
+    softGlow: 'rgba(255, 255, 255, 0.22)',
+    floorEllipse: 'rgba(255, 255, 255, 0.18)',
+    ringFill: '#ffffff',
+    knobColor: '#cbd5e1',
+  },
+  green: {
+    label: 'Neon Green Glow',
+    shadeFill: '#70c9a8',
+    shadeStroke: '#a7f3d0',
+    bulbGlowColor: 'rgba(52, 211, 153, 0.34)',
+    coneStopColor: '#34d399',
+    softGlow: 'rgba(52, 211, 153, 0.26)',
+    floorEllipse: 'rgba(52, 211, 153, 0.16)',
+    ringFill: '#a7f3d0',
+    knobColor: '#34d399',
+  },
+  red: {
+    label: 'Alert Mode (Coral)',
+    shadeFill: '#be5b64',
+    shadeStroke: '#fda4af',
+    bulbGlowColor: 'rgba(244, 63, 94, 0.36)',
+    coneStopColor: '#f43f5e',
+    softGlow: 'rgba(244, 63, 94, 0.28)',
+    floorEllipse: 'rgba(244, 63, 94, 0.16)',
+    ringFill: '#fda4af',
+    knobColor: '#fbbf24',
+  },
+  cyan: {
+    label: 'Studio Cyan Glow',
+    shadeFill: '#5fbdc9',
+    shadeStroke: '#a5f3fc',
+    bulbGlowColor: 'rgba(34, 211, 238, 0.34)',
+    coneStopColor: '#22d3ee',
+    softGlow: 'rgba(34, 211, 238, 0.26)',
+    floorEllipse: 'rgba(34, 211, 238, 0.16)',
+    ringFill: '#a5f3fc',
+    knobColor: '#22d3ee',
+  },
+  amber: {
+    label: 'Warm Studio Glow',
+    shadeFill: '#e7c796',
+    shadeStroke: '#fef3c7',
+    bulbGlowColor: 'rgba(251, 191, 36, 0.34)',
+    coneStopColor: '#fbbf24',
+    softGlow: 'rgba(251, 191, 36, 0.28)',
+    floorEllipse: 'rgba(251, 191, 36, 0.16)',
+    ringFill: '#fef08a',
+    knobColor: '#fbbf24',
+  },
+}
 
 const HARI_INDONESIA_SMK_ABS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
 
@@ -114,6 +221,19 @@ function getHariNama(tgl: string): string {
 interface GuruOption {
   email: string
   nama: string
+}
+
+function getTodayStrDefault(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function getHariTodayDefault(): string {
+  const nama = HARI_INDONESIA_SMK_ABS[new Date().getDay()]
+  return nama !== 'Jumat' ? nama : 'Sabtu'
 }
 
 export default function SmkAbsensiPage() {
@@ -129,7 +249,7 @@ export default function SmkAbsensiPage() {
   const [logoFallbackIndex, setLogoFallbackIndex] = useState(0)
 
   // State Lampu Tripod Interaktif
-  const [lampState, setLampState] = useState<LampState>('warm')
+  const { color: lampColor, setColor: setLampColor } = useSmkColor()
   const [cordPulled, setCordPulled] = useState(false)
 
   const formatNuptk = (val: unknown): string => {
@@ -188,13 +308,23 @@ export default function SmkAbsensiPage() {
   const [searchNama, setSearchNama] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
 
+  // Isi tanggal hari ini hanya di browser setelah mount (hindari SSR/hydration mismatch).
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setTanggal(getTodayStrDefault())
+    setTodayStr(getTodayStrDefault())
+    setFilterTanggal(getTodayStrDefault())
+    setHari(getHariTodayDefault())
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // QR Scanner
   const [scanStatus, setScanStatus] = useState<{
     type: 'success' | 'warning' | 'error'
     msg: string
   } | null>(null)
   const [isScanning, setIsScanning] = useState(false)
-  const qrScannerRef = useRef<any>(null)
+  const qrScannerRef = useRef<import('html5-qrcode').Html5Qrcode | null>(null)
   const isCooldownRef = useRef<boolean>(false)
 
   const siswaListRef = useRef<Siswa[]>([])
@@ -206,7 +336,7 @@ export default function SmkAbsensiPage() {
     absensiMapRef.current = absensiMap
   }, [absensiMap])
 
-  const logoCandidates = ['/logo-smk.jpg', '/logo-smk.png', '/logo-smp.jpg']
+  const logoCandidates = ['/logo-smk.png', '/logo-smp.jpg']
 
   const fetchMasterJamSmk = useCallback(async () => {
     const { data } = await supabase
@@ -259,25 +389,25 @@ export default function SmkAbsensiPage() {
             .order('jam_ke', { ascending: true }),
         ])
 
-        const allSmkKelas: OptionItem[] = (resKelas.data || []).map((k: any) => ({
+        const allSmkKelas: OptionItem[] = (resKelas.data || []).map((k: { id: number; nama_kelas: string }) => ({
           id: k.id,
           nama: k.nama_kelas,
         }))
-        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: any) => ({
+        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: { id: number; nama_mapel: string }) => ({
           id: m.id,
           nama: m.nama_mapel,
         }))
 
         const rawJadwal = resJadwal.data || []
-        const formattedJadwal: JadwalSlotSmk[] = rawJadwal.map((j: any) => {
+        const formattedJadwal: JadwalSlotSmk[] = rawJadwal.map((j: JadwalRowSmk) => {
           const kObj = Array.isArray(j.kelas) ? j.kelas[0] : j.kelas
           const mObj = Array.isArray(j.mapel) ? j.mapel[0] : j.mapel
           return {
             id: j.id,
-            hari: j.hari,
+            hari: j.hari || '',
             jam_ke: Number(j.jam_ke),
-            kelas_id: j.kelas_id,
-            mapel_id: j.mapel_id,
+            kelas_id: j.kelas_id ?? null,
+            mapel_id: j.mapel_id ?? null,
             guru_email: (j.guru_email || '').trim().toLowerCase(),
             nama_kelas: kObj?.nama_kelas || 'Semua Kelas DKV',
             nama_mapel: mObj?.nama_mapel || '-',
@@ -335,25 +465,6 @@ export default function SmkAbsensiPage() {
 
   useEffect(() => {
     let isMounted = true
-
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    const today = `${year}-${month}-${day}`
-
-    setTodayStr(today)
-    setTanggal(today)
-    setFilterTanggal(today)
-
-    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][
-      now.getDay()
-    ]
-    if (namaHari !== 'Jumat') {
-      setHari(namaHari)
-    } else {
-      setHari('Sabtu')
-    }
 
     async function getUserData() {
       const {
@@ -447,7 +558,7 @@ export default function SmkAbsensiPage() {
         const { data, error } = await query
 
         if (!error && data) {
-          const onlySmkSiswa = (data as any[]).filter((s) => {
+          const onlySmkSiswa = (data as SiswaRowAbsensi[]).filter((s) => {
             const kObj = Array.isArray(s.kelas) ? s.kelas[0] : s.kelas
             if ((s.jenjang || '').toUpperCase() === 'SMK') return true
             if ((kObj?.jenjang || '').toUpperCase() === 'SMK') return true
@@ -568,7 +679,7 @@ export default function SmkAbsensiPage() {
 
   // QR Scanner Modal
   useEffect(() => {
-    let html5QrCode: any = null
+    let html5QrCode: import('html5-qrcode').Html5Qrcode | null = null
     let isMounted = true
 
     if (showQrModal && activeTab === 'input') {
@@ -582,13 +693,15 @@ export default function SmkAbsensiPage() {
           html5QrCode = qrScannerRef.current
         }
 
+        if (!html5QrCode) return
+
         const startScanner = async () => {
           try {
-            if (html5QrCode.isScanning) {
-              await html5QrCode.stop()
+            if (html5QrCode!.isScanning) {
+              await html5QrCode!.stop()
             }
 
-            await html5QrCode.start(
+            await html5QrCode!.start(
               { facingMode: facingMode },
               { fps: 10, qrbox: { width: 200, height: 200 } },
               (decodedText: string) => {
@@ -596,7 +709,7 @@ export default function SmkAbsensiPage() {
               },
               () => {}
             )
-          } catch (err: any) {
+          } catch (err) {
             console.warn('Gagal memulai kamera:', err)
             setScanStatus({
               type: 'error',
@@ -676,6 +789,8 @@ export default function SmkAbsensiPage() {
 
   useEffect(() => {
     if (activeTab === 'rekap') {
+      // Memuat rekap saat tab dibuka (sengaja sinkron agar loading langsung tampil)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchRekapSmk()
     }
   }, [activeTab, fetchRekapSmk])
@@ -717,7 +832,7 @@ export default function SmkAbsensiPage() {
       .select('email, nama_lengkap, unit_mengajar')
       .order('nama_lengkap', { ascending: true })
     if (!data) return
-    const list = (data as any[])
+    const list = (data as GuruDropdownRow[])
       .map((r) => ({
         email: (r.email || '').trim(),
         nama: (r.nama_lengkap || '').trim(),
@@ -746,7 +861,7 @@ export default function SmkAbsensiPage() {
       const { data } = await q
       if (!data || data.length === 0) return null
       const uniq = Array.from(
-        new Set((data as any[]).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+        new Set((data as Array<{ guru_email?: string | null }>).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
       )
       return uniq.length === 1 ? uniq[0] : null
     } catch {
@@ -755,8 +870,11 @@ export default function SmkAbsensiPage() {
   }
 
   useEffect(() => {
-    if (isOperator) fetchGuruListSmk()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (isOperator) {
+      // Memuat daftar guru saat halaman dibuka
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchGuruListSmk()
+    }
   }, [isOperator])
 
   const handleSimpanAbsensiSmk = async () => {
@@ -932,8 +1050,9 @@ export default function SmkAbsensiPage() {
         }
         setActiveTab('rekap')
       }
-    } catch (err: any) {
-      alert('Terjadi kesalahan: ' + err.message)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error tidak diketahui'
+      alert('Terjadi kesalahan: ' + message)
     } finally {
       setSaving(false)
     }
@@ -1013,41 +1132,17 @@ export default function SmkAbsensiPage() {
   const handlePullLampCord = () => {
     setCordPulled(true)
     setTimeout(() => setCordPulled(false), 320)
-    setLampState((prev) => (prev === 'warm' ? 'coral' : prev === 'coral' ? 'dim' : 'warm'))
+    setLampColor(SMK_COLOR_KEYS[(SMK_COLOR_KEYS.indexOf(lampColor) + 1) % SMK_COLOR_KEYS.length])
     setActiveTab((prev) => (prev === 'input' ? 'rekap' : 'input'))
   }
 
-  // Warna Dinamis Kap Lampu & Sorotan Cahaya
-  const effectiveMode: LampState =
-    countInputAlpa > 0 && lampState !== 'dim' ? 'coral' : lampState
+  // Warna Dinamis Kap Lampu & Sorotan Cahaya (mengikuti warna bersama SMK)
+  const activePalette = ABS_PALETTE[countInputAlpa > 0 ? 'red' : lampColor]
 
-  const shadeFill =
-    effectiveMode === 'coral'
-      ? '#be5b64'
-      : effectiveMode === 'dim'
-      ? '#161b26'
-      : '#e7c796'
-
-  const shadeStroke =
-    effectiveMode === 'coral'
-      ? '#fda4af'
-      : effectiveMode === 'dim'
-      ? '#334155'
-      : '#fef3c7'
-
-  const bulbGlowColor =
-    effectiveMode === 'coral'
-      ? 'rgba(244, 63, 94, 0.36)'
-      : effectiveMode === 'dim'
-      ? 'rgba(15, 23, 42, 0)'
-      : 'rgba(251, 191, 36, 0.34)'
-
-  const coneStopColor =
-    effectiveMode === 'coral'
-      ? '#f43f5e'
-      : effectiveMode === 'dim'
-      ? '#000000'
-      : '#fbbf24'
+  const shadeFill = activePalette.shadeFill
+  const shadeStroke = activePalette.shadeStroke
+  const bulbGlowColor = activePalette.bulbGlowColor
+  const coneStopColor = activePalette.coneStopColor
 
   return (
     <motion.div
@@ -1085,11 +1180,14 @@ export default function SmkAbsensiPage() {
               </Link>
               <div className="flex items-center gap-2">
                 {logoFallbackIndex < logoCandidates.length ? (
-                  <img
+                  <Image
                     src={logoCandidates[logoFallbackIndex]}
                     onError={() => setLogoFallbackIndex((prev) => prev + 1)}
                     alt="Logo SMK"
-                    className="w-7 h-7 rounded-lg border border-amber-400/40 bg-white/10 p-0.5 object-contain"
+                    width={28}
+                    height={28}
+                    unoptimized
+                    className="rounded-lg border border-amber-400/40 bg-white/10 object-contain"
                   />
                 ) : (
                   <div className="w-7 h-7 rounded-lg border border-amber-400/40 bg-amber-400/15 text-amber-300 flex items-center justify-center">
@@ -1217,11 +1315,7 @@ export default function SmkAbsensiPage() {
                   STUDIO LAMP V5
                 </span>
                 <span className="text-[10px] text-slate-400 font-medium">
-                  {effectiveMode === 'coral'
-                    ? 'Alert Mode (Coral)'
-                    : effectiveMode === 'dim'
-                    ? 'Lampu Redup'
-                    : 'Warm Studio Glow'}
+                  {activePalette.label}
                 </span>
               </div>
 
@@ -1230,12 +1324,7 @@ export default function SmkAbsensiPage() {
                 <div
                   className="absolute top-[10%] w-56 h-56 rounded-full blur-[65px] transition-all duration-700 pointer-events-none"
                   style={{
-                    backgroundColor:
-                      effectiveMode === 'dim'
-                        ? 'transparent'
-                        : effectiveMode === 'coral'
-                        ? 'rgba(244, 63, 94, 0.28)'
-                        : 'rgba(251, 191, 36, 0.28)',
+                    backgroundColor: activePalette.softGlow,
                   }}
                 />
 
@@ -1248,12 +1337,12 @@ export default function SmkAbsensiPage() {
                       <stop
                         offset="0%"
                         stopColor={coneStopColor}
-                        stopOpacity={effectiveMode === 'dim' ? '0' : '0.32'}
+                        stopOpacity="0.32"
                       />
                       <stop
                         offset="55%"
                         stopColor={coneStopColor}
-                        stopOpacity={effectiveMode === 'dim' ? '0' : '0.10'}
+                        stopOpacity="0.10"
                       />
                       <stop offset="100%" stopColor={coneStopColor} stopOpacity="0" />
                     </linearGradient>
@@ -1283,13 +1372,7 @@ export default function SmkAbsensiPage() {
                     cy="495"
                     rx="82"
                     ry="11"
-                    fill={
-                      effectiveMode === 'dim'
-                        ? 'rgba(0,0,0,0.45)'
-                        : effectiveMode === 'coral'
-                        ? 'rgba(244,63,94,0.16)'
-                        : 'rgba(251,191,36,0.16)'
-                    }
+                    fill={activePalette.floorEllipse}
                   />
 
                   <line
@@ -1334,18 +1417,9 @@ export default function SmkAbsensiPage() {
                     cy="156"
                     rx="56"
                     ry="9"
-                    fill={
-                      effectiveMode === 'dim'
-                        ? '#0f172a'
-                        : effectiveMode === 'coral'
-                        ? '#fda4af'
-                        : '#fef08a'
-                    }
+                    fill={activePalette.ringFill}
                     style={{
-                      filter:
-                        effectiveMode === 'dim'
-                          ? 'none'
-                          : `drop-shadow(0 0 14px ${coneStopColor})`,
+                      filter: `drop-shadow(0 0 14px ${coneStopColor})`,
                     }}
                   />
 
@@ -1395,7 +1469,7 @@ export default function SmkAbsensiPage() {
                       cx="166"
                       cy="243"
                       r="5.5"
-                      fill={effectiveMode === 'dim' ? '#475569' : '#fbbf24'}
+                      fill={activePalette.knobColor}
                       stroke="#ffffff"
                       strokeWidth="1.2"
                     />

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import { SMK_COLORS, useSmkColor } from '../smkTheme'
 import {
   ArrowLeft,
   CalendarDays,
@@ -139,6 +140,7 @@ function getTodayIsoDate(): string {
 
 export default function SmkJadwalPage() {
   const router = useRouter()
+  const { color: activeSmkColor } = useSmkColor()
 
   // Auth & Role
   const [authChecking, setAuthChecking] = useState(true)
@@ -836,7 +838,10 @@ export default function SmkJadwalPage() {
       {/* =====================================================================
           1. TOP BAR COMPACT (TERKUNCI DI ATAS)
          ===================================================================== */}
-      <header className="shrink-0 z-30 bg-[#090c13]/95 backdrop-blur-md border-b border-white/10 px-3 py-2.5">
+      <header
+        className="shrink-0 z-30 bg-[#090c13]/95 backdrop-blur-md border-b border-white/10 px-3 py-2.5"
+        style={{ borderBottomColor: `rgba(${SMK_COLORS[activeSmkColor].rgb}, 0.35)` }}
+      >
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <Link

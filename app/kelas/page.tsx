@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import { sortKelas } from '@/lib/utils'
 import {
   School,
@@ -235,6 +236,7 @@ export default function KelolaKelasPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <DarkModeToggle />
             <div className={`border text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2 ${
               isDarkMode 
                 ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' 
@@ -277,7 +279,6 @@ export default function KelolaKelasPage() {
           </div>
         </header>
 
-        {/* 3. MAIN CONTENT AREA (FIXED CONTAINER) */}
         <main className="max-w-6xl w-full mx-auto p-4 sm:p-5 flex-1 flex flex-col min-h-0">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-1 min-h-0">
             
@@ -463,51 +464,6 @@ export default function KelolaKelasPage() {
         </div>
       </div>
 
-      {/* 4. BOTTOM NAVIGATION DOCK */}
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
-        <div className="max-w-xl mx-auto px-4 py-2 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-
-          {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-
-          {isOperator && (
-            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <GraduationCap className="w-5 h-5" />
-              <span>Guru</span>
-            </Link>
-          )}
-
-          <Link href="/jadwal" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
-      </div>
     </motion.div>
   )
 }

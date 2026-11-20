@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useAuthRole } from '@/hooks/useAuthRole' // Import custom hook role
+import { useAuthRole } from '@/hooks/useAuthRole'
+import { useDarkMode } from '@/hooks/useDarkMode'
 import {
   Clock,
   Users,
@@ -20,16 +21,28 @@ import {
   Globe,
   X,
   ChevronRight,
-  Wallet,
 } from 'lucide-react'
 
 export default function Navbar() {
-  const pathname = usePathname()
+  const pathname = usePathname() || '/'
   const router = useRouter()
   const [showAiModal, setShowAiModal] = useState(false)
 
-  // Cek role pengguna
   const { isOperator } = useAuthRole()
+  const { isDarkMode } = useDarkMode()
+
+  // Hindari hydration mismatch: sebelum `mounted`, pakai default gelap (identik server & client),
+  // lalu terapkan nilai nyata dari localStorage setelah mounted.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  const safeDarkMode = mounted ? isDarkMode : true
+
+  // Sembunyikan Navbar global di halaman login & portal SMK (yang punya navigasinya sendiri)
+  if (pathname === '/login' || pathname.startsWith('/smk')) {
+    return null
+  }
 
   const isAkademikActive = [
     '/jadwal',
@@ -48,7 +61,7 @@ export default function Navbar() {
       desc: 'ACP, TP, ATP, Prota, Prosem, KKTP, Modul, LKPD & Rubrik KBC',
       icon: Heart,
       iconBg: 'bg-[#1e293b]',
-      href: '/ai/kbc',
+      href: '/ai?tool=kbc',
       highlight: false,
     },
     {
@@ -58,7 +71,7 @@ export default function Navbar() {
       desc: 'Buat RPP & ATP otomatis dengan AI',
       icon: FileText,
       iconBg: 'bg-amber-500 text-slate-950 font-bold',
-      href: '/ai/perangkat',
+      href: '/ai?tool=perangkat',
       highlight: true,
     },
     {
@@ -68,7 +81,7 @@ export default function Navbar() {
       desc: 'Susun Modul Ajar Deep Learning Kurikulum Merdeka',
       icon: Wand2,
       iconBg: 'bg-[#1e293b]',
-      href: '/ai/deep-learning',
+      href: '/ai?tool=deep-learning',
       highlight: false,
     },
     {
@@ -78,7 +91,7 @@ export default function Navbar() {
       desc: 'Perencanaan kokurikuler lintas mapel & dimensi profil',
       icon: Compass,
       iconBg: 'bg-[#1e293b]',
-      href: '/ai/kokurikuler',
+      href: '/ai?tool=kokurikuler',
       highlight: false,
     },
     {
@@ -88,7 +101,7 @@ export default function Navbar() {
       desc: 'Tanya jawab & konsultasi materi mengajar',
       icon: Bot,
       iconBg: 'bg-[#1e293b]',
-      href: '/ai/chatbot',
+      href: '/ai?tool=chatbot',
       highlight: false,
     },
     {
@@ -98,7 +111,7 @@ export default function Navbar() {
       desc: 'Buat Lembar Kerja Peserta Didik interaktif',
       icon: Sparkles,
       iconBg: 'bg-[#1e293b]',
-      href: '/ai/lkpd',
+      href: '/ai?tool=lkpd',
       highlight: false,
     },
     {
@@ -108,7 +121,7 @@ export default function Navbar() {
       desc: 'Naskah Soal Ujian, LJS, dan Kunci Jawaban Siap Cetak',
       icon: HelpCircle,
       iconBg: 'bg-[#1e293b]',
-      href: '/ai/soal',
+      href: '/ai?tool=soal',
       highlight: false,
     },
     {
@@ -118,7 +131,7 @@ export default function Navbar() {
       desc: 'Generator Soal, Silabus, Rubrik Asesmen & Media',
       icon: Globe,
       iconBg: 'bg-[#1e293b]',
-      href: '/ai/multi',
+      href: '/ai?tool=multi',
       highlight: false,
     },
   ]
@@ -128,16 +141,26 @@ export default function Navbar() {
     router.push(href)
   }
 
+  const inactiveNav = safeDarkMode
+    ? 'text-slate-300 hover:text-white'
+    : 'text-slate-600 hover:text-slate-950'
+
   return (
     <>
-      {/* BOTTOM NAV DOCK */}
-      <div className="border-t border-slate-800/80 bg-[#0d1322]/95 backdrop-blur-md fixed bottom-0 left-0 right-0 z-50">
-        <div className="max-w-md mx-auto px-4 py-2.5 flex items-center justify-between">
+      {/* BOTTOM NAV DOCK GLOBAL */}
+      <div
+        className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
+          safeDarkMode
+            ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
+            : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
+        }`}
+      >
+        <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
           {/* 1. DASHBOARD (Semua Pengguna) */}
           <Link
             href="/"
             className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
-              pathname === '/' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+              pathname === '/' ? 'text-sky-400 font-bold' : inactiveNav
             }`}
           >
             <Clock className="w-5 h-5" />
@@ -149,7 +172,7 @@ export default function Navbar() {
             <Link
               href="/siswa"
               className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
-                pathname === '/siswa' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+                pathname === '/siswa' ? 'text-sky-400 font-bold' : inactiveNav
               }`}
             >
               <Users className="w-5 h-5" />
@@ -162,7 +185,7 @@ export default function Navbar() {
             <Link
               href="/guru"
               className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
-                pathname === '/guru' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+                pathname === '/guru' ? 'text-sky-400 font-bold' : inactiveNav
               }`}
             >
               <GraduationCap className="w-5 h-5" />
@@ -174,7 +197,7 @@ export default function Navbar() {
           <Link
             href="/jadwal"
             className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
-              isAkademikActive ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+              isAkademikActive ? 'text-sky-400 font-bold' : inactiveNav
             }`}
           >
             <BookOpen className="w-5 h-5" />
@@ -188,7 +211,7 @@ export default function Navbar() {
             className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
               showAiModal || pathname.startsWith('/ai')
                 ? 'text-sky-400 font-bold'
-                : 'text-slate-500 hover:text-slate-300'
+                : inactiveNav
             }`}
           >
             <Sparkles className="w-5 h-5" />
@@ -199,30 +222,13 @@ export default function Navbar() {
           <Link
             href="/laporan"
             className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
-              pathname === '/laporan' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+              pathname === '/laporan' ? 'text-sky-400 font-bold' : inactiveNav
             }`}
           >
             <Printer className="w-5 h-5" />
             <span>Laporan</span>
           </Link>
 
-          {/* 7. HONORARIUM (Semua Pengguna) */}
-          <Link
-            href="/honorarium"
-            className={`flex flex-col items-center gap-1 text-xs font-medium transition ${
-              pathname === '/honorarium' ? 'text-sky-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            <Wallet className="w-5 h-5" />
-            <span>Honorarium</span>
-          </Link>
-        </div>
-
-        {/* FOOTER TEXT */}
-        <div className="bg-[#070a12] py-2 text-center text-[11px] text-slate-500 border-t border-slate-900 flex items-center justify-center gap-2">
-          <span>Aplikasi Guru AI</span>
-          <span>•</span>
-          <span>Created by <strong className="text-slate-300 font-semibold">MUZAINI AL KAHFI</strong></span>
         </div>
       </div>
 

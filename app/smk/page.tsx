@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import { SMK_COLORS, useSmkColor, type SmkColorKey } from './smkTheme'
 import {
   Users,
   BookOpen,
@@ -15,74 +17,27 @@ import {
   LogOut,
   Layers,
   GraduationCap,
-  School,
   Hand,
   ChevronRight,
   Database,
 } from 'lucide-react'
-
-type LampColorKey = 'white' | 'green' | 'red' | 'cyan' | 'amber'
-
-const LAMP_CONFIG: Record<
-  LampColorKey,
-  {
-    label: string
-    dotClass: string
-    hex: string
-    rgb: string
-    textClass: string
-    badgeBg: string
-  }
-> = {
-  white: {
-    label: 'Putih Studio',
-    dotClass: 'bg-white',
-    hex: '#ffffff',
-    rgb: '255, 255, 255',
-    textClass: 'text-white',
-    badgeBg: 'bg-white/10',
-  },
-  green: {
-    label: 'Hijau Neon',
-    dotClass: 'bg-emerald-400',
-    hex: '#34d399',
-    rgb: '52, 211, 153',
-    textClass: 'text-emerald-300',
-    badgeBg: 'bg-emerald-500/15',
-  },
-  red: {
-    label: 'Merah Crimson',
-    dotClass: 'bg-rose-500',
-    hex: '#f43f5e',
-    rgb: '244, 63, 94',
-    textClass: 'text-rose-300',
-    badgeBg: 'bg-rose-500/15',
-  },
-  cyan: {
-    label: 'Biru Cyan',
-    dotClass: 'bg-cyan-400',
-    hex: '#22d3ee',
-    rgb: '34, 211, 238',
-    textClass: 'text-cyan-300',
-    badgeBg: 'bg-cyan-500/15',
-  },
-  amber: {
-    label: 'Oranye Emas',
-    dotClass: 'bg-amber-400',
-    hex: '#fbbf24',
-    rgb: '251, 191, 36',
-    textClass: 'text-amber-300',
-    badgeBg: 'bg-amber-500/15',
-  },
-}
 
 export default function SmkDashboardPage() {
   const router = useRouter()
 
   // State Lampu Gantung Interaktif (Bertahan selama berada di area SMK, mati jika pindah ke SMP)
   const [isLampOn, setIsLampOn] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [isPulling, setIsPulling] = useState(false)
-  const [activeColor, setActiveColor] = useState<LampColorKey>('green')
+  const { color: activeColor, setColor: setActiveColor } = useSmkColor()
+
+  // Pulihkan status lampu & tandai mounted hanya di client setelah mount (hindari SSR/hydration mismatch).
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setMounted(true)
+    setIsLampOn(window.sessionStorage.getItem('smk_lamp_on') === 'true')
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // State Profil Guru, Peran Operator & Statistik SMK
   const [loading, setLoading] = useState(true)
@@ -104,16 +59,7 @@ export default function SmkDashboardPage() {
     absensiHariIni: 0,
   })
 
-  const theme = LAMP_CONFIG[activeColor]
-
-  // Pulihkan status lampu terakhir selama sesi SMK masih aktif
-  useEffect(() => {
-    const savedLampOn = sessionStorage.getItem('smk_lamp_on') === 'true'
-    setIsLampOn(savedLampOn)
-
-    const savedCol = sessionStorage.getItem('smk_lamp_color') as LampColorKey | null
-    if (savedCol && LAMP_CONFIG[savedCol]) setActiveColor(savedCol)
-  }, [])
+  const theme = SMK_COLORS[activeColor]
 
   // Autentikasi & Ambil Data Khusus SMK Muna Mustofa (DKV)
   useEffect(() => {
@@ -200,10 +146,9 @@ export default function SmkDashboardPage() {
   }
 
   // Pilih Titik Warna Cahaya (Hanya aktif saat lampu hidup)
-  const handlePickColor = (color: LampColorKey) => {
+  const handlePickColor = (color: SmkColorKey) => {
     if (!isLampOn) return
     setActiveColor(color)
-    sessionStorage.setItem('smk_lamp_color', color)
   }
 
   // Reset status lampu SMK saat berpindah ke SMP
@@ -309,17 +254,17 @@ export default function SmkDashboardPage() {
               : 'opacity-0 scale-90 -translate-y-2 pointer-events-none'
           }`}
         >
-          {(Object.keys(LAMP_CONFIG) as LampColorKey[]).map((key) => {
+          {(Object.keys(SMK_COLORS) as SmkColorKey[]).map((key) => {
             const isSelected = activeColor === key
             return (
               <button
                 key={key}
                 type="button"
                 onClick={() => handlePickColor(key)}
-                title={LAMP_CONFIG[key].label}
-                aria-label={LAMP_CONFIG[key].label}
+                title={SMK_COLORS[key].label}
+                aria-label={SMK_COLORS[key].label}
                 className={`w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full transition-all duration-200 cursor-pointer ${
-                  LAMP_CONFIG[key].dotClass
+                  SMK_COLORS[key].dotClass
                 } ${
                   isSelected
                     ? 'scale-125 ring-2 ring-offset-2 ring-offset-[#121622] ring-white'
@@ -383,10 +328,10 @@ export default function SmkDashboardPage() {
               cy="74"
               rx="46"
               ry="10"
-              fill={isLampOn ? theme.hex : '#131620'}
+              fill={mounted && isLampOn ? theme.hex : '#131620'}
               className="transition-colors duration-300"
             />
-            {isLampOn && (
+            {mounted && isLampOn && (
               <ellipse cx="180" cy="73" rx="22" ry="5.5" fill="#ffffff" opacity="0.92" />
             )}
 
@@ -506,10 +451,10 @@ export default function SmkDashboardPage() {
             <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/10">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${theme.badgeBg}`}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border overflow-hidden bg-white p-0.5"
                   style={{ borderColor: `rgba(${theme.rgb}, 0.4)` }}
                 >
-                  <School className={`w-4 h-4 ${theme.textClass}`} />
+                  <Image src="/logo-smk.png" alt="Logo SMK" width={36} height={36} unoptimized className="w-full h-full object-contain" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">

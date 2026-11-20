@@ -1,7 +1,7 @@
 'use client'
-import { useState, useEffect, useMemo, useRef, type ClipboardEvent } from 'react'
+import { useState, useEffect, useMemo, useRef, Suspense, type ClipboardEvent } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import ChatAssistant from './components/ChatAssistant'
 import {
   Clock,
@@ -95,7 +96,7 @@ interface KepalaInfo {
   nuptk: string
 }
 
-export default function AiToolsPage() {
+function AiToolsPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
 
@@ -149,6 +150,19 @@ export default function AiToolsPage() {
   const [activeTool, setActiveTool] = useState('chatbot')
   const [activeTabSection, setActiveTabSection] = useState<'admin' | 'modul'>('admin')
   const [selectedDoc, setSelectedDoc] = useState('cp')
+  const searchParams = useSearchParams()
+
+  // Baca parameter ?tool=... dari URL (mis. /ai?tool=perangkat) agar tautan dari
+  // modal "Pilih Tool AI Lengkap" di Navbar membuka tool yang benar (bukan 404).
+  useEffect(() => {
+    const toolParam = searchParams.get('tool')
+    if (
+      toolParam &&
+      ['kbc', 'perangkat', 'deep-learning', 'kokurikuler', 'chatbot', 'lkpd', 'soal', 'multi'].includes(toolParam)
+    ) {
+      setActiveTool(toolParam)
+    }
+  }, [searchParams])
 
   const { isDarkMode } = useDarkMode()
   const [isSavingSoal, setIsSavingSoal] = useState(false)
@@ -1621,6 +1635,7 @@ export default function AiToolsPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <DarkModeToggle />
             <div
               className={`border text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1.5 shadow-xs ${
                 isDarkMode
@@ -3445,88 +3460,15 @@ export default function AiToolsPage() {
         </div>
       )}
 
-      {/* 3. FIXED COMPACT BOTTOM NAVIGATION BAR */}
-      <div
-        className={`border-t fixed bottom-0 left-0 right-0 z-40 shadow-lg transition-colors duration-300 ${
-          isDarkMode
-            ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
-            : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-        }`}
-      >
-        <div className="max-w-xl mx-auto px-4 py-1.5 flex items-center justify-between">
-          <Link
-            href="/"
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-white'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-
-          {isOperator && (
-            <Link
-              href="/siswa"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-                isDarkMode
-                  ? 'text-slate-400 hover:text-white'
-                  : 'text-slate-600 hover:text-slate-950'
-              }`}
-            >
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-
-          {isOperator && (
-            <Link
-              href="/guru"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-                isDarkMode
-                  ? 'text-slate-400 hover:text-white'
-                  : 'text-slate-600 hover:text-slate-950'
-              }`}
-            >
-              <GraduationCap className="w-5 h-5" />
-              <span>Guru</span>
-            </Link>
-          )}
-
-          <Link
-            href="/jadwal"
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-white'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-
-          <Link
-            href="/ai"
-            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition"
-          >
-            <Sparkles className="w-5 h-5" />
-            <span>AI Tools</span>
-          </Link>
-
-          <Link
-            href="/laporan"
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-white'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
-      </div>
     </motion.div>
+  )
+}
+
+// Bungkus dengan Suspense agar penggunaan useSearchParams aman saat prerender/SSG (Next.js App Router)
+export default function AiToolsPageRoute() {
+  return (
+    <Suspense fallback={null}>
+      <AiToolsPage />
+    </Suspense>
   )
 }

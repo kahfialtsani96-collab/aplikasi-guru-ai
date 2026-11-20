@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import { SMK_COLORS, useSmkColor } from '../smkTheme'
 import {
   ArrowLeft,
   GraduationCap,
@@ -90,6 +91,7 @@ function parseSupabaseError(err: unknown, fallback: string): string {
 
 export default function SmkMasterOperatorPage() {
   const router = useRouter()
+  const { color: activeSmkColor } = useSmkColor()
 
   const [authChecking, setAuthChecking] = useState(true)
   const [isOperatorVerified, setIsOperatorVerified] = useState(false)
@@ -286,6 +288,8 @@ export default function SmkMasterOperatorPage() {
 
   useEffect(() => {
     if (isOperatorVerified) {
+      // Memuat seluruh data master saat operator terverifikasi
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchAllSmkMaster()
     }
   }, [isOperatorVerified, fetchAllSmkMaster])
@@ -799,7 +803,10 @@ export default function SmkMasterOperatorPage() {
       )}
 
       {/* 1. HEADER COMPACT MOBILE-FIRST */}
-      <header className="shrink-0 z-30 bg-[#0b0e16]/90 backdrop-blur-md border-b border-white/10 px-3 py-2.5">
+      <header
+        className="shrink-0 z-30 bg-[#0b0e16]/90 backdrop-blur-md border-b border-white/10 px-3 py-2.5"
+        style={{ borderBottomColor: `rgba(${SMK_COLORS[activeSmkColor].rgb}, 0.35)` }}
+      >
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Link

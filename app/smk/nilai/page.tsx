@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { createClient } from '@supabase/supabase-js'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
+import { useSmkColor, SMK_COLOR_KEYS, type SmkColorKey } from '../smkTheme'
 import {
   ArrowLeft,
   LogOut,
@@ -90,40 +92,40 @@ interface LampTheme {
   accentSolid: string
 }
 
-const LAMP_THEMES: LampTheme[] = [
-  {
-    id: 'warm-gold',
-    name: 'Warm Gold',
-    bulbCore: '#fef08a',
-    bulbGlass: '#fde047',
-    filament: '#d97706',
-    glowRgba: 'rgba(251, 191, 36, 0.44)',
-    falloffNear: 'rgba(251, 191, 36, 0.26)',
-    falloffMid: 'rgba(245, 158, 11, 0.08)',
+const SMK_THEME_BY_COLOR: Record<SmkColorKey, LampTheme> = {
+  white: {
+    id: 'studio-white',
+    name: 'Studio White',
+    bulbCore: '#ffffff',
+    bulbGlass: '#e2e8f0',
+    filament: '#94a3b8',
+    glowRgba: 'rgba(255, 255, 255, 0.35)',
+    falloffNear: 'rgba(255, 255, 255, 0.18)',
+    falloffMid: 'rgba(226, 232, 240, 0.06)',
     falloffFar: 'rgba(6, 8, 14, 0)',
-    cardTint: 'rgba(251, 191, 36, 0.065)',
-    borderGlow: 'rgba(251, 191, 36, 0.30)',
-    badgeBg: 'rgba(251, 191, 36, 0.16)',
-    badgeText: '#fcd34d',
-    accentSolid: '#fbbf24',
+    cardTint: 'rgba(255, 255, 255, 0.05)',
+    borderGlow: 'rgba(255, 255, 255, 0.25)',
+    badgeBg: 'rgba(255, 255, 255, 0.15)',
+    badgeText: '#e2e8f0',
+    accentSolid: '#e2e8f0',
   },
-  {
-    id: 'arctic-cyan',
-    name: 'Studio Cyan',
-    bulbCore: '#e0f2fe',
-    bulbGlass: '#38bdf8',
-    filament: '#0284c7',
-    glowRgba: 'rgba(56, 189, 248, 0.44)',
-    falloffNear: 'rgba(56, 189, 248, 0.26)',
-    falloffMid: 'rgba(14, 165, 233, 0.08)',
+  green: {
+    id: 'neon-green',
+    name: 'Neon Green',
+    bulbCore: '#d1fae5',
+    bulbGlass: '#34d399',
+    filament: '#047857',
+    glowRgba: 'rgba(52, 211, 153, 0.44)',
+    falloffNear: 'rgba(52, 211, 153, 0.26)',
+    falloffMid: 'rgba(16, 185, 129, 0.08)',
     falloffFar: 'rgba(6, 8, 14, 0)',
-    cardTint: 'rgba(56, 189, 248, 0.065)',
-    borderGlow: 'rgba(56, 189, 248, 0.30)',
-    badgeBg: 'rgba(56, 189, 248, 0.16)',
-    badgeText: '#7dd3fc',
-    accentSolid: '#38bdf8',
+    cardTint: 'rgba(52, 211, 153, 0.065)',
+    borderGlow: 'rgba(52, 211, 153, 0.30)',
+    badgeBg: 'rgba(52, 211, 153, 0.16)',
+    badgeText: '#6ee7b7',
+    accentSolid: '#34d399',
   },
-  {
+  red: {
     id: 'coral-rose',
     name: 'Coral Sunset',
     bulbCore: '#ffe4e6',
@@ -139,7 +141,39 @@ const LAMP_THEMES: LampTheme[] = [
     badgeText: '#fda4af',
     accentSolid: '#fb7185',
   },
-]
+  cyan: {
+    id: 'arctic-cyan',
+    name: 'Studio Cyan',
+    bulbCore: '#e0f2fe',
+    bulbGlass: '#38bdf8',
+    filament: '#0284c7',
+    glowRgba: 'rgba(56, 189, 248, 0.44)',
+    falloffNear: 'rgba(56, 189, 248, 0.26)',
+    falloffMid: 'rgba(14, 165, 233, 0.08)',
+    falloffFar: 'rgba(6, 8, 14, 0)',
+    cardTint: 'rgba(56, 189, 248, 0.065)',
+    borderGlow: 'rgba(56, 189, 248, 0.30)',
+    badgeBg: 'rgba(56, 189, 248, 0.16)',
+    badgeText: '#7dd3fc',
+    accentSolid: '#38bdf8',
+  },
+  amber: {
+    id: 'warm-gold',
+    name: 'Warm Gold',
+    bulbCore: '#fef08a',
+    bulbGlass: '#fde047',
+    filament: '#d97706',
+    glowRgba: 'rgba(251, 191, 36, 0.44)',
+    falloffNear: 'rgba(251, 191, 36, 0.26)',
+    falloffMid: 'rgba(245, 158, 11, 0.08)',
+    falloffFar: 'rgba(6, 8, 14, 0)',
+    cardTint: 'rgba(251, 191, 36, 0.065)',
+    borderGlow: 'rgba(251, 191, 36, 0.30)',
+    badgeBg: 'rgba(251, 191, 36, 0.16)',
+    badgeText: '#fcd34d',
+    accentSolid: '#fbbf24',
+  },
+}
 
 export default function SmkPenilaianPage() {
   const router = useRouter()
@@ -158,7 +192,7 @@ export default function SmkPenilaianPage() {
   // STATE ANIMASI IMPOSSIBLE LIGHT BULB (PERSIS REFERENSI VIDEO)
   // =========================================================================
   const [isBulbOn, setIsBulbOn] = useState(true)
-  const [themeIndex, setThemeIndex] = useState(0)
+  const { color: activeColor, setColor: setActiveColor } = useSmkColor()
   const [cordStretch, setCordStretch] = useState(0)
   const [cordSwingAngle, setCordSwingAngle] = useState(0)
   const [doorCrackRatio, setDoorCrackRatio] = useState(0) // 0 = rapat, 0.22 = celah pintu
@@ -168,7 +202,7 @@ export default function SmkPenilaianPage() {
   const [isAnimatingScene, setIsAnimatingScene] = useState(false)
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
-  const currentTheme = LAMP_THEMES[themeIndex % LAMP_THEMES.length]
+  const currentTheme = SMK_THEME_BY_COLOR[activeColor]
 
   // Global Filter Periode Akademik
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>('Ganjil')
@@ -211,7 +245,7 @@ export default function SmkPenilaianPage() {
   const [searchNama, setSearchNama] = useState('')
   const [loadingRekap, setLoadingRekap] = useState(false)
 
-  const logoCandidates = ['/logo-smk.jpg', '/logo-smk.png', '/logo-smp.jpg']
+  const logoCandidates = ['/logo-smk.png', '/logo-smp.jpg']
 
   useEffect(() => {
     return () => {
@@ -262,7 +296,7 @@ export default function SmkPenilaianPage() {
     const t4 = setTimeout(() => {
       setCordStretch(0)
       setCordSwingAngle(2)
-      setThemeIndex((prev) => (prev + 1) % LAMP_THEMES.length)
+      setActiveColor(SMK_COLOR_KEYS[(SMK_COLOR_KEYS.indexOf(activeColor) + 1) % SMK_COLOR_KEYS.length])
       setIsBulbOn(true)
       setActiveTab(nextTab)
       setPullCounter((prev) => prev + 1)
@@ -282,6 +316,7 @@ export default function SmkPenilaianPage() {
     }, 1760)
 
     timersRef.current.push(t1, t2, t3, t4, t5, t6)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isAnimatingScene, pullCounter])
 
   const fetchOptionsSmk = useCallback(
@@ -313,11 +348,11 @@ export default function SmkPenilaianPage() {
             .eq('jenjang', 'SMK'),
         ])
 
-        const allSmkKelas: OptionItem[] = (resKelas.data || []).map((k: any) => ({
+        const allSmkKelas: OptionItem[] = (resKelas.data || []).map((k: { id: number; nama_kelas: string }) => ({
           id: Number(k.id),
           nama: String(k.nama_kelas),
         }))
-        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: any) => ({
+        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: { id: number; nama_mapel: string }) => ({
           id: Number(m.id),
           nama: String(m.nama_mapel),
         }))
@@ -330,14 +365,14 @@ export default function SmkPenilaianPage() {
 
         const cleanEmail = email.trim().toLowerCase()
         const myJadwal = (resJadwal.data || []).filter(
-          (j: any) => (j.guru_email || '').trim().toLowerCase() === cleanEmail
+          (j: { guru_email?: string | null }) => (j.guru_email || '').trim().toLowerCase() === cleanEmail
         )
 
         const uniqueKelasMap = new Map<number, string>()
         const uniqueMapelMap = new Map<number, string>()
         let hasGabunganSemuaKelas = false
 
-        myJadwal.forEach((item: any) => {
+        myJadwal.forEach((item: { kelas_id?: number | null; kelas?: { id?: number; nama_kelas?: string } | Array<{ id?: number; nama_kelas?: string }> | null; mapel?: { id?: number; nama_mapel?: string } | Array<{ id?: number; nama_mapel?: string }> | null; guru_email?: string | null }) => {
           const kObj = Array.isArray(item.kelas) ? item.kelas[0] : item.kelas
           const mObj = Array.isArray(item.mapel) ? item.mapel[0] : item.mapel
 
@@ -473,10 +508,10 @@ export default function SmkPenilaianPage() {
             const initialMap: NilaiMap = {}
             data.forEach((s) => {
               const matched = (existingNilai || []).find(
-                (n: Record<string, any>) => Number(n.siswa_id) === Number(s.id)
+                (n: Record<string, string | number | null | undefined>) => Number(n.siswa_id) === Number(s.id)
               )
               const val = matched
-                ? (matched as Record<string, any>)[jenisPenilaian]
+                ? (matched as Record<string, string | number | null | undefined>)[jenisPenilaian]
                 : undefined
               initialMap[String(s.id)] =
                 val !== undefined && val !== null ? Number(val) : ''
@@ -562,6 +597,8 @@ export default function SmkPenilaianPage() {
 
   useEffect(() => {
     if (activeTab === 'rekap') {
+      // Memuat rekap saat tab dibuka (sengaja sinkron agar loading langsung tampil)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchRekapSmk()
     }
   }, [activeTab, fetchRekapSmk])
@@ -635,8 +672,9 @@ export default function SmkPenilaianPage() {
       } else {
         alert('Data nilai akademik SMK berhasil disimpan!')
       }
-    } catch (err: any) {
-      alert('Terjadi kesalahan: ' + err.message)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error tidak diketahui'
+      alert('Terjadi kesalahan: ' + message)
     } finally {
       setSaving(false)
     }
@@ -732,11 +770,14 @@ export default function SmkPenilaianPage() {
               </Link>
               <div className="flex items-center gap-2">
                 {logoFallbackIndex < logoCandidates.length ? (
-                  <img
+                  <Image
                     src={logoCandidates[logoFallbackIndex]}
                     onError={() => setLogoFallbackIndex((prev) => prev + 1)}
                     alt="Logo SMK"
-                    className="w-7 h-7 rounded-lg border border-white/20 bg-white/10 p-0.5 object-contain"
+                    width={28}
+                    height={28}
+                    unoptimized
+                    className="rounded-lg border border-white/20 bg-white/10 object-contain"
                   />
                 ) : (
                   <div

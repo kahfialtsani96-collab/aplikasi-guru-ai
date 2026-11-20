@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { FileText, Printer, Trash2, Pencil } from 'lucide-react'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 
 const getSupabaseUrl = () => (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrulbdvgxfrtmznpjnm.supabase.co').replace(/['"]/g, '').trim()
 const getSupabaseAnonKey = () => (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder').replace(/['"]/g, '').trim()
@@ -108,15 +110,25 @@ export default function AdministrasiTUPage() {
       }
     }
     getUserData()
+    // fetchSmartOptions dideklarasikan di bawah (const arrow), dipanggil setelah mount, jadi aman diakses
+    // eslint-disable-next-line react-hooks/immutability
     fetchSmartOptions()
   }, [])
 
   useEffect(() => {
+    // fetchSurat dideklarasikan di bawah (function declaration di-hoist), jadi aman diakses
+    // eslint-disable-next-line react-hooks/immutability
     fetchSurat()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSemester, selectedTahunAjaran])
 
   useEffect(() => {
-    if (!editingId && jenisSurat) generateAutoNomorSurat(jenisSurat)
+    if (!editingId && jenisSurat) {
+      // generateAutoNomorSurat dideklarasikan di bawah, namun dipanggil lebih awal (aman karena async)
+      // eslint-disable-next-line react-hooks/immutability
+      generateAutoNomorSurat(jenisSurat)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jenisSurat, selectedTahunAjaran, editingId])
 
   const generateAutoNomorSurat = async (jenis: string) => {
@@ -142,18 +154,18 @@ export default function AdministrasiTUPage() {
     // 1. Fetch Siswa
     const { data: dataSiswa } = await supabase.from('siswa').select('*').order('id')
     if (dataSiswa) {
-      setSiswaOptions(dataSiswa.map((s: Record<string, any>) => {
+      setSiswaOptions(dataSiswa.map((s: Record<string, string | number | null | undefined>) => {
         const namaReal = s.nama_lengkap || s.nama || ''
         return {
-          id: Number(s.id), 
-          nama: String(namaReal), 
-          extraInfo: `NISN: ${s.nisn || '-'}`,
-          nisn: s.nisn || '',
-          ttl: `${s.tempat_lahir || ''}, ${s.tanggal_lahir || ''}`,
-          jk: s.jenis_kelamin || 'Laki-laki',
-          sekolahAsal: s.sekolah_asal || '',
-          ortu: s.nama_ayah || s.nama_ibu || s.nama_wali || '',
-          alamat: s.alamat || ''
+          id: Number(s.id),
+          nama: String(namaReal),
+          extraInfo: `NISN: ${String(s.nisn) || '-'}`,
+          nisn: String(s.nisn || ''),
+          ttl: `${String(s.tempat_lahir || '')}, ${String(s.tanggal_lahir || '')}`,
+          jk: String(s.jenis_kelamin || 'Laki-laki'),
+          sekolahAsal: String(s.sekolah_asal || ''),
+          ortu: String(s.nama_ayah || s.nama_ibu || s.nama_wali || ''),
+          alamat: String(s.alamat || '')
         }
       }))
     }
@@ -161,7 +173,7 @@ export default function AdministrasiTUPage() {
     // 2. Fetch Guru (Menggunakan Kolom: nama_lengkap, jabatan, mapel, NUPTK)
     const { data: dataGuru } = await supabase.from('guru').select('*').order('id')
     if (dataGuru) {
-      setGuruOptions(dataGuru.map((g: Record<string, any>) => {
+      setGuruOptions(dataGuru.map((g: Record<string, string | number | null | undefined>) => {
         const namaReal = g.nama_lengkap || g.nama_guru || g.nama || ''
         const jabatan = g.jabatan || g.mapel || 'Guru Mata Pelajaran'
         const nuptkVal = g.NUPTK || g.nuptk || g.nip || '-'
@@ -258,8 +270,8 @@ export default function AdministrasiTUPage() {
           fetchSurat()
         } else alert('Gagal simpan: ' + error.message)
       }
-    } catch (err: any) {
-      alert('Error: ' + err.message)
+    } catch (err) {
+      alert('Error: ' + (err instanceof Error ? err.message : 'tidak diketahui'))
     } finally {
       setLoading(false)
     }
@@ -604,7 +616,7 @@ export default function AdministrasiTUPage() {
             </Link>
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl overflow-hidden border p-0.5 shadow-xs bg-white">
-                <img src="/logo-smp.jpg" alt="Logo" className="w-full h-full object-contain" />
+                <Image src="/logo-smp.jpg" alt="Logo" width={32} height={32} unoptimized className="w-full h-full object-contain" />
               </div>
               <div>
                 <h1 className={`font-bold text-sm sm:text-base leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Aplikasi Guru AI</h1>
@@ -614,6 +626,7 @@ export default function AdministrasiTUPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <DarkModeToggle />
             <div className={`border text-xs font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
             }`}>

@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import {
   Users,
   School,
@@ -27,8 +28,6 @@ import {
   ArrowRight,
   Clock,
   Printer,
-  Sun,
-  Moon,
   BarChart3,
   Wallet,
 } from 'lucide-react'
@@ -63,7 +62,7 @@ export default function DashboardPage() {
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false)
 
   // STATE DARK MODE
-  const { isDarkMode, setIsDarkMode } = useDarkMode()
+  const { isDarkMode } = useDarkMode()
 
   // Helper format NUPTK agar bersih (jika kosong/null/EMPTY menjadi '-')
   const formatNuptk = (val: unknown): string => {
@@ -84,50 +83,6 @@ export default function DashboardPage() {
   useEffect(() => {
     sessionStorage.removeItem('smk_lamp_on')
   }, [])
-
-  // 2. LOGIKA ANIMASI CIRCULAR REVEAL DARK MODE + PERSISTENSI STORAGE
-  const toggleDarkMode = (event: React.MouseEvent<HTMLButtonElement>) => {
-    const nextState = !isDarkMode
-
-    localStorage.setItem('theme', nextState ? 'dark' : 'light')
-
-    if (!document.startViewTransition) {
-      setIsDarkMode(nextState)
-      return
-    }
-
-    const x = event.clientX
-    const y = event.clientY
-
-    const endRadius = Math.hypot(
-      Math.max(x, window.innerWidth - x),
-      Math.max(y, window.innerHeight - y)
-    )
-
-    const transition = document.startViewTransition(() => {
-      setIsDarkMode(nextState)
-    })
-
-    transition.ready.then(() => {
-      const clipPath = [
-        `circle(0px at ${x}px ${y}px)`,
-        `circle(${endRadius}px at ${x}px ${y}px)`,
-      ]
-
-      document.documentElement.animate(
-        {
-          clipPath: nextState ? clipPath : [...clipPath].reverse(),
-        },
-        {
-          duration: 500,
-          easing: 'ease-in-out',
-          pseudoElement: nextState
-            ? '::view-transition-new(root)'
-            : '::view-transition-old(root)',
-        }
-      )
-    })
-  }
 
   useEffect(() => {
     let isMounted = true
@@ -199,8 +154,8 @@ export default function DashboardPage() {
       const todayStr = new Date().toISOString().split('T')[0]
 
       const [resSiswa, resKelas, resGuru, resAbsensi] = await Promise.all([
-        supabase.from('siswa').select('*', { count: 'exact', head: true }),
-        supabase.from('kelas').select('*', { count: 'exact', head: true }),
+        supabase.from('siswa').select('*', { count: 'exact', head: true }).or('jenjang.eq.SMP,jenjang.is.null'),
+        supabase.from('kelas').select('*', { count: 'exact', head: true }).or('jenjang.eq.SMP,jenjang.is.null'),
         supabase.from('guru').select('*', { count: 'exact', head: true }),
         supabase.from('absensi').select('status').eq('tanggal', todayStr),
       ])
@@ -313,24 +268,8 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-3">
-            {/* TOMBOL TOGGLE DARK MODE / LIGHT MODE */}
-            <button
-              onClick={toggleDarkMode}
-              className={`p-1.5 sm:p-2 rounded-xl border transition cursor-pointer flex items-center justify-center ${
-                isDarkMode
-                  ? 'bg-amber-400/10 border-amber-400/30 text-amber-400 hover:bg-amber-400/20'
-                  : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
-              }`}
-              title={
-                isDarkMode ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'
-              }
-            >
-              {isDarkMode ? (
-                <Sun className="w-4 h-4 sm:w-5 sm:h-5" />
-              ) : (
-                <Moon className="w-4 h-4 sm:w-5 sm:h-5" />
-              )}
-            </button>
+            {/* TOMBOL TOGGLE DARK MODE / LIGHT MODE (global) */}
+            <DarkModeToggle />
 
             <div
               className={`hidden md:flex border text-xs font-semibold px-3 py-1.5 rounded-full items-center gap-2 ${
@@ -1315,88 +1254,6 @@ export default function DashboardPage() {
         <PixelBatSwitcher isDarkMode={isDarkMode} variant="floating" />
       )}
 
-      {/* BOTTOM NAVIGATION DOCK */}
-      <div
-        className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
-          isDarkMode
-            ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
-            : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-        }`}
-      >
-        <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex flex-col items-center gap-1 text-xs font-bold text-indigo-500 transition"
-          >
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-
-          {isOperator && (
-            <Link
-              href="/siswa"
-              className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-                isDarkMode
-                  ? 'text-slate-400 hover:text-slate-100'
-                  : 'text-slate-600 hover:text-slate-950'
-              }`}
-            >
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-
-          {isOperator && (
-            <Link
-              href="/guru"
-              className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-                isDarkMode
-                  ? 'text-slate-400 hover:text-slate-100'
-                  : 'text-slate-600 hover:text-slate-950'
-              }`}
-            >
-              <GraduationCap className="w-5 h-5" />
-              <span>Guru</span>
-            </Link>
-          )}
-
-          <Link
-            href="/jadwal"
-            className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-slate-100'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-
-          <Link
-            href="/ai"
-            className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-slate-100'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <Sparkles className="w-5 h-5" />
-            <span>AI Tools</span>
-          </Link>
-
-          <Link
-            href="/laporan"
-            className={`flex flex-col items-center gap-1 text-xs font-semibold transition ${
-              isDarkMode
-                ? 'text-slate-400 hover:text-slate-100'
-                : 'text-slate-600 hover:text-slate-950'
-            }`}
-          >
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
-      </div>
     </motion.div>
   )
 }

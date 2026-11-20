@@ -25,7 +25,7 @@ export default function InactivityHandler() {
       const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
       await supabase.auth.signOut()
       
-      // JANGAN hapus 'theme' di localStorage agar pilihan Dark Mode tetap tersimpan
+      // JANGAN hapus kunci tema (aplikasi-guru-dark-mode) di localStorage agar pilihan Dark Mode tetap tersimpan
       alert('Sesi Anda telah berakhir karena tidak ada aktivitas. Silakan login kembali.')
       
       // Gunakan window.location.href agar halaman melakukan hard refresh ke /login secara bersih

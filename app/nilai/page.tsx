@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import { sortKelas } from '@/lib/utils'
 import {
   Clock,
@@ -471,6 +472,7 @@ export default function PenilaianPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <DarkModeToggle />
             {/* PERIODE SEMESTER & TAHUN AJARAN */}
             <div className={`border text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-xs ${
               isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
@@ -616,7 +618,6 @@ export default function PenilaianPage() {
           {activeTab === 'input' && (
             <div className="flex flex-col h-full overflow-hidden space-y-2">
               
-              {/* AREA 40% ATAS: FORM FILTER COMPACT (FIXED / NON-SCROLL) */}
               <div className={`border rounded-xl p-2 shrink-0 shadow-xs space-y-1.5 ${
                 isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
               }`}>
@@ -875,50 +876,6 @@ export default function PenilaianPage() {
           )}
 
         </main>
-      </div>
-
-      {/* 3. FIXED BOTTOM NAVIGATION BAR */}
-      <div className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg shrink-0 print:hidden transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md' : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
-      }`}>
-        <div className="max-w-xl mx-auto px-4 py-1.5 flex items-center justify-between">
-          <Link href="/" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Clock className="w-5 h-5" />
-            <span>Dashboard</span>
-          </Link>
-
-          {isOperator && (
-            <Link href="/siswa" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <Users className="w-5 h-5" />
-              <span>Siswa</span>
-            </Link>
-          )}
-
-          {isOperator && (
-            <Link href="/guru" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-              isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-            }`}>
-              <GraduationCap className="w-5 h-5" />
-              <span>Guru</span>
-            </Link>
-          )}
-
-          <Link href="/nilai" className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-indigo-500 transition">
-            <BookOpen className="w-5 h-5" />
-            <span>Akademik</span>
-          </Link>
-
-          <Link href="/laporan" className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold transition ${
-            isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-950'
-          }`}>
-            <Printer className="w-5 h-5" />
-            <span>Laporan</span>
-          </Link>
-        </div>
       </div>
 
     </motion.div>

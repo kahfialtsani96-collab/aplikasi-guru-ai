@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import DarkModeToggle from '@/app/components/DarkModeToggle'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import {
   Wallet, Settings2, Users, RefreshCw, Plus, Save, CheckCircle2, Trash2,
@@ -1470,6 +1471,7 @@ export default function HonorariumPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <DarkModeToggle />
             <span className={`hidden sm:flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-300' : 'bg-white border-slate-300 text-emerald-700'}`}>
               <ShieldCheck className="w-3.5 h-3.5" />
               {isPengurus ? 'PENGURUS UTAMA' : 'GURU / STAF'}
