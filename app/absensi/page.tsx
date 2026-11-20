@@ -7,7 +7,8 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
-import { sortKelas } from '@/lib/utils'
+import AbsensiGuruTab from '@/app/components/absensi/AbsensiGuruTab'
+import { sortKelas, parseJamKeNum } from '@/lib/utils'
 import {
   Clock,
   ClipboardList,
@@ -88,6 +89,19 @@ interface StatusAbsensiMap {
   [siswaId: string]: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA'
 }
 
+const HARI_INDONESIA_ABSENSI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+function getHariNama(tgl: string): string {
+  const d = new Date(`${String(tgl).slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  return HARI_INDONESIA_ABSENSI[d.getDay()]
+}
+
+interface GuruOption {
+  email: string
+  nama: string
+}
+
 export default function AbsensiPage() {
   const router = useRouter()
   const { isOperator, canAccessBimbingan } = useAuthRole()
@@ -117,6 +131,18 @@ export default function AbsensiPage() {
   const { isDarkMode } = useDarkMode()
 
   const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input')
+  // Tab utama halaman: Absensi Siswa vs Absensi Guru
+  const [pageTab, setPageTab] = useState<'siswa' | 'guru'>('siswa')
+
+  // Dukung query parameter URL opsional ?tab=guru (membuka langsung tab Absensi Guru)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('tab') === 'guru') setPageTab('guru')
+    } catch {
+      /* ignore */
+    }
+  }, [])
   const [subTabAbsen, setSubTabAbsen] = useState<'belum' | 'sudah'>('belum')
   const [showQrModal, setShowQrModal] = useState<boolean>(false)
 
@@ -137,6 +163,10 @@ export default function AbsensiPage() {
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
   const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
+
+  // Daftar guru pengampu SMP (untuk dropdown saat operator menginput manual/insidental)
+  const [guruList, setGuruList] = useState<GuruOption[]>([])
+  const [selectedGuruEmail, setSelectedGuruEmail] = useState('')
 
   const [selectedKelasId, setSelectedKelasId] = useState('')
   const [selectedMapelId, setSelectedMapelId] = useState('')
@@ -571,7 +601,7 @@ export default function AbsensiPage() {
       }
 
       if (filterKelasId) query = query.eq('kelas_id', Number(filterKelasId))
-      if (filterMapelId) query = query.eq('mapel', filterMapelId)
+      if (filterMapelId) query = query.eq('mapel_id', Number(filterMapelId))
       if (filterTanggal) query = query.eq('tanggal', filterTanggal)
       if (searchNama.trim()) query = query.ilike('nama_siswa', `%${searchNama.trim()}%`)
 
@@ -608,6 +638,11 @@ export default function AbsensiPage() {
     }
   }, [activeTab, fetchRekap])
 
+  useEffect(() => {
+    if (isOperator) fetchGuruList()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOperator])
+
   const handleStatusChange = (
     siswaId: string,
     status: 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPA' | ''
@@ -634,6 +669,50 @@ export default function AbsensiPage() {
   }
 
   const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
+
+  // Ambil daftar guru pengampu jenjang SMP untuk dropdown operator
+  async function fetchGuruList() {
+    const { data } = await supabase
+      .from('guru')
+      .select('email, nama_lengkap, unit_mengajar')
+      .order('nama_lengkap', { ascending: true })
+    if (!data) return
+    const list = (data as any[])
+      .map((r) => ({
+        email: (r.email || '').trim(),
+        nama: (r.nama_lengkap || '').trim(),
+        unit: (r.unit_mengajar || '').trim().toLowerCase(),
+      }))
+      .filter((g) => g.email && g.nama)
+      .filter((g) => !g.unit || g.unit.includes('smp'))
+      .map(({ email, nama }) => ({ email, nama }))
+    setGuruList(list)
+  }
+
+  // Resolusi guru pengampu ASLI dari tabel jadwal (SMP) untuk absensi.
+  async function resolveGuruPengampuAbsensi(
+    kelasIdVal: number | string | null,
+    mapelIdNum: number,
+    dayName: string
+  ): Promise<string | null> {
+    try {
+      let q = supabase
+        .from('jadwal')
+        .select('guru_email')
+        .or('jenjang.eq.SMP,jenjang.is.null')
+        .eq('mapel_id', mapelIdNum)
+        .eq('hari', dayName)
+      if (kelasIdVal !== 'ALL' && kelasIdVal != null) q = q.eq('kelas_id', Number(kelasIdVal))
+      const { data } = await q
+      if (!data || data.length === 0) return null
+      const uniq = Array.from(
+        new Set((data as any[]).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+      )
+      return uniq.length === 1 ? uniq[0] : null
+    } catch {
+      return null
+    }
+  }
 
   // Simpan Absensi ke Supabase dengan label jenjang: 'SMP'
   const handleSimpanAbsensi = async () => {
@@ -662,6 +741,14 @@ export default function AbsensiPage() {
     setSaving(true)
     try {
       const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+
+      // PEMUTUSAN GURU PENGAMPU: utamakan data asli dari `jadwal`.
+      const hariNama = getHariNama(tanggal)
+      const resolvedGuru = hariNama
+        ? await resolveGuruPengampuAbsensi(selectedKelasId, Number(selectedMapelId), hariNama)
+        : null
+      const guruEmailSimpan = resolvedGuru || (isOperator && selectedGuruEmail.trim() ? selectedGuruEmail.trim().toLowerCase() : userEmail.trim().toLowerCase())
+
       const startJamObj = masterJamList.find(
         (j) => j.hari === hari && j.jam_ke === Number(jamMulai)
       )
@@ -698,6 +785,7 @@ export default function AbsensiPage() {
         return {
           tanggal,
           jam_ke: jamFormattedText,
+          jam_ke_num: parseJamKeNum(jamFormattedText),
           kelas_id:
             siswa.kelas_id || (selectedKelasId !== 'ALL' ? Number(selectedKelasId) : null),
           mapel_id: Number(selectedMapelId),
@@ -709,7 +797,7 @@ export default function AbsensiPage() {
           status: absensiMap[String(siswa.id)],
           semester: selectedSemester,
           tahun_ajaran: selectedTahunAjaran,
-          guru_email: userEmail.trim().toLowerCase(),
+          guru_email: guruEmailSimpan,
           jenjang: 'SMP',
         }
       })
@@ -724,6 +812,7 @@ export default function AbsensiPage() {
           .eq('tanggal', tanggal)
           .eq('semester', selectedSemester)
           .eq('tahun_ajaran', selectedTahunAjaran)
+          .eq('guru_email', guruEmailSimpan)
           .or('jenjang.eq.SMP,jenjang.is.null')
       } else {
         await supabase
@@ -734,6 +823,7 @@ export default function AbsensiPage() {
           .eq('tanggal', tanggal)
           .eq('semester', selectedSemester)
           .eq('tahun_ajaran', selectedTahunAjaran)
+          .eq('guru_email', guruEmailSimpan)
           .or('jenjang.eq.SMP,jenjang.is.null')
       }
 
@@ -748,7 +838,7 @@ export default function AbsensiPage() {
           setFilterKelasId(selectedKelasId)
         }
         if (selectedMapelObj) {
-          setFilterMapelId(selectedMapelObj.nama)
+          setFilterMapelId(String(selectedMapelObj.id))
         }
         setActiveTab('rekap')
       }
@@ -1013,6 +1103,40 @@ export default function AbsensiPage() {
 
         {/* MAIN CONTENT CONTAINER (NO SCROLL CONTAINER) */}
         <main className="max-w-6xl w-full mx-auto p-2 flex-1 flex flex-col space-y-2 overflow-hidden mb-12">
+          {/* TAB SWITCHER: ABSENSI SISWA vs ABSENSI GURU */}
+          <div
+            className={`grid grid-cols-2 p-0.5 rounded-lg border w-full text-[11px] font-extrabold shrink-0 shadow-xs ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
+            }`}
+          >
+            <button
+              onClick={() => setPageTab('siswa')}
+              className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
+                pageTab === 'siswa'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDarkMode
+                  ? 'text-slate-400'
+                  : 'text-slate-700'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" /> Absensi Siswa
+            </button>
+            <button
+              onClick={() => setPageTab('guru')}
+              className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
+                pageTab === 'guru'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDarkMode
+                  ? 'text-slate-400'
+                  : 'text-slate-700'
+              }`}
+            >
+              <GraduationCap className="w-4 h-4" /> Absensi Guru
+            </button>
+          </div>
+
+          {pageTab === 'siswa' ? (
+            <>
           {/* TAB SWITCHER: INPUT VS RIWAYAT */}
           <div
             className={`grid grid-cols-2 p-0.5 rounded-lg border w-full text-[11px] font-extrabold shrink-0 shadow-xs ${
@@ -1196,6 +1320,27 @@ export default function AbsensiPage() {
                   </div>
                 </div>
               </div>
+
+              {isOperator && (
+                <div className="grid grid-cols-12 gap-1.5 mb-1.5">
+                  <div className="col-span-12">
+                    <select
+                      value={selectedGuruEmail}
+                      onChange={(e) => setSelectedGuruEmail(e.target.value)}
+                      className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
+                        isDarkMode
+                          ? 'bg-slate-800 border-slate-700 text-white'
+                          : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      <option value="">-- Guru Pengampu (pilih bila input manual/insidental) --</option>
+                      {guruList.map((g) => (
+                        <option key={g.email} value={g.email}>{g.nama}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* QR SCANNER MODAL POPUP */}
               {showQrModal && (
@@ -1631,7 +1776,7 @@ export default function AbsensiPage() {
                 >
                   <option value="">Semua Mapel SMP</option>
                   {mapelList.map((m) => (
-                    <option key={m.id} value={m.nama}>
+                    <option key={m.id} value={String(m.id)}>
                       {m.nama}
                     </option>
                   ))}
@@ -1742,6 +1887,12 @@ export default function AbsensiPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+            </>
+          ) : (
+            <div className="flex flex-col h-full overflow-hidden space-y-2">
+              <AbsensiGuruTab />
             </div>
           )}
         </main>

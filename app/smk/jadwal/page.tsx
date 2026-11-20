@@ -185,12 +185,18 @@ export default function SmkJadwalPage() {
   }, [])
 
   // 0. Deteksi Hari Lokal Hanya di Browser Client (Mencegah Error Prerender Next.js)
+  //    Ditunda lewat requestAnimationFrame agar setState tidak dipanggil sinkron di dalam
+  //    body effect (aturan react-hooks/set-state-in-effect) sekaligus tetap aman dari
+  //    hydration mismatch karena hanya berjalan setelah mount/hidrasi di sisi browser.
   useEffect(() => {
     const info = getInitialDayInfo()
-    setTodayDayName(info.day)
-    setSelectedHari(info.day)
-    setFormHari(info.day)
-    setIsFridayToday(info.isFridayHoliday)
+    const frameId = requestAnimationFrame(() => {
+      setTodayDayName(info.day)
+      setSelectedHari(info.day)
+      setFormHari(info.day)
+      setIsFridayToday(info.isFridayHoliday)
+    })
+    return () => cancelAnimationFrame(frameId)
   }, [])
 
   // 1. Cek Sesi & Peran Pengguna (Operator vs Guru)
@@ -337,7 +343,9 @@ export default function SmkJadwalPage() {
 
   useEffect(() => {
     if (!authChecking) {
-      fetchAllData()
+      // Ditunda satu tick agar setState (mis. setLoading) tidak sinkron di badan effect.
+      const timerId = setTimeout(() => fetchAllData(), 0)
+      return () => clearTimeout(timerId)
     }
   }, [authChecking, fetchAllData])
 
@@ -389,7 +397,7 @@ export default function SmkJadwalPage() {
   const maxJpOnSelectedHari = useMemo(() => {
     if (jadwalOnSelectedHari.length === 0) return 0
     const highest = Math.max(...jadwalOnSelectedHari.map((j) => Number(j.jam_ke) || 1))
-    return Math.min(Math.max(highest, 1), 6)
+    return Math.min(Math.max(highest, 1), 8)
   }, [jadwalOnSelectedHari])
 
   const dynamicJamSlots = useMemo(() => {
@@ -604,11 +612,11 @@ export default function SmkJadwalPage() {
       !mapelIdNum ||
       !cleanEmail ||
       jamStart < 1 ||
-      jamStart > 6 ||
+      jamStart > 8 ||
       jamEnd < jamStart ||
-      jamEnd > 6
+      jamEnd > 8
     ) {
-      showToast('err', 'Periksa kembali Hari, Rentang Jam Ke (1–6), Kelas DKV, Guru, dan Mapel')
+      showToast('err', 'Periksa kembali Hari, Rentang Jam Ke (1–8), Kelas DKV, Guru, dan Mapel')
       return
     }
 
@@ -895,7 +903,7 @@ export default function SmkJadwalPage() {
         <section className="shrink-0 relative rounded-3xl bg-gradient-to-b from-[#131722] via-[#0c0f17] to-[#080a0f] border border-white/10 pt-3.5 pb-3 px-2.5 sm:px-5 overflow-hidden shadow-2xl">
           <div className="relative z-10 text-center">
             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-400/80">
-              FRESNEL SCHEDULE STAGE • MAX 6 JP
+              FRESNEL SCHEDULE STAGE • MAX 8 JP
             </p>
             <h2 className="text-base sm:text-lg font-black text-white tracking-tight flex items-center justify-center gap-2">
               <span>Hari {selectedHari}</span>
@@ -1093,7 +1101,7 @@ export default function SmkJadwalPage() {
                   </h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
                     {isOperator
-                      ? `Klik tombol "Tambah Jadwal" untuk menyusun slot jam pelajaran (1–6 JP) di hari ${selectedHari}.`
+                      ? `Klik tombol "Tambah Jadwal" untuk menyusun slot jam pelajaran (1–8 JP) di hari ${selectedHari}.`
                       : `Belum ada jadwal pelajaran SMK yang terdaftar untuk hari ${selectedHari}.`}
                   </p>
                 </div>
@@ -1456,7 +1464,7 @@ export default function SmkJadwalPage() {
                   }}
                   className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
                 >
-                  {[1, 2, 3, 4, 5, 6].map((jp) => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((jp) => (
                     <option key={jp} value={jp}>
                       Jam Ke-{jp}
                     </option>
@@ -1473,7 +1481,7 @@ export default function SmkJadwalPage() {
                   onChange={(e) => setFormJamSampai(e.target.value)}
                   className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
                 >
-                  {[1, 2, 3, 4, 5, 6]
+                  {[1, 2, 3, 4, 5, 6, 7, 8]
                     .filter((jp) => jp >= Number(formJamMulai))
                     .map((jp) => (
                       <option key={jp} value={jp}>

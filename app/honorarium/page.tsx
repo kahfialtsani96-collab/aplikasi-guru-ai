@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import { useAuthRole } from '@/hooks/useAuthRole'
 import {
   Wallet, Settings2, Users, RefreshCw, Plus, Save, CheckCircle2, Trash2,
   CalendarDays, FileCheck2, BadgeCheck, ShieldCheck, X, Landmark,
@@ -97,6 +98,15 @@ function extractSlots(jamKe: unknown): number[] {
 
   return Array.from(slots).sort((a, b) => a - b)
 }
+
+// Normalisasi nama mapel untuk pencocokan kata kunci gabungan (huruf kecil + angka saja).
+const normalizeMapelKey = (s: string) =>
+  String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+// Mapel gabungan jenjang SMK yang diajarkan ke seluruh kelas X–XII SECARA BERSAMAAN
+// dalam satu sesi (mis. PJOK, Qiro'ah, Pramuka). Satu sesi (tanggal + mapel) dihitung
+// TETAP 2 JP, dan tidak boleh diakumulasi meskipun tercatat di beberapa baris jurnal.
+const GABUNGAN_SMK_MAPEL = new Set(['pjok', 'qiroah', 'pramuka'])
 
 const bulanAkhir = (tahun: number, bulan: number) => new Date(tahun, bulan, 0).getDate()
 
@@ -464,6 +474,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
 
 export default function HonorariumPage() {
   const { isDarkMode } = useDarkMode()
+  const { isOperator } = useAuthRole()
 
   const [currentName, setCurrentName] = useState('')
   const [currentGuruId, setCurrentGuruId] = useState<number | null>(null)
@@ -512,6 +523,7 @@ export default function HonorariumPage() {
   const [tugasKegiatan, setTugasKegiatan] = useState('')
   const [tugasGuruIds, setTugasGuruIds] = useState<number[]>([])
   const [tugasNominal, setTugasNominal] = useState(0)
+
 
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ tipe: 'ok' | 'err'; pesan: string } | null>(null)
@@ -720,6 +732,9 @@ export default function HonorariumPage() {
     // di beberapa baris kelas sekaligus pada jam yang sama; slot jam digabung lewat Set
     // sehingga tetap dihitung 1x (mis. {7,8} = 2 JP), bukan dikali jumlah kelas/bukan 1 JP.
     const jurnalMap = new Map<string, { dateSlots: Map<string, Set<number>> }>()
+    // Sesi mapel gabungan jenjang SMK (PJOK/Qiro'ah/Pramuka, kelas X–XII serentak).
+    // Kunci sesi = `<tanggal>|<mapel ternormalisasi>`; setiap sesi = 2 JP tetap.
+    const gabunganSessions = new Map<string, Set<string>>()
     let validJurnal = 0
     if (emails.length > 0) {
       const [tahunStr, bulanStr] = targetPeriode.split('-')
@@ -729,8 +744,9 @@ export default function HonorariumPage() {
       const endIso = `${targetPeriode}-${String(bulanAkhir(tahun, bulan)).padStart(2, '0')}`
       const { data } = await supabase
         .from('jurnal_agenda')
-        .select('tanggal, jam_ke, guru_email, mapel, kelas, materi')
+        .select('tanggal, jam_ke, guru_email, mapel, kelas, materi, jenjang, status')
         .in('guru_email', emails)
+        .eq('status', 'Terlaksana')
         .gte('tanggal', startIso)
         .lte('tanggal', endIso)
       if (data) {
@@ -820,12 +836,74 @@ export default function HonorariumPage() {
           // Entri jurnal sah yang benar-benar dipakai perhitungan JP
           validJurnal++
 
+          // --- MAPEL GABUNGAN JENJANG SMK (kelas X–XII serentak) ---
+          // PJOK/Qiro'ah/Pramuka SMK diajarkan ke seluruh kelas X–XII sekaligus dalam
+          // satu sesi. Satu sesi (tanggal + mapel) dihitung TETAP 2 JP. Jika sesi yang
+          // sama tercatat lebih dari satu baris jurnal (mis. per kelas X/XI/XII), semua
+          // baris menyatu jadi satu sesi sehingga TIDAK diakumulasi. Baris ini juga TIDAK
+          // ikut ditambahkan ke daySet umum agar tidak dihitung dobel (double-count).
+          const jenjangTxt = String(row.jenjang ?? '').trim().toUpperCase()
+          const isGabunganSmk =
+            jenjangTxt === 'SMK' && GABUNGAN_SMK_MAPEL.has(normalizeMapelKey(mapelTxt))
+          if (isGabunganSmk) {
+            const sessKey = `${tgl}|${normalizeMapelKey(mapelTxt)}`
+            if (!gabunganSessions.has(em)) gabunganSessions.set(em, new Set())
+            gabunganSessions.get(em)!.add(sessKey)
+            return
+          }
+
           if (!jurnalMap.has(em)) jurnalMap.set(em, { dateSlots: new Map() })
           const rec = jurnalMap.get(em)!
           if (!rec.dateSlots.has(tgl)) rec.dateSlots.set(tgl, new Set())
           const daySet = rec.dateSlots.get(tgl)!
           slots.forEach((s) => daySet.add(s))
         })
+      }
+    }
+
+    // --- ABSENSI GURU (SUMBER UTAMA TRANSPORT HARI) -------------------------
+    // Kehadiran 'Hadir' dari tabel absensi_guru menjadi sumber utama hari
+    // transport. Tanggal unik (tanggal,guru_email) digabung ke himpunan hari
+    // transport yang sama dengan jurnal → anti double-count otomatis
+    // (1 hari tetap 1 hari). Jika tabel absensi_guru belum dibuat, dimuat aman
+    // (graceful fallback).
+    // ------------------------------------------------------------------------
+    const absensiGuruByEmail = new Map<string, Set<string>>()
+    if (activePenerima.length > 0) {
+      const [pkTahunStr, pkBulanStr] = targetPeriode.split('-')
+      const pkTahun = Number(pkTahunStr)
+      const pkBulan = Number(pkBulanStr)
+      if (Number.isFinite(pkTahun) && Number.isFinite(pkBulan)) {
+        const allActiveEmails = Array.from(
+          new Set(
+            activePenerima.map((p) => getGuruEmail(p.guru_id)).filter((e) => e.length > 0)
+          )
+        )
+        if (allActiveEmails.length > 0) {
+          const startIso = `${targetPeriode}-01`
+          const endIso = `${targetPeriode}-${String(bulanAkhir(pkTahun, pkBulan)).padStart(2, '0')}`
+          try {
+            const { data: absensiData, error: absensiError } = await supabase
+              .from('absensi_guru')
+              .select('tanggal, guru_email')
+              .eq('status', 'Hadir')
+              .in('guru_email', allActiveEmails)
+              .gte('tanggal', startIso)
+              .lte('tanggal', endIso)
+            if (absensiData && !absensiError) {
+              absensiData.forEach((r: any) => {
+                const em = (r.guru_email || '').trim().toLowerCase()
+                if (!em) return
+                const tgl = r.tanggal ? String(r.tanggal).slice(0, 10) : ''
+                if (!tgl) return
+                if (!absensiGuruByEmail.has(em)) absensiGuruByEmail.set(em, new Set())
+                absensiGuruByEmail.get(em)!.add(tgl)
+              })
+            }
+          } catch {
+            /* tabel absensi_guru belum dibuat → abaikan */
+          }
+        }
       }
     }
 
@@ -843,19 +921,31 @@ export default function HonorariumPage() {
 
       if (p.status === 'staf_piket') {
         jumlahJp = 0
-      } else if (jurnalRec) {
-        // Agregasi per tanggal: total JP = jumlah slot unik hari itu (deduplikasi gabungan)
-        jurnalRec.dateSlots.forEach((daySet, tgl) => {
-          const arr = Array.from(daySet).sort((a, b) => a - b)
-          transportDates.add(tgl)
-          jumlahJp += arr.length
-          detailJp.push({
-            tanggal: tgl,
-            jam: arr.length ? arr.join('-') : '-',
-            jp: arr.length,
-            slots: arr,
+      } else {
+        // Mapel gabungan SMK: tiap sesi (tanggal+mapel) = 2 JP, tidak diakumulasi.
+        const gSessions = gabunganSessions.get(email)
+        if (gSessions && gSessions.size > 0) {
+          gSessions.forEach((sessKey) => {
+            const tgl = sessKey.split('|')[0] || ''
+            if (tgl) transportDates.add(tgl)
+            jumlahJp += 2
+            detailJp.push({ tanggal: tgl, jam: '-', jp: 2, slots: [] })
           })
-        })
+        }
+        if (jurnalRec) {
+          // Agregasi per tanggal: total JP = jumlah slot unik hari itu (deduplikasi gabungan)
+          jurnalRec.dateSlots.forEach((daySet, tgl) => {
+            const arr = Array.from(daySet).sort((a, b) => a - b)
+            transportDates.add(tgl)
+            jumlahJp += arr.length
+            detailJp.push({
+              tanggal: tgl,
+              jam: arr.length ? arr.join('-') : '-',
+              jp: arr.length,
+              slots: arr,
+            })
+          })
+        }
       }
 
       let tugasNominal = 0
@@ -865,6 +955,13 @@ export default function HonorariumPage() {
           tugasNominal += n(t.nominal)
         }
       })
+
+      // Kehadiran 'Hadir' absensi_guru → tambah ke hari transport (TIDAK menambah JP).
+      // Nilai Set `transportDates` yang sama dipakai jurnal/tugas → anti double-count.
+      const absensiDates = absensiGuruByEmail.get(email)
+      if (absensiDates && absensiDates.size > 0) {
+        absensiDates.forEach((tgl) => transportDates.add(tgl))
+      }
 
       return computeTotalsRow({
         id: undefined,
@@ -1619,6 +1716,12 @@ export default function HonorariumPage() {
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-40 cursor-pointer">
                       <Plus className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Catat Tugas Tambahan
                     </button>
+                    <Link
+                      href="/absensi?tab=guru"
+                      className="inline-flex items-center text-[10px] font-black px-3 py-2 rounded-lg bg-teal-700 hover:bg-teal-600 text-white cursor-pointer"
+                    >
+                      <CalendarDays className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Buka Absensi Guru
+                    </Link>
                     <button onClick={handleAutoCalc} disabled={saving || isPaidPeriode}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40 cursor-pointer">
                       <RefreshCw className={`w-3.5 h-3.5 inline-block align-middle mr-1 ${saving ? 'animate-spin' : ''}`} /> Tarik &amp; Hitung Otomatis
@@ -1727,7 +1830,7 @@ export default function HonorariumPage() {
                                       className={cellCls} />
                                     {r.detailTransport && r.detailTransport.length > 0 && (
                                       <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-40 hidden group-hover:block w-52 rounded-lg border border-white/10 bg-black/95 text-[9px] leading-relaxed text-slate-100 p-2 shadow-2xl text-left">
-                                        <div className="font-black text-emerald-400 mb-1">Tanggal hadir ditarik</div>
+                                        <div className="font-black text-emerald-400 mb-1">Tanggal hadir (mengajar + absensi guru)</div>
                                         {r.detailTransport.map((d, i) => (
                                           <div key={i} className="py-0.5 border-b border-white/5"><span className="font-bold">{formatTanggalSingkat(d)}</span></div>
                                         ))}
@@ -2036,6 +2139,7 @@ export default function HonorariumPage() {
           </div>
         </div>
       )}
+
 
       {/* TOAST */}
       {toast && (

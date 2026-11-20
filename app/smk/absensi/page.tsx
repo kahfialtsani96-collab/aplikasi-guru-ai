@@ -103,6 +103,19 @@ interface StatusAbsensiMap {
 // Mode cahaya lampu persis seperti di video Lamp V5: Warm Gold -> Coral Red -> Dim/Off
 type LampState = 'warm' | 'coral' | 'dim'
 
+const HARI_INDONESIA_SMK_ABS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+function getHariNama(tgl: string): string {
+  const d = new Date(`${String(tgl).slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  return HARI_INDONESIA_SMK_ABS[d.getDay()]
+}
+
+interface GuruOption {
+  email: string
+  nama: string
+}
+
 export default function SmkAbsensiPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
@@ -154,6 +167,10 @@ export default function SmkAbsensiPage() {
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
   const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
   const [jadwalSmkList, setJadwalSmkList] = useState<JadwalSlotSmk[]>([])
+
+  // Daftar guru pengampu SMK (untuk dropdown saat operator menginput manual/insidental)
+  const [guruList, setGuruList] = useState<GuruOption[]>([])
+  const [selectedGuruEmail, setSelectedGuruEmail] = useState('')
 
   const [selectedKelasId, setSelectedKelasId] = useState('')
   const [selectedMapelId, setSelectedMapelId] = useState('')
@@ -693,6 +710,55 @@ export default function SmkAbsensiPage() {
 
   const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
 
+  // Ambil daftar guru pengampu jenjang SMK untuk dropdown operator
+  async function fetchGuruListSmk() {
+    const { data } = await supabase
+      .from('guru')
+      .select('email, nama_lengkap, unit_mengajar')
+      .order('nama_lengkap', { ascending: true })
+    if (!data) return
+    const list = (data as any[])
+      .map((r) => ({
+        email: (r.email || '').trim(),
+        nama: (r.nama_lengkap || '').trim(),
+        unit: (r.unit_mengajar || '').trim().toLowerCase(),
+      }))
+      .filter((g) => g.email && g.nama)
+      .filter((g) => !g.unit || g.unit.includes('smk'))
+      .map(({ email, nama }) => ({ email, nama }))
+    setGuruList(list)
+  }
+
+  // Resolusi guru pengampu ASLI dari tabel jadwal SMK untuk absensi.
+  async function resolveGuruPengampuAbsensiSmk(
+    kelasIdVal: number | string | null,
+    mapelIdNum: number,
+    dayName: string
+  ): Promise<string | null> {
+    try {
+      let q = supabase
+        .from('jadwal')
+        .select('guru_email')
+        .eq('jenjang', 'SMK')
+        .eq('mapel_id', mapelIdNum)
+        .eq('hari', dayName)
+      if (kelasIdVal !== 'ALL' && kelasIdVal != null) q = q.eq('kelas_id', Number(kelasIdVal))
+      const { data } = await q
+      if (!data || data.length === 0) return null
+      const uniq = Array.from(
+        new Set((data as any[]).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+      )
+      return uniq.length === 1 ? uniq[0] : null
+    } catch {
+      return null
+    }
+  }
+
+  useEffect(() => {
+    if (isOperator) fetchGuruListSmk()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOperator])
+
   const handleSimpanAbsensiSmk = async () => {
     if (!selectedKelasId || !selectedMapelId || !tanggal) {
       alert('Silakan pilih Tanggal, Kelas SMK, dan Mata Pelajaran terlebih dahulu!')
@@ -744,6 +810,13 @@ export default function SmkAbsensiPage() {
 
       const cleanEmail = userEmail.trim().toLowerCase()
 
+      // PEMUTUSAN GURU PENGAMPU: utamakan data asli dari `jadwal`.
+      const hariNama = getHariNama(tanggal)
+      const resolvedGuru = hariNama
+        ? await resolveGuruPengampuAbsensiSmk(selectedKelasId, Number(selectedMapelId), hariNama)
+        : null
+      const guruEmailSimpan = resolvedGuru || (isOperator && selectedGuruEmail.trim() ? selectedGuruEmail.trim().toLowerCase() : cleanEmail)
+
       const rowsToInsert = processedSiswa.map((siswa) => {
         const kObj = Array.isArray(siswa.kelas) ? siswa.kelas[0] : siswa.kelas
         let namaKelasVal = kObj?.nama_kelas || ''
@@ -766,7 +839,7 @@ export default function SmkAbsensiPage() {
           status: absensiMap[String(siswa.id)],
           semester: selectedSemester,
           tahun_ajaran: selectedTahunAjaran,
-          guru_email: cleanEmail,
+          guru_email: guruEmailSimpan,
           jenjang: 'SMK',
         }
       })
@@ -836,7 +909,7 @@ export default function SmkAbsensiPage() {
                   kelas_id: kId,
                   mapel_id: Number(selectedMapelId),
                   jam_ke: jp,
-                  guru_email: cleanEmail,
+                  guru_email: guruEmailSimpan,
                   jenjang: 'SMK',
                   materi: `Presensi Kelas SMK (${processedSiswa.length} siswa tercatat)`,
                   semester: selectedSemester,
@@ -1724,6 +1797,24 @@ export default function SmkAbsensiPage() {
                         </select>
                       </div>
                     </div>
+
+                    {isOperator && (
+                      <div className="mt-1.5">
+                        <label className="text-[9px] font-bold text-slate-400 block mb-0.5">
+                          Guru Pengampu (pilih bila input manual/insidental)
+                        </label>
+                        <select
+                          value={selectedGuruEmail}
+                          onChange={(e) => setSelectedGuruEmail(e.target.value)}
+                          className="w-full border border-white/10 bg-[#0d1322] text-white rounded-lg px-2 py-1 text-[10px] font-bold focus:outline-none focus:border-amber-400"
+                        >
+                          <option value="">-- Pilih Guru Pengampu --</option>
+                          {guruList.map((g) => (
+                            <option key={g.email} value={g.email}>{g.nama}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   {/* JADWAL SMK HARI INI */}

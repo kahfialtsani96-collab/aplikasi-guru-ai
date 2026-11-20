@@ -81,6 +81,19 @@ interface JurnalRecord {
 // 'coral' = Coral Rose (Riwayat Jurnal)
 type StudioMode = 'warm' | 'coral'
 
+const HARI_INDONESIA_SMK = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+function getHariNama(tgl: string): string {
+  const d = new Date(`${String(tgl).slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  return HARI_INDONESIA_SMK[d.getDay()]
+}
+
+interface GuruOption {
+  email: string
+  nama: string
+}
+
 export default function SmkJurnalPage() {
   const router = useRouter()
   const { isOperator } = useAuthRole()
@@ -96,6 +109,10 @@ export default function SmkJurnalPage() {
   const [kelasList, setKelasList] = useState<OptionItem[]>([])
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
   const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
+
+  // Daftar guru pengampu SMK (untuk dropdown saat operator menginput manual/insidental)
+  const [guruList, setGuruList] = useState<GuruOption[]>([])
+  const [selectedGuruEmail, setSelectedGuruEmail] = useState('')
   const [jadwalSmkList, setJadwalSmkList] = useState<JadwalSlotSmk[]>([])
 
   // Form Input Agenda SMK
@@ -422,6 +439,11 @@ export default function SmkJurnalPage() {
     }
   }, [filterKelasId, filterTanggal, searchMateri, userEmail, fetchRekapSmk])
 
+  useEffect(() => {
+    if (isOperator) fetchGuruListSmk()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOperator])
+
   const handleSelectJadwalPreset = (slots: JadwalSlotSmk[]) => {
     if (!slots || slots.length === 0) return
     const sorted = [...slots].sort((a, b) => a.jam_ke - b.jam_ke)
@@ -433,6 +455,68 @@ export default function SmkJurnalPage() {
     setSelectedKelasId(first.kelas_id ? String(first.kelas_id) : 'GABUNGAN')
     if (first.mapel_id) {
       setSelectedMapelId(String(first.mapel_id))
+    }
+  }
+
+  // Ambil daftar guru pengampu jenjang SMK untuk dropdown operator
+  async function fetchGuruListSmk() {
+    const { data } = await supabase
+      .from('guru')
+      .select('email, nama_lengkap, unit_mengajar')
+      .order('nama_lengkap', { ascending: true })
+    if (!data) return
+    const list = (data as any[])
+      .map((r) => ({
+        email: (r.email || '').trim(),
+        nama: (r.nama_lengkap || '').trim(),
+        unit: (r.unit_mengajar || '').trim().toLowerCase(),
+      }))
+      .filter((g) => g.email && g.nama)
+      .filter((g) => !g.unit || g.unit.includes('smk'))
+      .map(({ email, nama }) => ({ email, nama }))
+    setGuruList(list)
+  }
+
+  // Resolusi guru pengampu ASLI dari tabel jadwal SMK.
+  async function resolveGuruPengampuFromJadwalSmk(
+    kelasIdVal: number | null,
+    mapelIdNum: number,
+    dayName: string,
+    jamStart: number,
+    jamEnd: number
+  ): Promise<string | null> {
+    try {
+      let q = supabase
+        .from('jadwal')
+        .select('guru_email, jam, jam_ke')
+        .eq('jenjang', 'SMK')
+        .eq('mapel_id', mapelIdNum)
+        .eq('hari', dayName)
+      q = kelasIdVal == null ? q.is('kelas_id', null) : q.eq('kelas_id', kelasIdVal)
+
+      const { data } = await q
+      if (!data || data.length === 0) return null
+
+      const uniq = Array.from(
+        new Set((data as any[]).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+      )
+      if (uniq.length === 1) return uniq[0]
+
+      const overlapped = (data as any[]).filter((r) => {
+        const str = String(r.jam || r.jam_ke || '')
+        const m = str.match(/jam\s*ke[-:\s]*(\d+)(?:[^0-9]+(\d+))?/i)
+        const s = m ? parseInt(m[1], 10) || 1 : 1
+        const rawE = m && m[2] ? parseInt(m[2], 10) : NaN
+        const e = Number.isFinite(rawE) ? rawE : s
+        const rng = { start: Math.min(s, e), end: Math.max(s, e) }
+        return rng.start <= jamEnd && rng.end >= jamStart
+      })
+      const uniq2 = Array.from(
+        new Set(overlapped.map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+      )
+      return uniq2.length === 1 ? uniq2[0] : null
+    } catch {
+      return null
     }
   }
 
@@ -483,6 +567,21 @@ export default function SmkJurnalPage() {
 
       const cleanEmail = userEmail.trim().toLowerCase()
 
+      // PEMUTUSAN GURU PENGAMPU: utamakan data asli dari `jadwal` slot SMK.
+      const hariNama = getHariNama(tanggal)
+      const mapelIdNum = Number(selectedMapelId)
+      const kelasIdSimpan = selectedKelasId === 'GABUNGAN' ? null : Number(selectedKelasId)
+      const resolvedGuru = hariNama
+        ? await resolveGuruPengampuFromJadwalSmk(
+            kelasIdSimpan,
+            mapelIdNum,
+            hariNama,
+            Number(jamMulai),
+            Number(jamSelesai)
+          )
+        : null
+      const guruEmailSimpan = resolvedGuru || (isOperator && selectedGuruEmail.trim() ? selectedGuruEmail.trim().toLowerCase() : cleanEmail)
+
       const { error } = await supabase.from('jurnal_agenda').insert([
         {
           tanggal,
@@ -495,7 +594,7 @@ export default function SmkJurnalPage() {
           status,
           absen_siswa: absenSiswa.trim() || 'Nihil',
           keterangan: keterangan.trim(),
-          guru_email: cleanEmail,
+          guru_email: guruEmailSimpan,
           jenjang: 'SMK',
         },
       ])
@@ -1082,6 +1181,28 @@ export default function SmkJurnalPage() {
                         </select>
                       </div>
                     </div>
+
+                    {isOperator && (
+                      <div className="mb-2">
+                        <label className="text-[10px] font-medium text-stone-400 block mb-1">
+                          Guru Pengampu (pilih bila input manual/insidental)
+                        </label>
+                        <select
+                          value={selectedGuruEmail}
+                          onChange={(e) => setSelectedGuruEmail(e.target.value)}
+                          className="w-full rounded-xl bg-black/35 border border-white/10 px-2.5 py-2 text-xs text-stone-100 focus:outline-none focus:border-[#e7be8a] transition"
+                        >
+                          <option value="" className="bg-stone-900">
+                            Pilih Guru Pengampu
+                          </option>
+                          {guruList.map((g) => (
+                            <option key={g.email} value={g.email} className="bg-stone-900 text-white">
+                              {g.nama}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     {/* Baris 3: Materi Pembelajaran */}
                     <div>

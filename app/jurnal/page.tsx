@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
-import { sortKelas } from '@/lib/utils'
+import { sortKelas, parseJamKeNum } from '@/lib/utils'
 import {
   Clock,
   ClipboardList,
@@ -86,6 +86,20 @@ function parseJadwalJamRangeText(item: { jam?: string | null; jam_ke?: number | 
   return { start: v, end: v }
 }
 
+// Nama hari Indonesia untuk lookup jadwal dari tanggal
+const HARI_INDONESIA_JURNAL = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+function getHariNama(tgl: string): string {
+  const d = new Date(`${String(tgl).slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  return HARI_INDONESIA_JURNAL[d.getDay()]
+}
+
+interface GuruOption {
+  email: string
+  nama: string
+}
+
 export default function AgendaMengajarPage() {
   const router = useRouter()
   const { isOperator, canAccessBimbingan } = useAuthRole()
@@ -121,6 +135,10 @@ export default function AgendaMengajarPage() {
   const [mapelList, setMapelList] = useState<OptionItem[]>([])
   const [masterJamList, setMasterJamList] = useState<MasterJamItem[]>([])
 
+  // Daftar guru pengampu (untuk dropdown saat operator menginput manual/insidental)
+  const [guruList, setGuruList] = useState<GuruOption[]>([])
+  const [selectedGuruEmail, setSelectedGuruEmail] = useState('')
+
   // State Input Jurnal Agenda
   const [tanggal, setTanggal] = useState('')
   const [todayStr, setTodayStr] = useState('')
@@ -130,7 +148,8 @@ export default function AgendaMengajarPage() {
   const [selectedKelasId, setSelectedKelasId] = useState('')
   const [selectedMapelId, setSelectedMapelId] = useState('')
   const [materi, setMateri] = useState('')
-  const [status, setStatus] = useState<'Terlaksana' | 'Tertunda'>('Terlaksana')
+  const [status, setStatus] = useState<'Terlaksana' | 'Tertunda' | 'Digantikan'>('Terlaksana')
+  const [replacementGuruEmail, setReplacementGuruEmail] = useState('')
   const [absenSiswa, setAbsenSiswa] = useState('Nihil')
   const [keterangan, setKeterangan] = useState('')
 
@@ -220,6 +239,7 @@ export default function AgendaMengajarPage() {
         }
       }
 
+      if (isOperator) fetchGuruList()
       fetchJadwalGuru(rawEmail)
       fetchMasterJam()
       fetchJurnal(rawEmail, currentDateStr)
@@ -311,6 +331,11 @@ export default function AgendaMengajarPage() {
         .select('nama_siswa, status, kelas, nisn')
         .or('jenjang.eq.SMP,jenjang.is.null')
         .eq('tanggal', targetDate)
+
+      // Guru hanya mengambil presensi miliknya sendiri; operator lihat semua.
+      if (!isOperator && userEmail) {
+        query = query.ilike('guru_email', userEmail.trim())
+      }
 
       if (isEkskulGabungan) {
         if (targetMapelId) query = query.eq('mapel_id', Number(targetMapelId))
@@ -504,6 +529,64 @@ export default function AgendaMengajarPage() {
   const jamOptionsForHari = masterJamList.filter((j) => j.hari === hari)
   const isPenerapanOtomatis = !isOperator && !replaceMode && jadwalAutoList.length === 1
 
+  // Ambil daftar guru pengampu jenjang SMP untuk dropdown operator
+  async function fetchGuruList() {
+    const { data } = await supabase
+      .from('guru')
+      .select('email, nama_lengkap, unit_mengajar')
+      .order('nama_lengkap', { ascending: true })
+    if (!data) return
+    const list = (data as any[])
+      .map((r) => ({
+        email: (r.email || '').trim(),
+        nama: (r.nama_lengkap || '').trim(),
+        unit: (r.unit_mengajar || '').trim().toLowerCase(),
+      }))
+      .filter((g) => g.email && g.nama)
+      .filter((g) => !g.unit || g.unit.includes('smp'))
+      .map(({ email, nama }) => ({ email, nama }))
+    setGuruList(list)
+  }
+
+  // Resolusi guru pengampu ASLI dari tabel jadwal (SMP). Mengembalikan null
+  // jika tidak ada slot jadwal yang cocok / ambigu (butuh pilihan manual).
+  async function resolveGuruPengampuFromJadwal(
+    kelasIdVal: number | null,
+    mapelIdNum: number,
+    dayName: string,
+    jamStart: number,
+    jamEnd: number
+  ): Promise<string | null> {
+    try {
+      let q = supabase
+        .from('jadwal')
+        .select('guru_email, jam, jam_ke')
+        .or('jenjang.eq.SMP,jenjang.is.null')
+        .eq('mapel_id', mapelIdNum)
+        .eq('hari', dayName)
+      q = kelasIdVal == null ? q.is('kelas_id', null) : q.eq('kelas_id', kelasIdVal)
+
+      const { data } = await q
+      if (!data || data.length === 0) return null
+
+      const uniq = Array.from(
+        new Set((data as any[]).map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+      )
+      if (uniq.length === 1) return uniq[0]
+
+      const overlapped = (data as any[]).filter((r) => {
+        const rng = parseJadwalJamRangeText({ jam: r.jam, jam_ke: r.jam_ke })
+        return rng.start <= jamEnd && rng.end >= jamStart
+      })
+      const uniq2 = Array.from(
+        new Set(overlapped.map((r) => (r.guru_email || '').trim().toLowerCase()).filter(Boolean))
+      )
+      return uniq2.length === 1 ? uniq2[0] : null
+    } catch {
+      return null
+    }
+  }
+
   const handleSimpanJurnal = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedKelasId || !selectedMapelId || !materi.trim() || !tanggal) {
@@ -548,6 +631,47 @@ export default function AgendaMengajarPage() {
       const mapelIdNum = Number(selectedMapelId)
       const kelaskIdSimpan = selectedKelasId === 'GABUNGAN' ? null : Number(selectedKelasId)
 
+      // PEMUTUSAN GURU PENGAMPU: utamakan data asli dari `jadwal` slot tersebut.
+      // Bila tidak ada slot jadwal yang cocok (manual/insidental), operator memilih
+      // guru pengampu dari dropdown — JANGAN pernah jatuh ke email akun operator.
+      // Kondisi kehadiran menentukan siapa pemilik JP & Transport:
+      //   - Terlaksana / Tertunda → guru pengampu asli tetap tercatat sebagai pemilik.
+      //   - Digantikan (operator) → guru_email atas nama guru pengganti, status Terlaksana.
+      const hariNama = getHariNama(tanggal)
+      const resolvedGuru = hariNama
+        ? await resolveGuruPengampuFromJadwal(
+            kelaskIdSimpan,
+            mapelIdNum,
+            hariNama,
+            Number(jamMulai),
+            Number(jamSelesai)
+          )
+        : null
+
+      let finalStatus: 'Terlaksana' | 'Tertunda'
+      let guruEmailSimpan: string
+
+      if (status === 'Digantikan') {
+        finalStatus = 'Terlaksana'
+        if (!replacementGuruEmail.trim()) {
+          alert('Untuk kondisi "Digantikan Guru Lain", pilih Guru Pengganti terlebih dahulu.')
+          setSaving(false)
+          return
+        }
+        guruEmailSimpan = replacementGuruEmail.trim().toLowerCase()
+      } else {
+        finalStatus = status as 'Terlaksana' | 'Tertunda'
+        const pengampuAsli =
+          resolvedGuru ||
+          (isOperator ? selectedGuruEmail.trim().toLowerCase() : userEmail.trim().toLowerCase())
+        if (!pengampuAsli) {
+          alert('Pilih Guru Pengampu terlebih dahulu (atau lengkapi kelas/jadwal agar cocok dengan slot resmi).')
+          setSaving(false)
+          return
+        }
+        guruEmailSimpan = pengampuAsli
+      }
+
       // CEGAH DUPLIKASI: cek apakah sudah ada entri (tanggal + kelas_id + mapel_id)
       let queryDup = supabase
         .from('jurnal_agenda')
@@ -568,15 +692,16 @@ export default function AgendaMengajarPage() {
         }
         const payload = {
           jam_ke: jamFormattedText,
+          jam_ke_num: parseJamKeNum(jamFormattedText),
           kelas_id: kelaskIdSimpan,
           mapel_id: mapelIdNum,
           kelas: namaKelasSimpan,
           mapel: selectedMapelObj?.nama || '',
           materi: materi.trim(),
-          status,
+          status: finalStatus,
           absen_siswa: absenSiswa.trim() || 'Nihil',
           keterangan: keterangan.trim(),
-          guru_email: userEmail.trim().toLowerCase(),
+          guru_email: guruEmailSimpan,
           jenjang: 'SMP',
         }
         const { error: updErr } = await supabase
@@ -602,15 +727,16 @@ export default function AgendaMengajarPage() {
         {
           tanggal,
           jam_ke: jamFormattedText,
+          jam_ke_num: parseJamKeNum(jamFormattedText),
           kelas_id: kelaskIdSimpan,
           mapel_id: mapelIdNum,
           kelas: namaKelasSimpan,
           mapel: selectedMapelObj?.nama || '',
           materi: materi.trim(),
-          status,
+          status: finalStatus,
           absen_siswa: absenSiswa.trim() || 'Nihil',
           keterangan: keterangan.trim(),
-          guru_email: userEmail.trim().toLowerCase(),
+          guru_email: guruEmailSimpan,
           jenjang: 'SMP',
         },
       ])
@@ -942,6 +1068,25 @@ export default function AgendaMengajarPage() {
                   </div>
                 </div>
 
+                {isOperator && (
+                  <div className="grid grid-cols-12 gap-1.5">
+                    <div className="col-span-12">
+                      <select
+                        value={selectedGuruEmail}
+                        onChange={(e) => setSelectedGuruEmail(e.target.value)}
+                        className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        <option value="">-- Guru Pengampu (pilih bila input manual/insidental) --</option>
+                        {guruList.map((g) => (
+                          <option key={g.email} value={g.email}>{g.nama}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
                 {/* ROW 2.b: INDIKATOR OTOMATISASI JADWAL MENGAJAR */}
                 {(isPenerapanOtomatis || jadwalAutoList.length > 0) && (
                   <div
@@ -988,15 +1133,18 @@ export default function AgendaMengajarPage() {
                   <div className="col-span-5">
                     <select
                       value={status}
-                      onChange={(e) => setStatus(e.target.value as 'Terlaksana' | 'Tertunda')}
+                      onChange={(e) => setStatus(e.target.value as 'Terlaksana' | 'Tertunda' | 'Digantikan')}
                       className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
                         status === 'Terlaksana' 
                           ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
                           : 'bg-rose-100 text-rose-900 border-rose-300'
                       }`}
                     >
-                      <option value="Terlaksana">Terlaksana</option>
-                      <option value="Tertunda">Tertunda</option>
+                      <option value="Terlaksana">Terlaksana — Guru Hadir (JP + Transport dihitung)</option>
+                      <option value="Tertunda">Tertunda — Guru Tidak Hadir / Tugas Mandiri (JP & Transport TIDAK dihitung)</option>
+                      {isOperator && (
+                        <option value="Digantikan">Digantikan Guru Lain (JP & Transport masuk ke guru pengganti)</option>
+                      )}
                     </select>
                   </div>
 
@@ -1020,6 +1168,25 @@ export default function AgendaMengajarPage() {
                     </button>
                   </div>
                 </div>
+
+                {isOperator && status === 'Digantikan' && (
+                  <div className="grid grid-cols-12 gap-1.5">
+                    <div className="col-span-12">
+                      <select
+                        value={replacementGuruEmail}
+                        onChange={(e) => setReplacementGuruEmail(e.target.value)}
+                        className={`w-full border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        <option value="">-- Guru Pengganti --</option>
+                        {guruList.map((g) => (
+                          <option key={g.email} value={g.email}>{g.nama}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* TOMBOL SIMPAN AGENDA */}
                 <button

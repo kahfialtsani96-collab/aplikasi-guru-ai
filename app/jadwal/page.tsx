@@ -120,17 +120,13 @@ function parseJamRange(item: Jadwal): { start: number; end: number; jp: number }
   let start = Number(item.jam_ke || 1)
   let end = start
 
-  if (item.jam && item.jam.includes('s/d')) {
-    const match = item.jam.match(/Ke-(\d+)\s+s\/d\s+(\d+)/i)
-    if (match) {
-      start = Number(match[1])
-      end = Number(match[2])
-    }
-  } else if (item.jam) {
-    const singleMatch = item.jam.match(/Ke-(\d+)/i)
-    if (singleMatch) {
-      start = Number(singleMatch[1])
-      end = start
+  const jamStr = String(item.jam || '')
+  if (jamStr) {
+    const rangeMatch = jamStr.match(/Ke-\s*(\d+)(?:\s*s\/d\s*(\d+))?/i)
+    if (rangeMatch) {
+      start = Number(rangeMatch[1])
+      const rawEnd = Number(rangeMatch[2])
+      end = Number.isFinite(rawEnd) && rawEnd > start ? rawEnd : start
     }
   }
 
@@ -227,7 +223,7 @@ export default function JadwalMengajarPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Data Jadwal SMP
-  const [allSmkFilteredJadwal, setAllSmkFilteredJadwal] = useState<Jadwal[]>([])
+  const [allSmpJadwal, setAllSmpJadwal] = useState<Jadwal[]>([])
   const [loading, setLoading] = useState(false)
 
   // State Filter & Tampilan Daftar (Mode List vs Matriks & Accordion)
@@ -261,17 +257,25 @@ export default function JadwalMengajarPage() {
   }, [])
 
   // Sinkronisasi Status Absensi Real-Time dari Supabase (cocokkan Mapel+Kelas dan Jam+Kelas)
-  const fetchAbsensiStatusByDate = useCallback(async (targetDate: string) => {
-    if (!targetDate) return
-    const { data, error } = await supabase
-      .from('absensi')
-      .select('kelas_id, kelas, mapel_id, mapel, jam_ke')
-      .eq('tanggal', targetDate)
+  const fetchAbsensiStatusByDate = useCallback(
+    async (targetDate: string) => {
+      if (!targetDate) return
+      let query = supabase
+        .from('absensi')
+        .select('kelas_id, kelas, mapel_id, mapel, jam_ke')
+        .eq('tanggal', targetDate)
 
-    if (error) {
-      console.error('Error fetching absensi status:', error.message)
-      return
-    }
+      // Guru hanya melihat status presensi miliknya sendiri; operator melihat semuanya.
+      if (!isOperator && userEmail) {
+        query = query.ilike('guru_email', userEmail.trim())
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        console.error('Error fetching absensi status:', error.message)
+        return
+      }
 
     const keys = new Set<string>()
     ;(data || []).forEach((row: any) => {
@@ -306,7 +310,7 @@ export default function JadwalMengajarPage() {
     })
 
     setAbsenStatusKeys(keys)
-  }, [])
+  }, [isOperator, userEmail])
 
   useEffect(() => {
     if (!tanggalCekAbsen) return
@@ -517,9 +521,9 @@ export default function JadwalMengajarPage() {
           return Number(a.jam_ke || 0) - Number(b.jam_ke || 0)
         })
 
-        setAllSmkFilteredJadwal(sortedData)
+        setAllSmpJadwal(sortedData)
       } else {
-        setAllSmkFilteredJadwal([])
+        setAllSmpJadwal([])
       }
     } catch (err) {
       console.error('Error fetching jadwal:', err)
@@ -547,21 +551,21 @@ export default function JadwalMengajarPage() {
 
   // Daftar Jadwal sesuai Peran
   const roleScopedJadwal = useMemo(() => {
-    if (isOperator) return allSmkFilteredJadwal
-    if (guruScope === 'all') return allSmkFilteredJadwal
+    if (isOperator) return allSmpJadwal
+    if (guruScope === 'all') return allSmpJadwal
     const cleanMe = (userEmail || '').trim().toLowerCase()
-    return allSmkFilteredJadwal.filter(
+    return allSmpJadwal.filter(
       (j) => (j.guru_email || '').trim().toLowerCase() === cleanMe
     )
-  }, [allSmkFilteredJadwal, isOperator, guruScope, userEmail])
+  }, [allSmpJadwal, isOperator, guruScope, userEmail])
 
   // Jadwal Pribadi Guru
   const myPersonalJadwal = useMemo(() => {
     const cleanMe = (userEmail || '').trim().toLowerCase()
-    return allSmkFilteredJadwal.filter(
+    return allSmpJadwal.filter(
       (j) => (j.guru_email || '').trim().toLowerCase() === cleanMe
     )
-  }, [allSmkFilteredJadwal, userEmail])
+  }, [allSmpJadwal, userEmail])
 
   const myTotalJp = useMemo(() => {
     return myPersonalJadwal.reduce((acc, item) => acc + parseJamRange(item).jp, 0)
@@ -594,7 +598,7 @@ export default function JadwalMengajarPage() {
 
     matrixJamRows.forEach((row) => {
       kelasList.forEach((k) => {
-        const cell = allSmkFilteredJadwal.find((j) => {
+        const cell = allSmpJadwal.find((j) => {
           if (j.hari !== matrixHari) return false
           if (Number(j.kelas_id) !== Number(k.id)) return false
           const { start, end } = parseJamRange(j)
@@ -616,7 +620,7 @@ export default function JadwalMengajarPage() {
     matrixHari,
     selectedDateHariName,
     kelasList,
-    allSmkFilteredJadwal,
+    allSmpJadwal,
     isCellSudahAbsen,
     matrixJamRows,
   ])
@@ -729,7 +733,7 @@ export default function JadwalMengajarPage() {
     const isAllClassesSerentak = selectedKelasId === 'ALL' && !editingJadwalId
 
     if (!isAllClassesSerentak) {
-      const bentrok = allSmkFilteredJadwal.find((j) => {
+      const bentrok = allSmpJadwal.find((j) => {
         if (editingJadwalId && j.id === editingJadwalId) return false
         if (j.hari !== hari) return false
 
@@ -762,6 +766,24 @@ export default function JadwalMengajarPage() {
     } else {
       if (kelasList.length === 0) {
         alert('Data kelas SMP masih kosong.')
+        return
+      }
+      const bentrokSerentak = allSmpJadwal.find((j) => {
+        if (j.hari !== hari) return false
+        const { start: existingStart, end: existingEnd } = parseJamRange(j)
+        const isTimeOverlap = startInput <= existingEnd && endInput >= existingStart
+        return isTimeOverlap && Number(j.mapel_id) === Number(selectedMapelId)
+      })
+      if (bentrokSerentak) {
+        const namaBentrok =
+          typeof bentrokSerentak.mapel === 'object'
+            ? bentrokSerentak.mapel?.nama_mapel
+            : String(bentrokSerentak.mapel || '')
+        alert(
+          `BENTROK! Sudah ada jadwal ${getGuruDisplayName(
+            bentrokSerentak.guru_email
+          )} (${namaBentrok}) pada ${hari} di jam yang tumpang tindih. Periksa kembali data serentak.`
+        )
         return
       }
       const okConfirm = confirm(
@@ -852,7 +874,7 @@ export default function JadwalMengajarPage() {
       const { error } = await supabase.from('jadwal').delete().eq('id', id)
       if (!error) {
         if (editingJadwalId === id) resetFormInput()
-        setAllSmkFilteredJadwal((prev) => prev.filter((item) => item.id !== id))
+        setAllSmpJadwal((prev) => prev.filter((item) => item.id !== id))
       }
     } catch (err) {
       console.error('Error deleting jadwal:', err)
@@ -2001,7 +2023,7 @@ export default function JadwalMengajarPage() {
                               </td>
 
                               {kelasList.map((k) => {
-                                const cellJadwal = allSmkFilteredJadwal.find((j) => {
+                                const cellJadwal = allSmpJadwal.find((j) => {
                                   if (j.hari !== matrixHari) return false
                                   if (Number(j.kelas_id) !== Number(k.id)) return false
                                   const { start, end } = parseJamRange(j)

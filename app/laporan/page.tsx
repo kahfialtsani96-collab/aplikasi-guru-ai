@@ -76,6 +76,14 @@ function formatHariTanggal(tanggal: unknown): string {
 }
 
 // Normalisasi nama mapel: buang awalan kelas ("VII A - ") & rapikan Title Case
+function stripJenjangMapel(raw: unknown): string {
+  // Buang akhiran penanda jenjang yang tertinggal di data lama, mis.
+  // "BAHASA INDONESIA (SMK)" -> "BAHASA INDONESIA".
+  return String(raw ?? '')
+    .replace(/\s*\((?:SMK|SMP)\)\s*$/i, '')
+    .trim()
+}
+
 function normalizeMapelNama(raw: unknown, namaKelas?: string): string {
   let s = String(raw ?? '').trim()
   if (!s) return ''
@@ -84,10 +92,11 @@ function normalizeMapelNama(raw: unknown, namaKelas?: string): string {
     const prefix = `${namaKelas.trim()} -`
     if (s.toUpperCase().startsWith(prefix.toUpperCase())) s = s.slice(prefix.length).trim()
   }
-  return s
+  s = s
     .split(/\s+/)
     .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
     .join(' ')
+  return stripJenjangMapel(s)
 }
 
 // Ekstrak jumlah per status absensi
@@ -299,7 +308,7 @@ function buildJurnalGridCells(opts: {
           jamEnd: b.jamEnd,
           mapelId: rMapel,
           mapelNama: b.mapelNama,
-          guruNama,
+          guruNama: guruNamaMap.get(b.guruEmail) || '-',
           materi,
           status,
           matchedJurnal: true,
@@ -329,7 +338,7 @@ function buildJurnalGridCells(opts: {
         jamEnd: fbEnd,
         mapelId: rMapel,
         mapelNama,
-        guruNama,
+        guruNama: ownBlock ? guruNamaMap.get(ownBlock.guruEmail) || '-' : guruNama,
         materi,
         status,
         matchedJurnal: true,
@@ -533,7 +542,8 @@ export default function LaporanPage() {
   const [filterKelasLeger, setFilterKelasLeger] = useState('')
   const [filterMapelLeger, setFilterMapelLeger] = useState('')
 
-  const [filterKelasJurnal, setFilterKelasJurnal] = useState('')
+  const [filterKelasJurnalSmp, setFilterKelasJurnalSmp] = useState<string>('ALL')
+  const [filterKelasJurnalSmk, setFilterKelasJurnalSmk] = useState<string>('ALL')
   const [filterTanggalJurnal, setFilterTanggalJurnal] = useState('')
   const [filterBulanJurnal, setFilterBulanJurnal] = useState('')
   const [filterMapelJurnal, setFilterMapelJurnal] = useState('')
@@ -990,6 +1000,48 @@ export default function LaporanPage() {
     const buildJabatanLabel = (): string => {
       void namaMapelTerpilih
       return 'Guru Mata Pelajaran'
+    }
+    // Prioritas 0.5: Guru pengampu berdasarkan JADWAL RESMI (kelas + mapel).
+    // Mengatasi kasus satu mapel diampu beberapa guru di kelas berbeda (mis. B.Indo
+    // dibagi guru kelas 7&8 dan guru kelas 9): pilih guru yang benar-benar mengajar
+    // kelas laporan tersebut, bukan asal ambil satu guru dari guru_mapel.
+    if (resolvedMapelId && options.kelasId) {
+      const jenjangVal = (options.jenjang || '').toUpperCase()
+      let qJadwal = supabase
+        .from('jadwal')
+        .select('guru_email')
+        .eq('kelas_id', Number(options.kelasId))
+        .eq('mapel_id', resolvedMapelId)
+      if (jenjangVal === 'SMK') {
+        qJadwal = qJadwal.eq('jenjang', 'SMK')
+      } else if (jenjangVal === 'SMP') {
+        qJadwal = qJadwal.or('jenjang.eq.SMP,jenjang.is.null')
+      }
+      const { data: jadwalRows } = await qJadwal
+      if (jadwalRows && jadwalRows.length > 0) {
+        const uniqEmails = Array.from(
+          new Set(
+            (jadwalRows as any[])
+              .map((r) => (r.guru_email || '').trim().toLowerCase())
+              .filter(Boolean)
+          )
+        )
+        if (uniqEmails.length === 1) {
+          const guruEmailClean = uniqEmails[0]
+          const { data: gByJadwal } = await supabase
+            .from('guru')
+            .select('nama_lengkap, NUPTK')
+            .ilike('email', guruEmailClean)
+            .maybeSingle()
+          if (gByJadwal && gByJadwal.nama_lengkap) {
+            return {
+              nama: gByJadwal.nama_lengkap.trim(),
+              nuptk: formatNuptk(gByJadwal.NUPTK),
+              jabatanLabel: buildJabatanLabel(),
+            }
+          }
+        }
+      }
     }
     // Prioritas 1: Guru Pengampu dari relasi guru_mapel (berdasarkan mapel_id hasil pencocokan)
     if (resolvedMapelId) {
@@ -1535,7 +1587,7 @@ export default function LaporanPage() {
             <table class="header-identitas">
               <tr>
                 <td style="width: 15%;"><b>Mata Pelajaran</b></td>
-                <td style="width: 35%;">: ${s.mapel}</td>
+                <td style="width: 35%;">: ${stripJenjangMapel(s.mapel)}</td>
                 <td style="width: 15%;"><b>Nama Siswa</b></td>
                 <td style="width: 35%;">: ........................................................</td>
               </tr>
@@ -1601,6 +1653,12 @@ export default function LaporanPage() {
       firstSoal?.mapel || filterMapelBankSoal || ''
     )
 
+    const kelasBankSoalObj = filterKelasBankSoal
+      ? kelasList.find(
+          (k) => k.nama?.trim().toLowerCase() === String(filterKelasBankSoal).trim().toLowerCase()
+        )
+      : undefined
+
     const guruPengampu = await resolvePenandatanganPDF({
       mode: 'mapel',
       mapelId: selectedMapel?.id ?? null,
@@ -1608,6 +1666,7 @@ export default function LaporanPage() {
       jenjang: (selectedMapel?.jenjang as 'SMP' | 'SMK' | null) || null,
       mapelNama: selectedMapel?.nama || filterMapelBankSoal || firstSoal?.mapel,
       namaGuruFallback: firstSoal?.nama_guru,
+      kelasId: kelasBankSoalObj ? String(kelasBankSoalObj.id) : null,
     })
 
     // Tentukan Kepala Sekolah sesuai jenjang soal (SMK vs SMP)
@@ -1671,7 +1730,7 @@ export default function LaporanPage() {
             (s) => `
               <div style="border: 1px solid #000; padding: 10px; margin-bottom: 14px;">
                 <h3 style="margin: 0 0 4px 0; text-transform: uppercase; text-align: center; font-size: 11pt;">
-                  MAPEL: ${s.mapel} (Fase / Kelas: ${s.fase_kelas})
+                  MAPEL: ${stripJenjangMapel(s.mapel)} (Fase / Kelas: ${s.fase_kelas})
                 </h3>
                 <p style="font-size: 9pt; margin: 0 0 8px 0; text-align: center;">
                   Guru Pengampu: <b>${s.nama_guru || guruPengampu.nama}</b> | Jumlah Soal: ${s.jumlah_soal} (${s.bentuk_soal})
@@ -1725,7 +1784,7 @@ export default function LaporanPage() {
             <table class="header-identitas">
               <tr>
                 <td style="width: 15%;"><b>Mata Pelajaran</b></td>
-                <td style="width: 35%;">: ${s.mapel}</td>
+                <td style="width: 35%;">: ${stripJenjangMapel(s.mapel)}</td>
                 <td style="width: 15%;"><b>Nama Siswa</b></td>
                 <td style="width: 35%;">: ........................................................</td>
               </tr>
@@ -1754,12 +1813,19 @@ export default function LaporanPage() {
       })
       .join('')
 
+    const kelasBankSoalObj2 = filterKelasBankSoal
+      ? kelasList.find(
+          (k) => k.nama?.trim().toLowerCase() === String(filterKelasBankSoal).trim().toLowerCase()
+        )
+      : undefined
+
     const guruPengampu = await resolvePenandatanganPDF({
       mode: 'mapel',
       mapelId: selectedMapel?.id ?? null,
       kodeMapel: selectedMapel?.kode_mapel ?? null,
       jenjang: (selectedMapel?.jenjang as 'SMP' | 'SMK' | null) || null,
       mapelNama: selectedMapel?.nama || filterMapelBankSoal || soalData[0]?.mapel,
+      kelasId: kelasBankSoalObj2 ? String(kelasBankSoalObj2.id) : null,
     })
 
     // Tentukan Kepala Sekolah sesuai jenjang soal (SMK vs SMP)
@@ -2025,6 +2091,8 @@ export default function LaporanPage() {
       guruCetak = await resolvePenandatanganPDF({
         mode: 'mapel',
         mapelId: filterMapelLeger || null,
+        kelasId: filterKelasLeger || null,
+        jenjang: selectedK?.jenjang ? String(selectedK.jenjang).toUpperCase() as 'SMP' | 'SMK' : undefined,
       })
 
       let querySiswa = supabase
@@ -2060,7 +2128,7 @@ export default function LaporanPage() {
           kelas:
             (siswa as any).kelas?.nama_kelas ||
             (Array.isArray((siswa as any).kelas) ? (siswa as any).kelas[0]?.nama_kelas : '-'),
-          mapel: n.mata_pelajaran || selectedM?.nama || '-',
+          mapel: stripJenjangMapel(n.mata_pelajaran) || selectedM?.nama || '-',
           tugas: n.nilai_tugas ?? '-',
           uts: n.nilai_uts ?? '-',
           uas: n.nilai_uas ?? '-',
@@ -2109,10 +2177,54 @@ export default function LaporanPage() {
         </table>
       `
     } else if (jenis === 'jurnal') {
-      const selectedK = kelasList.find((k) => k.id === Number(filterKelasJurnal))
       const selectedM = filterMapelJurnal
         ? mapelList.find((m) => Number(m.id) === Number(filterMapelJurnal))
         : null
+
+      // ==== Target kelas untuk cetak JURNAL (dua dropdown terpisah: SMP & SMK) ====
+      // Nilai dropdown: 'ALL' -> semua kelas jenjang tsb; id -> satu kelas tertentu.
+      const daftarKelasTarget: RaporKelasItem[] = []
+      let labelJudulKelas = ' (SEMUA KELAS)'
+      let selectedK: RaporKelasItem | undefined = undefined
+      if (!filterMapelJurnal) {
+        const tambahTarget = (v: string, jenjang: 'SMP' | 'SMK') => {
+          if (!v) return
+          if (v === 'ALL') {
+            daftarKelasTarget.push(
+              ...(jenjang === 'SMP' ? groupedKelasOptions.smp : groupedKelasOptions.smk)
+            )
+          } else {
+            const k = kelasList.find((kk) => Number(kk.id) === Number(v))
+            if (k) daftarKelasTarget.push(k)
+          }
+        }
+        tambahTarget(filterKelasJurnalSmp, 'SMP')
+        tambahTarget(filterKelasJurnalSmk, 'SMK')
+
+        if (daftarKelasTarget.length > 0) {
+          if (daftarKelasTarget.length === 1) {
+            selectedK = daftarKelasTarget[0]
+            labelJudulKelas = ` (${selectedK.nama.toUpperCase()})`
+          } else {
+            const smpOnly = daftarKelasTarget.every(
+              (k) => detectUnitByKelas(k.nama, k.jenjang, k.tingkat) === 'SMP'
+            )
+            const smkOnly = daftarKelasTarget.every(
+              (k) => detectUnitByKelas(k.nama, k.jenjang, k.tingkat) === 'SMK'
+            )
+            labelJudulKelas = smpOnly
+              ? ' (SEMUA KELAS SMP)'
+              : smkOnly
+              ? ' (SEMUA KELAS SMK)'
+              : ' (SEMUA KELAS)'
+          }
+        }
+      }
+      const singleKelasId = daftarKelasTarget.length === 1
+        ? String(daftarKelasTarget[0].id)
+        : ''
+      const isMultiKelas = !filterMapelJurnal && daftarKelasTarget.length > 1
+      const filterKelasJurnal = singleKelasId
 
       // Mode cetak: per Mapel/Guru (berbasis mapel_id) vs per Kelas
       const isGuruMode = Boolean(filterMapelJurnal)
@@ -2124,6 +2236,8 @@ export default function LaporanPage() {
         .eq('tahun_ajaran', selectedTahunAjaran)
         .order('tanggal', { ascending: true })
       if (filterKelasJurnal) queryAgenda = queryAgenda.eq('kelas_id', Number(filterKelasJurnal))
+      else if (isMultiKelas)
+        queryAgenda = queryAgenda.in('kelas_id', daftarKelasTarget.map((k) => Number(k.id)))
       if (filterMapelJurnal) queryAgenda = queryAgenda.eq('mapel_id', Number(filterMapelJurnal))
       if (filterTanggalJurnal) queryAgenda = queryAgenda.eq('tanggal', filterTanggalJurnal)
       else if (filterBulanJurnal) queryAgenda = queryAgenda.ilike('tanggal', `${filterBulanJurnal}%`)
@@ -2143,9 +2257,7 @@ export default function LaporanPage() {
         ? `JURNAL AGENDA MENGAJAR GURU${
             selectedM ? ` (${(selectedM.nama || '').toUpperCase()})` : ''
           }`
-        : `JURNAL AGENDA HARIAN KELAS${
-            selectedK ? ` (${selectedK.nama.toUpperCase()})` : ' (SEMUA KELAS)'
-          }`
+        : `JURNAL AGENDA HARIAN KELAS${labelJudulKelas}`
 
       let guruCetakJurnal: RaporGuruInfo
       let faseLabel = ''
@@ -2155,14 +2267,19 @@ export default function LaporanPage() {
           mapelId: filterMapelJurnal || null,
           mapelNama: selectedM?.nama || null,
           kodeMapel: selectedM?.kode_mapel || null,
+          kelasId: filterKelasJurnal || null,
+          jenjang: selectedK?.jenjang ? String(selectedK.jenjang).toUpperCase() as 'SMP' | 'SMK' : undefined,
         })
       } else {
-        const waliInfo = await resolveWaliKelasByKelasId(filterKelasJurnal || null)
-        const jabatanWali = `Wali Kelas ${selectedK?.nama ? selectedK.nama.toUpperCase() : ''}`.trim()
+        const targetPertama = daftarKelasTarget[0]
+        const waliInfo = await resolveWaliKelasByKelasId(
+          targetPertama ? String(targetPertama.id) : null
+        )
+        const jabatanWali = `Wali Kelas ${targetPertama?.nama ? targetPertama.nama.toUpperCase() : ''}`.trim()
         guruCetakJurnal = { ...waliInfo, jabatanLabel: jabatanWali }
-        if (selectedK) {
+        if (targetPertama) {
           if (unitUtama === 'SMP') faseLabel = 'D'
-          else faseLabel = getKelasGradeWeight(selectedK.nama, selectedK.tingkat) === 10 ? 'E' : 'F'
+          else faseLabel = getKelasGradeWeight(targetPertama.nama, targetPertama.tingkat) === 10 ? 'E' : 'F'
         }
       }
 
@@ -2178,7 +2295,222 @@ export default function LaporanPage() {
         })
       }
 
-      if (!isGuruMode && filterKelasJurnal) {
+      if (!filterMapelJurnal && isMultiKelas) {
+        {
+          const { data: guruSemua } = await supabase
+            .from('guru')
+            .select('email, nama_lengkap')
+          ;(guruSemua || []).forEach((g: any) => {
+            const em = String(g?.email || '').trim().toLowerCase()
+            if (em) guruNamaMap.set(em, String(g?.nama_lengkap || '').trim())
+          })
+        }
+        let sectionsHtml = ''
+        for (let idxK = 0; idxK < daftarKelasTarget.length; idxK++) {
+          const targetK = daftarKelasTarget[idxK]
+
+          const { data: jadwalData } = await supabase
+            .from('jadwal')
+            .select('*')
+            .eq('kelas_id', Number(targetK.id))
+          const jadwalRows: any[] = jadwalData || []
+
+          let qAbsensi = supabase
+            .from('absensi')
+            .select('*')
+            .eq('kelas_id', Number(targetK.id))
+          if (filterTanggalJurnal) qAbsensi = qAbsensi.eq('tanggal', filterTanggalJurnal)
+          else if (filterBulanJurnal)
+            qAbsensi = qAbsensi.ilike('tanggal', `${filterBulanJurnal}%`)
+          const { data: absensiData } = await qAbsensi
+          const absensiRows: any[] = absensiData || []
+
+          const rawRowsKelas = rawRows.filter(
+            (r) => Number(r.kelas_id) === Number(targetK.id)
+          )
+
+          const absenByTanggal = new Map<string, any[]>()
+          for (const a of absensiRows) {
+            const tgl = a.tanggal ? String(a.tanggal).slice(0, 10) : ''
+            if (!tgl) continue
+            if (!absenByTanggal.has(tgl)) absenByTanggal.set(tgl, [])
+            absenByTanggal.get(tgl)!.push(a)
+          }
+
+          const jurnalByTanggal = new Map<string, any[]>()
+          for (const r of rawRowsKelas) {
+            const tgl = r.tanggal ? String(r.tanggal).slice(0, 10) : ''
+            if (!tgl) continue
+            if (!jurnalByTanggal.has(tgl)) jurnalByTanggal.set(tgl, [])
+            jurnalByTanggal.get(tgl)!.push(r)
+          }
+
+          const namaKelasClean = (targetK.nama || '')
+            .replace(/\s*-\s*$/, '')
+            .trim()
+
+          const activeTanggal = Array.from(
+            new Set([...jurnalByTanggal.keys(), ...absenByTanggal.keys()])
+          ).filter((tgl) => new Date(`${tgl}T00:00:00`).getDay() !== 5)
+          const sortedTanggal = activeTanggal.sort()
+
+          const dayGridMap = new Map<string, JurnalGridCell[]>()
+          const dayAbsenHtmlMap = new Map<string, string>()
+          for (const tgl of sortedTanggal) {
+            dayGridMap.set(
+              tgl,
+              buildJurnalGridCells({
+                tanggal: tgl,
+                jadwalRows,
+                jurnalRows: jurnalByTanggal.get(tgl) || [],
+                absensiRowsTanggal: absenByTanggal.get(tgl) || [],
+                namaKelasClean,
+                guruNamaMap,
+              })
+            )
+            dayAbsenHtmlMap.set(
+              tgl,
+              formatAbsenHarianGabungan(
+                (jurnalByTanggal.get(tgl) || []).map((x) => ({ absenRaw: x.absen_siswa })),
+                absenByTanggal.get(tgl) || []
+              )
+            )
+          }
+          let totalPertemuan = 0
+          let totalTerlaksana = 0
+          for (const cells of dayGridMap.values()) {
+            for (const c of cells) {
+              if (c.isStart) {
+                totalPertemuan++
+                if ((c.status || '').toLowerCase().includes('terlaksana')) totalTerlaksana++
+              }
+            }
+          }
+          const totalTertunda = totalPertemuan - totalTerlaksana
+
+          const sekarangK = new Date()
+          const bulanLabelK = filterBulanJurnal
+            ? formatBulanIndonesia(filterBulanJurnal)
+            : filterTanggalJurnal
+            ? formatBulanIndonesia(String(filterTanggalJurnal).slice(0, 7))
+            : `${BULAN_INDONESIA[sekarangK.getMonth()]} ${sekarangK.getFullYear()}`
+
+          const waliInfoK = await resolveWaliKelasByKelasId(String(targetK.id))
+          const jabatanWaliK = `Wali Kelas ${targetK.nama.toUpperCase()}`.trim()
+          const guruDetailK: RaporGuruInfo = { ...waliInfoK, jabatanLabel: jabatanWaliK }
+          const faseK =
+            unitUtama === 'SMP'
+              ? 'D'
+              : getKelasGradeWeight(targetK.nama, targetK.tingkat) === 10
+              ? 'E'
+              : 'F'
+
+          const identitasLeftK2 = `
+            <tr><td style="width:36%;"><b>Satuan Pendidikan</b></td><td>: ${unitUtama} Muna Mustofa</td></tr>
+            <tr><td><b>Kelas / Fase</b></td><td>: ${targetK.nama} / ${faseK}</td></tr>
+            <tr><td><b>Wali Kelas</b></td><td>: ${guruDetailK.nama}</td></tr>
+          `
+          const identitasRightK2 = `
+            <tr><td style="width:30%;"><b>Tahun Ajaran</b></td><td>: ${selectedTahunAjaran}</td></tr>
+            <tr><td><b>Semester</b></td><td>: ${selectedSemester}</td></tr>
+            <tr><td><b>Bulan</b></td><td>: ${bulanLabelK}</td></tr>
+          `
+
+          const headerRowsK2 = `
+            <tr>
+              <th style="width:6%; background:#e5e7eb;">Jam Ke-</th>
+              <th style="width:16%; background:#e5e7eb;">Mata Pelajaran</th>
+              <th style="width:28%; background:#e5e7eb;">Materi Pokok / Kegiatan KBM</th>
+              <th style="width:17%; background:#e5e7eb;">Nama Guru Pengampu</th>
+              <th style="width:16%; background:#e5e7eb;">Status</th>
+              <th style="width:17%; background:#e5e7eb;">Absen Siswa<br/>(Sakit/Izin/Alpa)</th>
+            </tr>
+          `
+          const dayBlocksK2 =
+            sortedTanggal.length > 0
+              ? sortedTanggal
+                  .map((tgl) => {
+                    const cells = dayGridMap.get(tgl)!
+                    const absenHtml = dayAbsenHtmlMap.get(tgl) || 'NIHIL'
+                    const rowsHtml = cells
+                      .map((cell) => {
+                        const n = cell.n
+                        let cols = `<td class="c jam-no">${n}</td>`
+                        if (cell.isStart) {
+                          cols += `<td rowspan="${cell.span}" class="upper">${String(cell.mapel).toUpperCase()}</td>`
+                          cols += `<td rowspan="${cell.span}" class="upper">${String(cell.materi).toUpperCase()}</td>`
+                          cols += `<td rowspan="${cell.span}">${cell.guruNama}</td>`
+                          cols += `<td rowspan="${cell.span}" class="c b status-cell">${cell.status}</td>`
+                        } else if (!cell.isCovered) {
+                          cols += '<td>-</td><td>-</td><td>-</td><td>-</td>'
+                        }
+                        if (n === 1) cols += `<td rowspan="8" class="absen-cell">${absenHtml}</td>`
+                        return `<tr>${cols}</tr>`
+                      })
+                      .join('')
+                    return `
+                      <div class="jurnal-day-block">
+                        <div class="hari-header">HARI / TANGGAL: ${formatHariTanggalPanjang(tgl)}</div>
+                        <table class="data-table">
+                          <thead>${headerRowsK2}</thead>
+                          <tbody>${rowsHtml}</tbody>
+                        </table>
+                      </div>
+                    `
+                  })
+                  .join('')
+              : `
+                  <div class="jurnal-day-block">
+                    <table class="data-table">
+                      <tbody><tr><td class="c" colspan="6">Belum ada data agenda mengajar tersimpan.</td></tr></tbody>
+                    </table>
+                  </div>
+                `
+
+          const rekapBoxK2 = `
+            <table class="rekap-box">
+              <tr>
+                <th>Total Pertemuan</th>
+                <th>Terlaksana</th>
+                <th>Tertunda / Izin</th>
+              </tr>
+              <tr>
+                <td class="c b">${totalPertemuan}</td>
+                <td class="c b">${totalTerlaksana}</td>
+                <td class="c b">${totalTertunda}</td>
+              </tr>
+            </table>
+          `
+          sectionsHtml += `
+            <div class="jurnal-section"${idxK > 0 ? ' style="page-break-before: always;"' : ''}>
+              <table class="identitas-table">
+                <tr>
+                  <td style="width:50%; vertical-align:top;">${identitasLeftK2}</td>
+                  <td style="width:50%; vertical-align:top;">${identitasRightK2}</td>
+                </tr>
+              </table>
+              <div class="jurnal-body-wrap">
+                ${dayBlocksK2}
+              </div>
+              <div class="rekap-wrap">
+                <div class="rekap-left">${rekapBoxK2}</div>
+                <div style="clear:both;"></div>
+              </div>
+              ${getFooterTtdHTML(guruDetailK)}
+            </div>
+          `
+        }
+        const contentBody2 = `
+          ${buildKopJurnalHtml(unitUtama)}
+          <h3 class="jurnal-judul">${judulDoc}</h3>
+          ${sectionsHtml}
+        `
+
+        executePrintJurnal(judulDoc, contentBody2)
+        return
+      }
+
+      if (!isGuruMode && !isMultiKelas && filterKelasJurnal) {
         // ============================================================================
         // MODE KELAS — SINKRONISASI MATRIKS JADWAL (MASTER GRID) + REKAP ABSENSI
         // Bangun slot Jam Ke-1 s/d 8 dari tabel `jadwal` resmi kelas, cocokkan
@@ -2295,15 +2627,15 @@ export default function LaporanPage() {
         const headerRows2 = `
           <tr>
             <th style="width:6%; background:#e5e7eb;">Jam Ke-</th>
-            <th style="width:17%; background:#e5e7eb;">Mata Pelajaran</th>
-            <th style="width:31%; background:#e5e7eb;">Materi Pokok / Kegiatan KBM</th>
-            <th style="width:18%; background:#e5e7eb;">Nama Guru Pengampu</th>
-            <th style="width:10%; background:#e5e7eb;">Status</th>
-            <th style="width:18%; background:#e5e7eb;">Absen Siswa<br/>(Sakit/Izin/Alpa)</th>
+            <th style="width:16%; background:#e5e7eb;">Mata Pelajaran</th>
+            <th style="width:28%; background:#e5e7eb;">Materi Pokok / Kegiatan KBM</th>
+            <th style="width:17%; background:#e5e7eb;">Nama Guru Pengampu</th>
+            <th style="width:16%; background:#e5e7eb;">Status</th>
+            <th style="width:17%; background:#e5e7eb;">Absen Siswa<br/>(Sakit/Izin/Alpa)</th>
           </tr>
         `
 
-        const bodyRows2 =
+        const dayBlocks2 =
           sortedTanggal.length > 0
             ? sortedTanggal
                 .map((tgl) => {
@@ -2329,14 +2661,23 @@ export default function LaporanPage() {
                     })
                     .join('')
                   return `
-                    <tbody style="break-inside: avoid; page-break-inside: avoid;">
-                      <tr class="hari-header"><td colspan="6">HARI / TANGGAL: ${formatHariTanggalPanjang(tgl)}</td></tr>
-                      ${rowsHtml}
-                    </tbody>
+                    <div class="jurnal-day-block">
+                      <div class="hari-header">HARI / TANGGAL: ${formatHariTanggalPanjang(tgl)}</div>
+                      <table class="data-table">
+                        <thead>${headerRows2}</thead>
+                        <tbody>${rowsHtml}</tbody>
+                      </table>
+                    </div>
                   `
                 })
                 .join('')
-            : `<tbody><tr><td class="c" colspan="6">Belum ada data agenda mengajar tersimpan.</td></tr></tbody>`
+            : `
+                <div class="jurnal-day-block">
+                  <table class="data-table">
+                    <tbody><tr><td class="c" colspan="6">Belum ada data agenda mengajar tersimpan.</td></tr></tbody>
+                  </table>
+                </div>
+              `
         const rekapBox2 = `
           <table class="rekap-box">
             <tr>
@@ -2362,10 +2703,7 @@ export default function LaporanPage() {
             </tr>
           </table>
           <div class="jurnal-body-wrap">
-            <table class="data-table">
-              <thead>${headerRows2}</thead>
-              <tbody>${bodyRows2}</tbody>
-            </table>
+            ${dayBlocks2}
           </div>
           <div class="rekap-wrap">
             <div class="rekap-left">${rekapBox2}</div>
@@ -2565,11 +2903,11 @@ export default function LaporanPage() {
       const headerRows = `
         <tr>
           <th style="width:6%; background:#e5e7eb;">Jam Ke-</th>
-          <th style="width:15%; background:#e5e7eb;">Mata Pelajaran</th>
-          <th style="width:26%; background:#e5e7eb;">Materi Pokok / Kegiatan KBM</th>
-          <th style="width:15%; background:#e5e7eb;">${labelPihak}</th>
-          <th style="width:9%; background:#e5e7eb;">Status</th>
-          <th style="width:29%; background:#e5e7eb;">Absen Siswa<br/>(Sakit/Izin/Alpa)</th>
+          <th style="width:14%; background:#e5e7eb;">Mata Pelajaran</th>
+          <th style="width:23%; background:#e5e7eb;">Materi Pokok / Kegiatan KBM</th>
+          <th style="width:14%; background:#e5e7eb;">${labelPihak}</th>
+          <th style="width:15%; background:#e5e7eb;">Status</th>
+          <th style="width:28%; background:#e5e7eb;">Absen Siswa<br/>(Sakit/Izin/Alpa)</th>
         </tr>
       `
 
@@ -2881,7 +3219,7 @@ export default function LaporanPage() {
         idx + 1,
         s.nama_lengkap,
         namaKelas,
-        n.mata_pelajaran || '-',
+        stripJenjangMapel(n.mata_pelajaran) || '-',
         n.nilai_tugas ?? 0,
         n.nilai_uts ?? 0,
         n.nilai_uas ?? 0,
@@ -3035,6 +3373,8 @@ export default function LaporanPage() {
     const guruCetak = await resolvePenandatanganPDF({
       mode: 'mapel',
       mapelId: mapelNilai || null,
+      kelasId: kelasNilai || null,
+      jenjang: selectedK?.jenjang ? String(selectedK.jenjang).toUpperCase() as 'SMP' | 'SMK' : undefined,
     })
 
     const judulDoc = `LAPORAN RIWAYAT INPUT NILAI AKADEMIK ${
@@ -3077,7 +3417,7 @@ export default function LaporanPage() {
                       n.created_at ? new Date(n.created_at).toLocaleDateString('id-ID') : '-'
                     }</td>
                     <td style="border: 1px solid #000; padding: 5px;">${n.siswa?.nama_lengkap || '-'}</td>
-                    <td style="border: 1px solid #000; padding: 5px;">${n.mata_pelajaran || '-'}</td>
+                    <td style="border: 1px solid #000; padding: 5px;">${stripJenjangMapel(n.mata_pelajaran) || '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.nilai_tugas ?? '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.nilai_uts ?? '-'}</td>
                     <td style="border: 1px solid #000; padding: 5px; text-align: center;">${n.nilai_uas ?? '-'}</td>
@@ -3155,17 +3495,19 @@ export default function LaporanPage() {
             .identitas-table td { border: none; padding: 2px 4px; vertical-align: top; }
             .jurnal-body-wrap { width: 100%; max-width: 100%; }
             .data-table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: 10pt; table-layout: fixed; }
-            .data-table th { border: 1px solid #000; padding: 4px 3px; font-size: 8.5pt; vertical-align: middle; }
-            .data-table td { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; overflow-wrap: break-word; }
+            .data-table th { border: 1px solid #000; padding: 4px 6px; font-size: 8.5pt; vertical-align: middle; text-align: center; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; }
+            .data-table td { border: 1px solid #000; padding: 4px 6px; vertical-align: middle; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; }
             .data-table thead { display: table-header-group; }
             .data-table tr { break-inside: avoid; page-break-inside: avoid; }
             .data-table .c { text-align: center; }
             .data-table .b { font-weight: bold; }
-            .data-table .hari-header td { background: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; padding: 5px 4px; }
             .data-table .upper { text-transform: uppercase; }
             .data-table .jam-no { font-weight: bold; }
-            .data-table .status-cell { white-space: nowrap; min-width: 9%; text-align: center; }
-            .data-table .absen-cell { font-size: 8.5pt; text-align: left; line-height: 1.4; vertical-align: middle; }
+            .data-table .status-cell { white-space: normal; word-wrap: break-word; overflow-wrap: break-word; text-align: center; vertical-align: middle; padding: 4px 6px; min-width: 15%; }
+            .data-table .absen-cell { font-size: 8.5pt; text-align: center; vertical-align: middle; line-height: 1.4; padding: 4px 6px; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; }
+            .data-table .hari-header td { background: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; padding: 5px 4px; }
+            .jurnal-day-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px; }
+            .hari-header { background: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; padding: 5px 8px; border: 1px solid #000; margin: 10px 0 6px; }
             .jam-filled { background-color: #334155 !important; }
             .rekap-wrap { margin-top: 12px; }
             .rekap-left { float: left; width: 50%; padding-right: 22px; }
@@ -3838,18 +4180,38 @@ export default function LaporanPage() {
                     >
                       KELAS (7–12)
                     </label>
-                    <select
-                      value={filterKelasJurnal}
-                      onChange={(e) => setFilterKelasJurnal(e.target.value)}
-                      className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
-                        isDarkMode
-                          ? 'bg-slate-800 border-slate-700 text-white'
-                          : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                    >
-                      <option value="">Semua Kelas</option>
-                      {renderKelasOptGroups(false)}
-                    </select>
+                    <div className="space-y-1.5">
+                      <select
+                        value={filterKelasJurnalSmp}
+                        onChange={(e) => setFilterKelasJurnalSmp(e.target.value)}
+                        className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
+                          isDarkMode
+                            ? 'bg-slate-800 border-slate-700 text-white'
+                            : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        <option value="">Tidak cetak SMP</option>
+                        <option value="ALL">Semua Kelas SMP (7-9)</option>
+                        {groupedKelasOptions.smp.map((k) => (
+                          <option key={k.id} value={k.id}>{k.nama}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={filterKelasJurnalSmk}
+                        onChange={(e) => setFilterKelasJurnalSmk(e.target.value)}
+                        className={`w-full border rounded-xl px-2 py-1 text-xs font-bold focus:outline-none ${
+                          isDarkMode
+                            ? 'bg-slate-800 border-slate-700 text-white'
+                            : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        <option value="">Tidak cetak SMK</option>
+                        <option value="ALL">Semua Kelas SMK (10-12)</option>
+                        {groupedKelasOptions.smk.map((k) => (
+                          <option key={k.id} value={k.id}>{k.nama}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <div>

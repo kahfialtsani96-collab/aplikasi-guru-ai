@@ -52,3 +52,27 @@ export function sortKelas<T extends object>(list: T[]): T[] {
     )
   return [...list].sort((a, b) => compareKelasName(nameOf(a), nameOf(b)))
 }
+
+/**
+ * Parse angka jam awal dari teks `jam_ke` untuk kolom numerik `jam_ke_num`.
+ * Selaras dengan aturan backfill di docs/migrasi-cleanup-jadwal-absensi-jurnal.sql:
+ *   - "Jam Ke-1 s/d 2" / "Jam Ke-1"  -> 1 (ambil angka jam pertama)
+ *   - "1" (hanya angka)               -> 1
+ *   - kosong/null/format tidak valid   -> null (aman untuk baris lama)
+ */
+export function parseJamKeNum(value: unknown): number | null {
+  if (value == null) return null
+  const str = String(value).trim()
+  if (str === '') return null
+  const keMatch = str.match(/Jam\s*Ke-\s*(\d+)/i)
+  if (keMatch) {
+    const n = parseInt(keMatch[1], 10)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  const bareMatch = str.match(/^(\d+)$/)
+  if (bareMatch) {
+    const n = parseInt(bareMatch[1], 10)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  return null
+}
