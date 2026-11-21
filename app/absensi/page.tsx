@@ -227,7 +227,7 @@ export default function AbsensiPage() {
               .order('nama_kelas', { ascending: true }),
             supabase
               .from('mapel')
-              .select('id, nama_mapel, jenjang')
+              .select('id, nama_mapel, kode_mapel, jenjang')
               .or('jenjang.eq.SMP,jenjang.is.null')
               .order('nama_mapel', { ascending: true }),
           ])
@@ -283,6 +283,79 @@ export default function AbsensiPage() {
               uniqueMapelMap.set(item.mapel.id, item.mapel.nama_mapel)
             }
           })
+
+          // Gabungkan mapel ampuan guru dari profil (kolom `mapel` & relasi `guru_mapel`)
+          // agar dropdown menampilkan SEMUA mapel (termasuk mapel ekstrakurikuler/Pramuka),
+          // bukan hanya yang tercatat di tabel jadwal.
+          try {
+            const { data: smpMapelData } = await supabase
+              .from('mapel')
+              .select('id, nama_mapel, kode_mapel, jenjang')
+              .or('jenjang.eq.SMP,jenjang.is.null')
+
+            const smpMapelRef: (OptionItem & { kode?: string })[] = (smpMapelData || [])
+              .filter(
+                (m) =>
+                  (m.jenjang || 'SMP').toUpperCase() !== 'SMK' &&
+                  !(m.nama_mapel || '').toUpperCase().includes('(SMK)') &&
+                  !(m.nama_mapel || '').toUpperCase().includes('DKV')
+              )
+              .map((m) => ({
+                id: m.id,
+                nama: m.nama_mapel,
+                kode: (m.kode_mapel || '').trim().toUpperCase(),
+              }))
+
+            const { data: guruProfile } = await supabase
+              .from('guru')
+              .select('id, mapel')
+              .ilike('email', email.trim())
+              .maybeSingle()
+
+            if (guruProfile?.id) {
+              const smpMapelByKode = new Map<string, OptionItem>()
+              smpMapelRef.forEach((m) => {
+                if (m.kode && !smpMapelByKode.has(m.kode)) smpMapelByKode.set(m.kode, m)
+              })
+
+              const { data: guruMapelRows } = await supabase
+                .from('guru_mapel')
+                .select('mapel_id, mapel:mapel_id(id, nama_mapel, jenjang, kode_mapel)')
+                .eq('guru_id', guruProfile.id)
+
+              ;(guruMapelRows || []).forEach((row) => {
+                const mObj = Array.isArray(row.mapel) ? row.mapel[0] : row.mapel
+                const mId = Number(mObj?.id ?? row.mapel_id)
+                if (!mId) return
+                const jenjang = (mObj?.jenjang || '').toUpperCase()
+                const mName = String(mObj?.nama_mapel || '')
+                if (jenjang === 'SMK' || mName.toUpperCase().includes('(SMK)')) return
+                if (mName.toUpperCase().includes('DKV')) return
+                const kode = (mObj?.kode_mapel || '').trim().toUpperCase()
+                const found = kode
+                  ? smpMapelByKode.get(kode)
+                  : smpMapelRef.find((m) => Number(m.id) === mId)
+                if (found) uniqueMapelMap.set(found.id, found.nama)
+              })
+
+              const profileNames = (guruProfile.mapel || '')
+                .split(/[,;]/)
+                .map((s: string) => s.trim().toLowerCase())
+                .filter(Boolean)
+              if (profileNames.length > 0) {
+                smpMapelRef.forEach((m) => {
+                  // Hanya mapel yg memang terdaftar sbg mapel SMP (via kode_mapel).
+                  // Cocokkan secara ketat utk mencegah salah ambil mapel SMK.
+                  if (!m.kode) return
+                  const mName = m.nama.toLowerCase()
+                  const hit = profileNames.some((n: string) => mName === n)
+                  if (hit) uniqueMapelMap.set(m.id, m.nama)
+                })
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching mapel profil guru SMP:', err)
+          }
 
           setKelasList(
             sortKelas(

@@ -37,6 +37,12 @@ interface OptionItem {
   nama: string
 }
 
+interface SmkMapelRef {
+  id: number
+  nama: string
+  kode?: string
+}
+
 interface MasterJamItem {
   id: number
   hari: string
@@ -56,6 +62,7 @@ interface JadwalSlotSmk {
   guru_email: string
   nama_kelas: string
   nama_mapel: string
+  kode_mapel: string
 }
 
 interface JurnalRecord {
@@ -348,7 +355,7 @@ export default function SmkJurnalPage() {
             .order('nama_kelas', { ascending: true }),
           supabase
             .from('mapel')
-            .select('id, nama_mapel, jenjang')
+            .select('id, nama_mapel, kode_mapel, jenjang')
             .eq('jenjang', 'SMK')
             .order('nama_mapel', { ascending: true }),
           supabase
@@ -363,7 +370,7 @@ export default function SmkJurnalPage() {
               guru_email,
               jenjang,
               kelas:kelas_id(id, nama_kelas),
-              mapel:mapel_id(id, nama_mapel)
+              mapel:mapel_id(id, nama_mapel, kode_mapel)
             `
             )
             .eq('jenjang', 'SMK')
@@ -374,13 +381,16 @@ export default function SmkJurnalPage() {
           id: k.id,
           nama: k.nama_kelas,
         }))
-        const allSmkMapel: OptionItem[] = (resMapel.data || []).map((m: { id: number; nama_mapel: string }) => ({
-          id: m.id,
-          nama: m.nama_mapel,
-        }))
+        const allSmkMapel: SmkMapelRef[] = (resMapel.data || []).map(
+          (m: { id: number; nama_mapel: string; kode_mapel?: string | null }) => ({
+            id: m.id,
+            nama: m.nama_mapel,
+            kode: (m.kode_mapel || '').trim().toUpperCase(),
+          })
+        )
 
         const rawJadwal = resJadwal.data || []
-        const formattedJadwal: JadwalSlotSmk[] = rawJadwal.map((j: { id: number; hari?: string | null; jam_ke?: number | null; kelas_id?: number | null; mapel_id?: number | null; guru_email?: string | null; jenjang?: string | null; kelas?: { id?: number; nama_kelas?: string } | Array<{ id?: number; nama_kelas?: string }> | null; mapel?: { id?: number; nama_mapel?: string } | Array<{ id?: number; nama_mapel?: string }> | null }) => {
+        const formattedJadwal: JadwalSlotSmk[] = rawJadwal.map((j: { id: number; hari?: string | null; jam_ke?: number | null; kelas_id?: number | null; mapel_id?: number | null; guru_email?: string | null; jenjang?: string | null; kelas?: { id?: number; nama_kelas?: string } | Array<{ id?: number; nama_kelas?: string }> | null; mapel?: { id?: number; nama_mapel?: string; kode_mapel?: string | null } | Array<{ id?: number; nama_mapel?: string; kode_mapel?: string | null }> | null }) => {
           const kObj = Array.isArray(j.kelas) ? j.kelas[0] : j.kelas
           const mObj = Array.isArray(j.mapel) ? j.mapel[0] : j.mapel
           return {
@@ -392,6 +402,7 @@ export default function SmkJurnalPage() {
             guru_email: (j.guru_email || '').trim().toLowerCase(),
             nama_kelas: kObj?.nama_kelas || 'Semua Kelas DKV',
             nama_mapel: mObj?.nama_mapel || '-',
+            kode_mapel: (mObj?.kode_mapel || '').trim().toUpperCase(),
           }
         })
 
@@ -408,6 +419,13 @@ export default function SmkJurnalPage() {
         } else {
           const uniqueKelasMap = new Map<number, string>()
           const uniqueMapelMap = new Map<number, string>()
+          // Kunci pencocokan utama berbasis kode_mapel utk mapel jenjang SMK
+          const smkMapelByKode = new Map<string, SmkMapelRef>()
+          allSmkMapel.forEach((m) => {
+            if (m.kode) smkMapelByKode.set(m.kode, m)
+          })
+          // kode_mapel mapel SMK yg benar-benar terdaftar pd jadwal guru ini
+          const jadwalKodeSet = new Set<string>()
           let hasGabunganSemuaKelas = false
 
           myJadwal.forEach((slot) => {
@@ -418,8 +436,57 @@ export default function SmkJurnalPage() {
             }
             if (slot.mapel_id) {
               uniqueMapelMap.set(slot.mapel_id, slot.nama_mapel)
+              if (slot.kode_mapel) jadwalKodeSet.add(slot.kode_mapel)
             }
           })
+
+          // Gabungkan mapel ampuan guru dari profil (relasi `guru_mapel` & kolom
+          // teks `mapel`), TETAPI hanya bila kode_mapel-nya terdaftar sbg mapel
+          // jenjang SMK (validasi via kode_mapel & jadwal guru).
+          try {
+            const { data: guruProfile } = await supabase
+              .from('guru')
+              .select('id, mapel')
+              .ilike('email', cleanEmail)
+              .maybeSingle()
+
+            if (guruProfile?.id) {
+              // (a) Relasi guru_mapel -> validasi kode_mapel terhadap mapel SMK
+              const { data: guruMapelRows } = await supabase
+                .from('guru_mapel')
+                .select('mapel_id, mapel:mapel_id(id, nama_mapel, kode_mapel)')
+                .eq('guru_id', guruProfile.id)
+
+              ;(guruMapelRows || []).forEach((row) => {
+                const mObj = Array.isArray(row.mapel) ? row.mapel[0] : row.mapel
+                const mId = Number(mObj?.id ?? row.mapel_id)
+                if (!mId) return
+                const kode = (mObj?.kode_mapel || '').trim().toUpperCase()
+                const found = kode
+                  ? smkMapelByKode.get(kode)
+                  : allSmkMapel.find((m) => Number(m.id) === mId)
+                if (found) uniqueMapelMap.set(found.id, found.nama)
+              })
+
+              // (b) Kolom teks `mapel` pd profil guru: HANYA dipakai jika kode_mapel
+              //     mapel tsb terdaftar sbg mapel jenjang SMK pd jadwal guru ini
+              //     (mencegah bocornya mapel SMP spt PJOK ke halaman SMK).
+              const profileNames = (guruProfile.mapel || '')
+                .split(/[,;]/)
+                .map((s: string) => s.trim().toLowerCase())
+                .filter(Boolean)
+              if (profileNames.length > 0) {
+                allSmkMapel.forEach((m) => {
+                  if (!m.kode || !jadwalKodeSet.has(m.kode)) return
+                  const mName = m.nama.toLowerCase()
+                  const hit = profileNames.some((n: string) => mName === n)
+                  if (hit) uniqueMapelMap.set(m.id, m.nama)
+                })
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching mapel profil guru SMK:', err)
+          }
 
           if (hasGabunganSemuaKelas) {
             setKelasList(allSmkKelas)
