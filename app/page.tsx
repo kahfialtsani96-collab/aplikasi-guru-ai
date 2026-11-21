@@ -9,6 +9,7 @@ import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
 import DarkModeToggle from '@/app/components/DarkModeToggle'
+import DynamicIslandNotification, { type Accent } from '@/app/components/DynamicIslandNotification'
 import {
   Users,
   School,
@@ -50,6 +51,7 @@ export default function DashboardPage() {
   const [isStrictOperatorRole, setIsStrictOperatorRole] = useState(false)
   const [canAccessSmkPortal, setCanAccessSmkPortal] = useState(false)
   const [waliKelasAssignedId, setWaliKelasAssignedId] = useState<number | null>(null)
+  const [honorNotif, setHonorNotif] = useState<{ title: string; subtitle: string; badge: number; accent: Accent; periode?: string } | null>(null)
 
   const { isOperator, canAccessBimbingan } = useAuthRole()
 
@@ -127,6 +129,49 @@ export default function DashboardPage() {
           setUserNuptkDisplay(cleanNuptk)
           setIsStrictOperatorRole(isUserStrictOperator)
           setCanAccessSmkPortal(hasSmkAccess)
+
+          // Notifikasi rekap honorarium di dashboard sesuai peran (KS / Yayasan / Bendahara)
+          const jabatanLower = (dataGuruLogin.jabatan || '').toLowerCase()
+          const isKepsekRole = jabatanLower.includes('kepala') && !jabatanLower.includes('smk')
+          const isYayasanRole = jabatanLower.includes('yayasan')
+          const isBendaharaRole = jabatanLower.includes('bendahara')
+          if (isKepsekRole || isYayasanRole || isBendaharaRole) {
+            const { data: rekapData } = await supabase
+              .from('honorarium_rekap')
+              .select('periode, disahkan_kepsek_at, disahkan_yayasan_at, status, confirmed_at')
+            if (rekapData && isMounted) {
+              const pendingPeriodes = new Set<string>()
+              const todayStart = new Date()
+              todayStart.setHours(0, 0, 0, 0)
+              for (const r of rekapData) {
+                const [pY, pM] = String(r.periode).split('-').map(Number)
+                const cutoff27 = new Date(pY, (pM || 1) - 1, 27)
+                const ksApproved = !!r.disahkan_kepsek_at || !!r.confirmed_at
+                let isPending = false
+                if (isKepsekRole) {
+                  isPending = !ksApproved && r.status !== 'PAID' && todayStart >= cutoff27
+                } else if (isYayasanRole) {
+                  isPending = ksApproved && !r.disahkan_yayasan_at
+                } else if (isBendaharaRole) {
+                  isPending = !!r.disahkan_yayasan_at && r.status !== 'PAID'
+                }
+                if (isPending) pendingPeriodes.add(String(r.periode))
+              }
+              if (pendingPeriodes.size > 0) {
+                setHonorNotif({
+                  title: isKepsekRole ? 'Persetujuan Kepala Sekolah' : isYayasanRole ? 'Persetujuan Yayasan' : 'Pembayaran Bendahara',
+                  subtitle: isKepsekRole
+                    ? `${pendingPeriodes.size} periode rekap menunggu disahkan`
+                    : isYayasanRole
+                      ? `${pendingPeriodes.size} periode menunggu disahkan Yayasan`
+                      : `${pendingPeriodes.size} periode menunggu pembayaran`,
+                  badge: pendingPeriodes.size,
+                  periode: pendingPeriodes.values().next().value as string | undefined,
+                  accent: isKepsekRole ? 'indigo' : isYayasanRole ? 'amber' : 'emerald',
+                })
+              }
+            }
+          }
 
           // Cek apakah guru bertugas sebagai Wali Kelas
           if (!isUserStrictOperator && dataGuruLogin.id) {
@@ -348,6 +393,16 @@ export default function DashboardPage() {
         </header>
 
         <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+          {honorNotif && (
+            <DynamicIslandNotification
+              title={honorNotif.title}
+              subtitle={honorNotif.subtitle}
+              badge={honorNotif.badge}
+              accent={honorNotif.accent}
+              periode={honorNotif.periode}
+              link="/honorarium"
+            />
+          )}
           {/* STATISTIK TOP */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div

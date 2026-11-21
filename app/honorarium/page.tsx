@@ -10,7 +10,7 @@ import { useAuthRole } from '@/hooks/useAuthRole'
 import {
   Wallet, Settings2, Users, RefreshCw, Plus, Save, CheckCircle2, Trash2,
   CalendarDays, FileCheck2, BadgeCheck, ShieldCheck, X, Landmark,
-  Banknote, Info, History,
+  Banknote, Info, History, Lock,
 } from 'lucide-react'
 
 // CLIENT SUPABASE AMAN (mencegah error prerender/SSG Vercel)
@@ -27,8 +27,8 @@ const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 // 3 Pengurus Utama (akses penuh). Pencocokan case-insensitive + trim spasi.
 const PENGURUS_NAMES = ['MUZAINI AL KAHFI', 'RIZIEQ NIZAR', 'TRI RATNO S.Pd.,MPd.']
 
-const normalizeName = (s: string) => (s || '').trim().replace(/\s+/g, ' ').toUpperCase()
-const isPengurusName = (nama: string) => PENGURUS_NAMES.includes(normalizeName(nama))
+const normalizeName = (s: string) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
+const isPengurusName = (nama: string) => PENGURUS_NAMES.some((p) => normalizeName(p) === normalizeName(nama))
 
 // Garis kosong untuk area tanda tangan cetak bila pejabat belum terdaftar di database.
 const BLANK_TTD = '....................................'
@@ -541,26 +541,95 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                 })()}
               </tbody>
             </table>
-            <div className="flex justify-between items-end pt-8 mt-4 no-break">
-              <div className="text-center w-1/2">
-                <div className="text-[9px] font-medium text-black">Penerima / Guru,</div>
-                <div className="h-14" />
-                <div className="text-[10px] font-black underline text-black">{r.guru_nama}</div>
-              </div>
-              <div className="text-center w-1/2">
-                <div className="text-[9px] font-medium text-black">Mengetahui, Bendahara</div>
-                {showBendaharaTtd ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-14" />}
-                <div className="text-[10px] font-black underline text-black">{bendahara || BLANK_TTD}</div>
-              </div>
-            </div>
-            <div className="text-center mt-10 no-break">
-              <div className="text-[9px] font-medium text-black">Mengetahui, Kepala SMP Muna Mustofa</div>
-              {showKepsekTtd ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' }) : <div className="h-14" />}
-              <div className="text-[10px] font-black underline text-black">{kepalaSekolah || BLANK_TTD}</div>
-              <div className="text-[8px] text-black">
-                {kepalaSekolahNuptk ? `NUPTK. ${kepalaSekolahNuptk}` : ''}
-              </div>
-            </div>
+            {(() => {
+              const nPenerima = (r.guru_nama || '').trim().toLowerCase()
+              const nBendahara = (bendahara || '').trim().toLowerCase()
+              const nKepsek = (kepalaSekolah || '').trim().toLowerCase()
+              const sameBendahara = !!nBendahara && nPenerima === nBendahara
+              const sameKepsek = !!nKepsek && nPenerima === nKepsek
+
+              // Kasus sangat jarang: penerima merangkap Bendahara & Kepala Sekolah sekaligus.
+              if (sameBendahara && sameKepsek) {
+                return (
+                  <div className="text-center mt-10 no-break">
+                    <div className="text-[9px] font-medium text-black">Penerima & Mengetahui, Bendahara & Kepala SMP Muna Mustofa</div>
+                    {showKepsekTtd
+                      ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' })
+                      : <div className="h-14" />}
+                    <div className="text-[10px] font-black underline text-black">{r.guru_nama}</div>
+                    {kepalaSekolahNuptk ? <div className="text-[8px] text-black">NUPTK. {kepalaSekolahNuptk}</div> : null}
+                  </div>
+                )
+              }
+
+              // Penerima = Kepala Sekolah → gabung jadi satu blok (pakai stempel), Bendahara tersendiri.
+              if (sameKepsek) {
+                return (
+                  <div className="flex justify-between items-end pt-8 mt-4 no-break">
+                    <div className="text-center w-1/2">
+                      <div className="text-[9px] font-medium text-black">Penerima & Mengetahui, Kepala SMP Muna Mustofa</div>
+                      {showKepsekTtd
+                        ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' })
+                        : <div className="h-14" />}
+                      <div className="text-[10px] font-black underline text-black">{r.guru_nama}</div>
+                      {kepalaSekolahNuptk ? <div className="text-[8px] text-black">NUPTK. {kepalaSekolahNuptk}</div> : null}
+                    </div>
+                    <div className="text-center w-1/2">
+                      <div className="text-[9px] font-medium text-black">Mengetahui, Bendahara</div>
+                      {showBendaharaTtd ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-14" />}
+                      <div className="text-[10px] font-black underline text-black">{bendahara || BLANK_TTD}</div>
+                    </div>
+                  </div>
+                )
+              }
+
+              // Penerima = Bendahara → gabung jadi satu blok, Kepala Sekolah tersendiri (tetap pakai stempel).
+              if (sameBendahara) {
+                return (
+                  <div className="flex justify-between items-end pt-8 mt-4 no-break">
+                    <div className="text-center w-1/2">
+                      <div className="text-[9px] font-medium text-black">Penerima & Mengetahui, Bendahara</div>
+                      {showBendaharaTtd ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-14" />}
+                      <div className="text-[10px] font-black underline text-black">{r.guru_nama}</div>
+                    </div>
+                    <div className="text-center w-1/2">
+                      <div className="text-[9px] font-medium text-black">Mengetahui, Kepala SMP Muna Mustofa</div>
+                      {showKepsekTtd
+                        ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' })
+                        : <div className="h-14" />}
+                      <div className="text-[10px] font-black underline text-black">{kepalaSekolah || BLANK_TTD}</div>
+                      {kepalaSekolahNuptk ? <div className="text-[8px] text-black">NUPTK. {kepalaSekolahNuptk}</div> : null}
+                    </div>
+                  </div>
+                )
+              }
+
+              // Normal: semua orang berbeda.
+              return (
+                <>
+                  <div className="flex justify-between items-end pt-8 mt-4 no-break">
+                    <div className="text-center w-1/2">
+                      <div className="text-[9px] font-medium text-black">Penerima / Guru,</div>
+                      <div className="h-14" />
+                      <div className="text-[10px] font-black underline text-black">{r.guru_nama}</div>
+                    </div>
+                    <div className="text-center w-1/2">
+                      <div className="text-[9px] font-medium text-black">Mengetahui, Bendahara</div>
+                      {showBendaharaTtd ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-14" />}
+                      <div className="text-[10px] font-black underline text-black">{bendahara || BLANK_TTD}</div>
+                    </div>
+                  </div>
+                  <div className="text-center mt-10 no-break">
+                    <div className="text-[9px] font-medium text-black">Mengetahui, Kepala SMP Muna Mustofa</div>
+                    {showKepsekTtd
+                      ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' })
+                      : <div className="h-14" />}
+                    <div className="text-[10px] font-black underline text-black">{kepalaSekolah || BLANK_TTD}</div>
+                    {kepalaSekolahNuptk ? <div className="text-[8px] text-black">NUPTK. {kepalaSekolahNuptk}</div> : null}
+                  </div>
+                </>
+              )
+            })()}
           </div>
         </div>
       ))}
@@ -575,9 +644,17 @@ export default function HonorariumPage() {
   const [currentName, setCurrentName] = useState('')
   const [currentGuruId, setCurrentGuruId] = useState<number | null>(null)
   const [currentEmail, setCurrentEmail] = useState<string | null>(null)
+  // Identitas guru hasil pencocokan email akun yang login pada tabel public.guru
+  // (id + nama_lengkap). Dipakai untuk memfilter slip tanda terima agar hanya
+  // merender slip milik pemilik akun yang sedang login.
+  const [loginGuru, setLoginGuru] = useState<{ id: number; nama_lengkap: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const isPengurus = isPengurusName(currentName)
+  // Identitas 3 Pengurus Utama ditentukan via pencocokan nama (case-insensitive, trim +
+  // rapatkan spasi) terhadap whitelist tetap PENGURUS_NAMES — BUKAN berdasarkan role akun.
+  // Pattern sama dengan server-side public.honorarium_current_access() (docs/migrasi-
+  // rpc-otorisasi-honor.sql). Operator biasa TIDAK otomatis menjadi Pengurus Utama.
+  const isPengurusUtama = isPengurusName(currentName)
 
   const [periodeBulan, setPeriodeBulan] = useState('01')
   const [periodeTahun, setPeriodeTahun] = useState('2026')
@@ -586,13 +663,42 @@ export default function HonorariumPage() {
   )
   const periode = `${periodeTahun}-${periodeBulan}`
 
+  // Batas tanggal 27 untuk persetujuan Kepala Sekolah (dihitung setelah hydration,
+  // bukan saat prerender — menghindari "unstable value new Date()" di Next.js 16).
+  const [canKirimKepsek, setCanKirimKepsek] = useState(false)
+  useEffect(() => {
+    const [cY, cM] = periode.split('-').map(Number)
+    const cutoff27 = new Date(cY, (cM || 1) - 1, 27)
+    const t0 = new Date()
+    t0.setHours(0, 0, 0, 0)
+    setCanKirimKepsek(t0 >= cutoff27)
+  }, [periode])
+
   // Inisialisasi periode ke bulan/tahun saat ini SETELAH hydration (menghindari
   // warning Next.js 16 "unstable value new Date()" pada Client Component).
   useEffect(() => {
     const d = new Date()
-    setPeriodeBulan(String(d.getMonth() + 1).padStart(2, '0'))
-    setPeriodeTahun(String(d.getFullYear()))
-    setTahunOptions(Array.from({ length: 6 }, (_, i) => d.getFullYear() - 2 + i))
+    let bulanAwal = String(d.getMonth() + 1).padStart(2, '0')
+    let tahunAwal = String(d.getFullYear())
+
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const mPeriode = (params.get('periode') || '').match(/^(\d{4})-(\d{2})$/)
+      if (mPeriode) {
+        const mo = Number(mPeriode[2])
+        if (mo >= 1 && mo <= 12) {
+          tahunAwal = mPeriode[1]
+          bulanAwal = mPeriode[2]
+        }
+      }
+    } catch {
+      // abaikan, fallback ke bulan/tahun saat ini
+    }
+
+    setPeriodeBulan(bulanAwal)
+    setPeriodeTahun(tahunAwal)
+    // setPeriodeTahun sudah ditangani di atas (prioritas dari query ?periode=)
+    setTahunOptions(Array.from({ length: 6 }, (_, i) => Number(tahunAwal) - 2 + i))
   }, [])
 
   const [activeTab, setActiveTab] = useState<'master' | 'rekap' | 'riwayat'>('rekap')
@@ -610,8 +716,8 @@ export default function HonorariumPage() {
   const isKepalaSekolah = currentJabatanLower.includes('kepala') && !currentJabatanLower.includes('smk')
   const isBendahara = currentJabatanLower.includes('bendahara')
   const isYayasan = currentJabatanLower.includes('yayasan')
-  const canManageRekap = isPengurus || isOperator
-  const showFullRekap = canManageRekap || isKepalaSekolah || isBendahara
+  const canManageRekap = isPengurusUtama
+  const showFullRekap = canManageRekap || isKepalaSekolah || isBendahara || isYayasan
   const [pengaturan, setPengaturan] = useState<PengaturanRow | null>(null)
   const [potonganList, setPotonganList] = useState<PotonganRow[]>([])
   const [penerimaList, setPenerimaList] = useState<PenerimaRow[]>([])
@@ -641,14 +747,17 @@ export default function HonorariumPage() {
   const [jurnalSahCount, setJurnalSahCount] = useState(0)
   const [printMode, setPrintMode] = useState<'none' | 'daftar' | 'slip'>('none')
   const [paperSize, setPaperSize] = useState<'f4' | 'a4'>('f4')
+  // Jika diisi, cetak hanya slip satu guru tertentu; null = cetak semua (admin/pejabat).
+  const [slipGuruId, setSlipGuruId] = useState<number | null>(null)
 
-  const triggerPrint = (mode: 'daftar' | 'slip') => {
+  const triggerPrint = (mode: 'daftar' | 'slip', guruId?: number | null) => {
+    setSlipGuruId(guruId ?? null)
     setPrintMode(mode)
     window.setTimeout(() => window.print(), 300)
   }
 
   useEffect(() => {
-    const onAfter = () => setPrintMode('none')
+    const onAfter = () => { setPrintMode('none'); setSlipGuruId(null) }
     window.addEventListener('afterprint', onAfter)
     return () => window.removeEventListener('afterprint', onAfter)
   }, [])
@@ -657,35 +766,74 @@ export default function HonorariumPage() {
   const guruById = (gid: number) => guruList.find((g) => g.id === gid)
   const getGuruEmail = (gid: number) => (guruById(gid)?.email || '').trim().toLowerCase()
 
-  // Nama pejabat TTD diambil DINAMIS dari kolom `jabatan` tabel public.guru.
-  // Pencocokan case-insensitive. Nilai ini diteruskan sebagai prop ke komponen
-  // PrintDocument untuk area tanda tangan cetak.
-  const resolveSignatoryNama = (predicate: (jabatanLower: string) => boolean): string => {
-    const hit = guruList.find((g) => {
-      const j = String(g.jabatan ?? '').trim().toLowerCase()
-      return j.length > 0 && predicate(j)
-    })
-    return (hit?.nama_lengkap || '').trim()
+  // Nama & NUPTK pejabat TTD diambil DINAMIS dari kolom `jabatan` tabel public.guru.
+  // Pencocokan case-insensitive dengan prioritas EXACT-FIRST agar label "mirip"
+  // (mis. "Wakil Kepala Sekolah") tidak salah terpilih sebagai pejabat asli.
+  // Jika pengguna yang login adalah pejabat tsb., gunakan identitas dirinya (currentName)
+  // sehingga TTD sesuai akun yang sedang mencetak.
+  const findSignatoryGuru = (
+    predicates: Array<(jabatanLower: string) => boolean>,
+  ): GuruRow | null => {
+    for (const pred of predicates) {
+      const hit = guruList.find((g) => {
+        const j = String(g.jabatan ?? '').trim().toLowerCase()
+        return j.length > 0 && pred(j)
+      })
+      if (hit) return hit
+    }
+    return null
   }
-  const namaKetuaYayasan =
-    resolveSignatoryNama((j) => j.includes('ketua yayasan')) ||
-    resolveSignatoryNama((j) => j.includes('yayasan'))
-  // Kepala Sekolah: prioritaskan SMP (jabatan tanpa kata "SMK", mis. "Kepala Sekolah").
-  // Fallback ke "Kepala Sekolah SMK" bila tidak ada yang murni SMP.
-  const namaKepalaSekolah =
-    resolveSignatoryNama((j) => j.includes('kepala sekolah') && !j.includes('smk')) ||
-    resolveSignatoryNama((j) => j.includes('kepala sekolah'))
-  const resolveSignatoryNuptk = (predicate: (jabatanLower: string) => boolean): string => {
-    const hit = guruList.find((g) => {
-      const j = String(g.jabatan ?? '').trim().toLowerCase()
-      return j.length > 0 && predicate(j)
-    })
-    return String(hit?.NUPTK ?? '').trim()
+
+  const useLoginIdentityIf = (
+    isSelf: boolean,
+    resolvedName: string,
+    resolvedNuptk: string,
+  ): { nama: string; nuptk: string } => {
+    if (isSelf && currentName.trim()) {
+      const self = guruById(currentGuruId ?? -1)
+      return {
+        nama: currentName.trim(),
+        nuptk: self?.NUPTK ? String(self.NUPTK).trim() : '',
+      }
+    }
+    return { nama: resolvedName, nuptk: resolvedNuptk }
   }
-  const nuptkKepalaSekolah =
-    resolveSignatoryNuptk((j) => j.includes('kepala sekolah') && !j.includes('smk')) ||
-    resolveSignatoryNuptk((j) => j.includes('kepala sekolah'))
-  const namaBendahara = resolveSignatoryNama((j) => j.includes('bendahara'))
+
+  const ksGuru = findSignatoryGuru([
+    (j) => j === 'kepala sekolah',
+    (j) => j.includes('kepala sekolah') && !j.includes('smk'),
+    (j) => j.includes('kepala sekolah'),
+  ])
+  const bendaharaGuru = findSignatoryGuru([
+    (j) => j === 'bendahara',
+    (j) => j.includes('bendahara'),
+  ])
+  const yayasanGuru = findSignatoryGuru([
+    (j) => j === 'ketua yayasan',
+    (j) => j.includes('ketua yayasan'),
+    (j) => j.includes('yayasan'),
+  ])
+
+  const ksIdentity = useLoginIdentityIf(
+    isKepalaSekolah,
+    (ksGuru?.nama_lengkap || '').trim(),
+    ksGuru?.NUPTK ? String(ksGuru.NUPTK).trim() : '',
+  )
+  const bendaharaIdentity = useLoginIdentityIf(
+    isBendahara,
+    (bendaharaGuru?.nama_lengkap || '').trim(),
+    bendaharaGuru?.NUPTK ? String(bendaharaGuru.NUPTK).trim() : '',
+  )
+  const yayasanIdentity = useLoginIdentityIf(
+    isYayasan,
+    (yayasanGuru?.nama_lengkap || '').trim(),
+    yayasanGuru?.NUPTK ? String(yayasanGuru.NUPTK).trim() : '',
+  )
+
+  const namaKepalaSekolah = ksIdentity.nama
+  const nuptkKepalaSekolah = ksIdentity.nuptk
+  const namaBendahara = bendaharaIdentity.nama
+  const namaKetuaYayasan = yayasanIdentity.nama
 
   // =====================================================================
   // IDENTITAS LOGIN + MASTER DATA (mount sekali)
@@ -712,6 +860,13 @@ export default function HonorariumPage() {
       if (mounted) {
         setCurrentName(nama)
         setCurrentGuruId(guruRow?.id ?? null)
+        // Simpan id + nama_lengkap guru yang cocok dengan email akun login
+        // (pencocokan case-insensitive via .ilike + cleanEmail trim/lower).
+        setLoginGuru(
+          guruRow?.id != null && (guruRow.nama_lengkap || '').trim()
+            ? { id: Number(guruRow.id), nama_lengkap: String(guruRow.nama_lengkap).trim() }
+            : null
+        )
       }
 
       // Master data
@@ -754,7 +909,7 @@ export default function HonorariumPage() {
         .order('tanggal')
 
       let rekapQuery = supabase.from('honorarium_rekap').select('*').eq('periode', periode)
-      if (!isPengurus && currentGuruId) {
+      if (!showFullRekap && currentGuruId) {
         rekapQuery = rekapQuery.eq('guru_id', currentGuruId)
       }
       const rekapRes = await rekapQuery
@@ -771,20 +926,22 @@ export default function HonorariumPage() {
     loadPeriode()
     return () => { mounted = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periode, currentEmail, penerimaList, guruList, pengaturan, potonganList, isPengurus, currentGuruId])
+  }, [periode, currentEmail, penerimaList, guruList, pengaturan, potonganList, showFullRekap, currentGuruId])
 
   // =====================================================================
   // MEMASTIKAN SEMUA PENERIMA AKTIF MUNCUL DI REKAP
   // =====================================================================
   function hydrateRekap(savedRows: RekapRow[]): RekapRow[] {
-    const activePenerima = isPengurus
+    const activePenerima = showFullRekap
       ? penerimaList.filter((p) => p.aktif)
       : penerimaList.filter((p) => p.aktif && p.guru_id === currentGuruId)
     const savedMap = new Map(savedRows.map((r) => [r.guru_id, r]))
 
     const rows = activePenerima.map((p) => {
       const existing = savedMap.get(p.guru_id)
-      const nama = existing?.guru_nama || guruById(p.guru_id)?.nama_lengkap || ''
+      // Selalu utamakan nama dari master guru (sumber kebenaran), bukan nilai
+      // guru_nama yang mungkin basi/keliru dari state baris rekap.
+      const nama = guruById(p.guru_id)?.nama_lengkap || existing?.guru_nama || ''
       if (existing) {
         return computeTotalsRow({ ...existing, periode, guru_nama: nama })
       }
@@ -1167,9 +1324,7 @@ export default function HonorariumPage() {
       updated_by: currentName,
       updated_at: new Date().toISOString(),
     }))
-    const { error } = await supabase
-      .from('honorarium_rekap')
-      .upsert(payload, { onConflict: 'periode,guru_id' })
+    const { error } = await supabase.rpc('honorarium_save_rekap', { p_rows: payload })
     return error
   }
 
@@ -1281,14 +1436,12 @@ export default function HonorariumPage() {
     }
     setSaving(true)
     try {
-      const { error } = await supabase.from('honorarium_tugas_tambahan').insert({
-        periode,
-        tanggal: tugasTanggal,
-        nama_kegiatan: tugasKegiatan.trim(),
-        guru_ids: tugasGuruIds,
-        nominal: n(tugasNominal),
-        updated_by: currentName,
-        updated_at: new Date().toISOString(),
+      const { error } = await supabase.rpc('honorarium_save_tugas', {
+        p_periode: periode,
+        p_tanggal: tugasTanggal,
+        p_nama_kegiatan: tugasKegiatan.trim(),
+        p_guru_ids: tugasGuruIds,
+        p_nominal: n(tugasNominal),
       })
       if (error) throw error
       setShowTugasModal(false)
@@ -1308,7 +1461,7 @@ export default function HonorariumPage() {
 
   const handleDeleteTugas = async (id: string) => {
     if (!confirm('Hapus catatan tugas tambahan ini?')) return
-    const { error } = await supabase.from('honorarium_tugas_tambahan').delete().eq('id', id)
+    const { error } = await supabase.rpc('honorarium_delete_tugas', { p_id: id })
     if (!error) {
       await reloadTugas()
       showToast('ok', 'Tugas tambahan dihapus.')
@@ -1336,13 +1489,13 @@ export default function HonorariumPage() {
 
     if (defaultP) {
       let q = supabase.from('honorarium_rekap').select('*').eq('periode', defaultP).eq('status', 'PAID')
-      if (!isPengurus && currentGuruId) q = q.eq('guru_id', currentGuruId)
+      if (!showFullRekap && currentGuruId) q = q.eq('guru_id', currentGuruId)
       const { data: rows } = await q
       setRiwayatList(rows || [])
     } else {
       setRiwayatList([])
     }
-  }, [riwayatPeriode, isPengurus, currentGuruId])
+  }, [riwayatPeriode, showFullRekap, currentGuruId])
 
   useEffect(() => {
     if (activeTab === 'riwayat') loadRiwayat()
@@ -1375,26 +1528,7 @@ export default function HonorariumPage() {
 
   const logAudit = async (kategori: string, aksi: string) => {
     try {
-      await supabase.from('honorarium_audit_log').insert({
-        kategori,
-        nama_lengkap: currentName.trim() || 'Anonim',
-        aksi,
-      })
-      // Jaga database tetap ringan: simpan hanya 5 terbaru per kategori
-      const { data: keep } = await supabase
-        .from('honorarium_audit_log')
-        .select('id')
-        .eq('kategori', kategori)
-        .order('created_at', { ascending: false })
-        .limit(5)
-      const ids = (keep || []).map((k: any) => k.id)
-      if (ids.length > 0) {
-        await supabase
-          .from('honorarium_audit_log')
-          .delete()
-          .eq('kategori', kategori)
-          .not('id', 'in', `(${ids.join(',')})`)
-      }
+      await supabase.rpc('honorarium_log_audit', { p_kategori: kategori, p_aksi: aksi })
       if (activeTab === kategori) await loadAuditLogs(kategori)
     } catch {
       /* non-blocking: jangan gagalkan aksi utama saat log gagal */
@@ -1412,30 +1546,24 @@ export default function HonorariumPage() {
   // =====================================================================
   const handleApprove = async () => {
     if (!isKepalaSekolah) return showToast('err', 'Hanya Kepala Sekolah yang dapat menyetujui.')
+    if (!canKirimKepsek) return showToast('err', 'Rekap baru dapat disahkan Kepala Sekolah mulai tanggal 27 bulan periode.')
     if (isPaidPeriode) return showToast('err', 'Periode sudah dibayar & terkunci.')
-    if (isApprovedPeriode) return showToast('err', 'Periode ini sudah disetujui.')
+    if (stageKepsek) return showToast('err', 'Periode ini sudah disetujui Kepala Sekolah.')
+    if (rekapRows.length === 0) return showToast('err', 'Tidak ada data penerima untuk periode ini.')
     if (!confirm('Setujui honorarium bulan ini sebagai KEPALA SEKOLAH?')) return
     setSaving(true)
     try {
-      const { error } = await supabase
-        .from('honorarium_rekap')
-        .update({
-          confirmed_by: currentName,
-          confirmed_at: new Date().toISOString(),
-          updated_by: currentName,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('periode', periode)
-
+      const nowIso = new Date().toISOString()
+      const { error } = await supabase.rpc('honorarium_approve_kepsek', { p_periode: periode })
       if (error) throw error
       setRekapList((prev) =>
         prev.map((r) =>
           r.periode === periode
-            ? { ...r, confirmed_by: currentName, confirmed_at: new Date().toISOString() }
+            ? { ...r, confirmed_by: currentName, confirmed_at: nowIso, disahkan_kepsek_by: currentName, disahkan_kepsek_at: nowIso, alur: 'yayasan' }
             : r
         )
       )
-      showToast('ok', 'Rekap disetujui oleh Kepala Sekolah.')
+      showToast('ok', 'Rekap disetujui Kepala Sekolah. Terkirim ke Yayasan.')
       await logAudit('riwayat', 'Disetujui Kepala Sekolah')
     } catch (e: any) {
       showToast('err', 'Gagal setujui: ' + e.message)
@@ -1444,25 +1572,45 @@ export default function HonorariumPage() {
     }
   }
 
+  const handleApproveYayasan = async () => {
+    if (!isYayasan) return showToast('err', 'Hanya Yayasan yang dapat menyetujui tahap ini.')
+    if (isPaidPeriode) return showToast('err', 'Periode sudah dibayar & terkunci.')
+    if (!stageKepsek) return showToast('err', 'Belum disetujui Kepala Sekolah.')
+    if (stageYayasan) return showToast('err', 'Periode ini sudah disetujui Yayasan.')
+    if (!confirm('Setujui honorarium bulan ini sebagai YAYASAN?')) return
+    setSaving(true)
+    try {
+      const nowIso = new Date().toISOString()
+      const { error } = await supabase.rpc('honorarium_approve_yayasan', { p_periode: periode })
+      if (error) throw error
+      setRekapList((prev) =>
+        prev.map((r) =>
+          r.periode === periode
+            ? { ...r, disahkan_yayasan_by: currentName, disahkan_yayasan_at: nowIso, alur: 'bendahara' }
+            : r
+        )
+      )
+      showToast('ok', 'Rekap disetujui Yayasan. Terkirim ke Bendahara.')
+      await logAudit('riwayat', 'Disetujui Yayasan')
+    } catch (e: any) {
+      showToast('err', 'Gagal setujui Yayasan: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handlePay = async () => {
     if (!isBendahara) return showToast('err', 'Hanya Bendahara yang dapat menandai dibayar.')
     if (isPaidPeriode) return showToast('err', 'Periode sudah dibayar & terkunci.')
-    if (!isApprovedPeriode) return showToast('err', 'Belum disetujui Kepala Sekolah.')
+    if (!stageYayasan) return showToast('err', 'Belum disetujui Yayasan.')
     if (!confirm('Konfirmasi pembayaran honorarium bulan ini sebagai BENDAHARA? Data akan terkunci (PAID).')) return
     setSaving(true)
     try {
-      const { error } = await supabase
-        .from('honorarium_rekap')
-        .update({
-          status: 'PAID',
-          updated_by: currentName,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('periode', periode)
-
+      const nowIso = new Date().toISOString()
+      const { error } = await supabase.rpc('honorarium_pay_bendahara', { p_periode: periode })
       if (error) throw error
       setRekapList((prev) =>
-        prev.map((r) => (r.periode === periode ? { ...r, status: 'PAID' } : r))
+        prev.map((r) => (r.periode === periode ? { ...r, status: 'PAID', alur: 'selesai' } : r))
       )
       showToast('ok', 'Pembayaran dikonfirmasi Bendahara. Periode terkunci (PAID).')
       await logAudit('riwayat', 'Dibayar Bendahara')
@@ -1514,15 +1662,13 @@ export default function HonorariumPage() {
         updated_at: nowIso,
       }))
 
-      const [{ error: e1 }, { error: e2 }, { error: e3 }] = await Promise.all([
-        supabase.from('honorarium_pengaturan').upsert(pengPayload, { onConflict: 'id' }),
-        supabase.from('honorarium_potongan').upsert(potPayload, { onConflict: 'id' }),
-        supabase.from('honorarium_penerima').upsert(penPayload, { onConflict: 'guru_id' }),
-      ])
+      const { error: eSave } = await supabase.rpc('honorarium_save_master', {
+        p_pengaturan: [pengPayload],
+        p_potongan: potPayload,
+        p_penerima: penPayload,
+      })
 
-      if (e1) throw e1
-      if (e2) throw e2
-      if (e3) throw e3
+      if (eSave) throw eSave
       showToast('ok', 'Pengaturan Master (Tarif, Potongan, Penerima) berhasil disimpan.')
 
       // Log rincian spesifik: bandingkan nilai lama vs nilai baru
@@ -1582,15 +1728,63 @@ export default function HonorariumPage() {
   }
 
   const bulanLabel = BLN_NAMES[Number(periodeBulan) - 1] || periodeBulan
-  const rekapRows = rekapList.filter((r) => r.periode === periode)
+  // Rekap yang dipakai untuk tampilan & cetak: nama penerima SELALU diselesaikan
+  // dari master guru via guru_id, sehingga slip/daftar tidak pernah menampilkan
+  // nama yang basi/keliru (mis. selalu nama pengurus) walau state baris berubah.
+  const rekapRows = rekapList
+    .filter((r) => r.periode === periode)
+    .map((r) => {
+      const guru = guruById(r.guru_id)
+      if (!guru && process.env.NODE_ENV !== 'production') {
+        console.warn(`Honorarium: guru_id ${r.guru_id} tidak ditemukan di master guru.`)
+      }
+      return { ...r, guru_nama: guru?.nama_lengkap || r.guru_nama || '' }
+    })
+
+  // Baris yang dicetak pada slip tanda terima.
+  // - Admin/Pengurus/Kepala Sekolah/Bendahara/Yayasan (showFullRekap): semua penerima
+  //   (bisa dipersempit ke satu guru via tombol cetak per baris → slipGuruId).
+  // - Guru biasa: HANYA slip miliknya sendiri (dicocokkan via guru_id / nama akun login),
+  //   sehingga tidak pernah ikut merender slip guru lain.
+  const slipRows = showFullRekap
+    ? (slipGuruId != null ? rekapRows.filter((r) => r.guru_id === slipGuruId) : rekapRows)
+    : rekapRows.filter((r) => {
+        const matchId = currentGuruId != null && r.guru_id === currentGuruId
+        const matchName =
+          !!currentName.trim() &&
+          String(r.guru_nama || '').trim().toLowerCase() === currentName.trim().toLowerCase()
+        return matchId || matchName
+      })
   const isPaidPeriode = rekapRows.some((r) => r.status === 'PAID')
-  const isApprovedPeriode = rekapRows.some((r) => !!r.confirmed_at)
   const stageKepsek = rekapRows[0]?.disahkan_kepsek_at || rekapRows[0]?.confirmed_at
   const stageYayasan = rekapRows[0]?.disahkan_yayasan_at
   const showKepsekTtd = !!stageKepsek
   const showYayasanTtd = !!stageYayasan
   const showBendaharaTtd = isPaidPeriode
+  const statusPeriode = isPaidPeriode ? 'PAID' : stageYayasan ? 'DISAHKAN YAYASAN' : stageKepsek ? 'DISAHKAN KEPSEK' : 'DRAFT'
+  const statusPeriodeCls = isPaidPeriode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40' : stageYayasan ? 'bg-violet-500/15 text-violet-400 border border-violet-500/40' : stageKepsek ? 'bg-sky-500/15 text-sky-400 border border-sky-500/40' : isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-300'
   const personalRow = rekapRows.find((r) => r.guru_id === currentGuruId)
+
+  // Cetak slip tanda terima milik PEMILIK akun yang login saja (bukan slip guru
+  // lain). Pencocokan via guru_id / nama_lengkap dari tabel guru untuk email akun
+  // login. Jika email belum terdaftar di tabel guru atau tidak ada data honorarium,
+  // tampilkan notifikasi dan batalkan cetak (fallback aman).
+  const printOwnSlip = () => {
+    if (!stageKepsek) return showToast('err', 'Cetak hanya bisa dilakukan setelah periode disetujui Kepala Sekolah.')
+    const owner = rekapRows.find((r) =>
+      (loginGuru?.id != null && r.guru_id === loginGuru.id) ||
+      (!!loginGuru?.nama_lengkap &&
+        String(r.guru_nama || '').trim().toLowerCase() === loginGuru.nama_lengkap.trim().toLowerCase())
+    )
+    if (!owner) {
+      const em = (currentEmail || '').trim()
+      return showToast(
+        'err',
+        `Data honorarium untuk email akun yang login (${em}) tidak ditemukan pada periode ${bulanLabel} ${periodeTahun}. Tidak ada slip yang dapat dicetak.`
+      )
+    }
+    triggerPrint('slip', owner.guru_id)
+  }
 
   if (loading) {
     return (
@@ -1632,7 +1826,7 @@ export default function HonorariumPage() {
             <DarkModeToggle />
             <span className={`hidden sm:flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-300' : 'bg-white border-slate-300 text-emerald-700'}`}>
               <ShieldCheck className="w-3.5 h-3.5" />
-              {isPengurus ? 'PENGURUS UTAMA' : 'GURU / STAF'}
+              {isPengurusUtama ? 'PENGURUS UTAMA' : isOperator ? 'OPERATOR · VIEW ONLY' : 'GURU / STAF'}
             </span>
             <Link href="/" className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:text-slate-950'}`}>
               ← Dashboard
@@ -1672,8 +1866,8 @@ export default function HonorariumPage() {
 
         {/* TAB SWITCHER */}
         <div className="px-3 pt-3">
-          <div className={`grid ${isPengurus ? 'grid-cols-3' : 'grid-cols-2'} p-0.5 rounded-xl border text-[11px] font-extrabold ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
-            {isPengurus && (
+          <div className={`grid ${isPengurusUtama ? 'grid-cols-3' : 'grid-cols-2'} p-0.5 rounded-xl border text-[11px] font-extrabold ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
+            {isPengurusUtama && (
               <button
                 onClick={() => setActiveTab('master')}
                 className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${activeTab === 'master' ? 'bg-indigo-600 text-white' : isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}
@@ -1697,7 +1891,7 @@ export default function HonorariumPage() {
         </div>
 
         <main className="px-3 pb-28 pt-3 flex-1 w-full space-y-3">
-          {activeTab === 'master' && isPengurus && (
+          {activeTab === 'master' && isPengurusUtama && (
             <>
               <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
               {/* TARIF GLOBAL */}
@@ -1869,13 +2063,42 @@ export default function HonorariumPage() {
             <>
               <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
 
-              {(isKepalaSekolah || isBendahara) && (
+              {(isKepalaSekolah || isBendahara || isYayasan) && (
                 <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-xs font-extrabold text-indigo-400">Alur Persetujuan — {bulanLabel} {periodeTahun}</h3>
-                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${isPaidPeriode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40' : isApprovedPeriode ? 'bg-sky-500/15 text-sky-400 border border-sky-500/40' : isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-300'}`}>
-                      {isPaidPeriode ? 'PAID' : isApprovedPeriode ? 'DISAHKAN' : 'DRAFT'}
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-full ${statusPeriodeCls}`}>
+                      {statusPeriode}
                     </span>
+                  </div>
+
+                  {/* STEPPER ALUR PERSETUJUAN */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                    {[
+                      { label: 'Pengurus', done: true },
+                      { label: 'Kepala Sekolah', done: !!stageKepsek },
+                      { label: 'Yayasan', done: !!stageYayasan },
+                      { label: 'Bendahara / PAID', done: isPaidPeriode },
+                    ].map((s, i, arr) => {
+                      const isActive = !s.done && (i === 0 ? true : arr[i - 1].done)
+                      return (
+                        <div key={s.label} className="flex items-center gap-1 shrink-0">
+                          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-black ${
+                            s.done
+                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                              : isActive
+                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 animate-pulse'
+                                : isDarkMode
+                                  ? 'bg-slate-800 border-slate-700 text-slate-500'
+                                  : 'bg-slate-100 border-slate-300 text-slate-500'
+                          }`}>
+                            {s.done ? <CheckCircle2 className="w-3 h-3" /> : <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                            {s.label}
+                          </div>
+                          {i < arr.length - 1 && <div className={`h-px w-3 ${isDarkMode ? 'bg-slate-700' : 'bg-slate-300'}`} />}
+                        </div>
+                      )
+                    })}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
@@ -1890,22 +2113,35 @@ export default function HonorariumPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!isPaidPeriode && !isApprovedPeriode && isKepalaSekolah && (
-                      <button onClick={handleApprove} disabled={saving}
-                        className="text-[10px] font-black px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40 cursor-pointer">
-                        <CheckCircle2 className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Setujui (Disahkan)
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/60">
+                    {!showKepsekTtd && !showBendaharaTtd && isKepalaSekolah && (
+                      <>
+                        <button onClick={handleApprove} disabled={saving || !canKirimKepsek}
+                          className="inline-flex items-center gap-1.5 text-[11px] font-black px-4 py-2.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/30 text-white cursor-pointer">
+                          <CheckCircle2 className="w-4 h-4" /> Setujui (Disahkan)
+                        </button>
+                        {!canKirimKepsek && (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-400">
+                            <Lock className="w-3 h-3" /> Tersedia mulai tanggal 27 bulan periode
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {showKepsekTtd && !showYayasanTtd && !showBendaharaTtd && isYayasan && (
+                      <button onClick={handleApproveYayasan} disabled={saving}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-black px-4 py-2.5 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-violet-500/30 text-white cursor-pointer">
+                        <BadgeCheck className="w-4 h-4" /> Setujui Yayasan
                       </button>
                     )}
-                    {!isPaidPeriode && isApprovedPeriode && isBendahara && (
+                    {showYayasanTtd && !showBendaharaTtd && isBendahara && (
                       <button onClick={handlePay} disabled={saving}
-                        className="text-[10px] font-black px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-40 cursor-pointer">
-                        <Landmark className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Tandai Dibayar
+                        className="inline-flex items-center gap-1.5 text-[11px] font-black px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/30 text-slate-950 cursor-pointer">
+                        <Landmark className="w-4 h-4" /> Tandai Dibayar
                       </button>
                     )}
-                    {isApprovedPeriode && !isPaidPeriode && (
-                      <span className="text-[10px] font-bold text-sky-400">
-                        Disahkan oleh {rekapRows[0]?.confirmed_by || '-'} · {formatTanggal(rekapRows[0]?.confirmed_at)}
+                    {!showBendaharaTtd && (
+                      <span className={`text-[9px] font-bold ml-auto ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {!showKepsekTtd ? '• Menunggu Kepala Sekolah' : !showYayasanTtd ? `• Disahkan K.S. ${rekapRows[0]?.disahkan_kepsek_by || rekapRows[0]?.confirmed_by || '-'} ${formatTanggal(rekapRows[0]?.disahkan_kepsek_at || rekapRows[0]?.confirmed_at)}` : `• Disahkan Yayasan ${rekapRows[0]?.disahkan_yayasan_by || '-'} ${formatTanggal(rekapRows[0]?.disahkan_yayasan_at)}`}
                       </span>
                     )}
                   </div>
@@ -1914,7 +2150,8 @@ export default function HonorariumPage() {
 
               {showFullRekap && (
                 <>
-                  {/* AKSI BIL */}
+                  {/* AKSI INPUT & REKAP (disembunyikan untuk Kepala Sekolah & Bendahara) */}
+                  {!isKepalaSekolah && !isBendahara && (
                   <div className={`border rounded-2xl p-3 flex flex-wrap items-center gap-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
                     <button onClick={() => setShowTugasModal(true)} disabled={isPaidPeriode || !canManageRekap}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-40 cursor-pointer">
@@ -1926,14 +2163,14 @@ export default function HonorariumPage() {
                     >
                       <CalendarDays className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Buka Absensi Guru
                     </Link>
-                    <button onClick={handleAutoCalc} disabled={saving || isPaidPeriode || !canManageRekap}
+                    <button onClick={handleAutoCalc} disabled={saving || isPaidPeriode || !!stageYayasan || !canManageRekap}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40 cursor-pointer">
                       <RefreshCw className={`w-3.5 h-3.5 inline-block align-middle mr-1 ${saving ? 'animate-spin' : ''}`} /> Tarik &amp; Hitung Otomatis
                     </button>
                     <span className={`text-[10px] font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>
                       {jurnalSahCount > 0 ? `${jurnalSahCount} entri jurnal sah ditarik` : 'Belum ada penarikan jurnal'}
                     </span>
-                    <button onClick={handleSaveRekap} disabled={saving || isPaidPeriode || !canManageRekap}
+                    <button onClick={handleSaveRekap} disabled={saving || isPaidPeriode || !!stageYayasan || !canManageRekap}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 cursor-pointer">
                       <Save className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Simpan Rekap
                     </button>
@@ -1944,6 +2181,7 @@ export default function HonorariumPage() {
                       </span>
                     )}
                   </div>
+                  )}
 
                   {/* CETAK DOKUMEN RESMI */}
                   <div className={`border rounded-2xl p-3 flex flex-wrap items-center gap-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
@@ -1953,10 +2191,12 @@ export default function HonorariumPage() {
                       <option value="f4">F4 / Folio Landscape (330×215mm)</option>
                       <option value="a4">A4 Landscape (297×210mm)</option>
                     </select>
-                    <button onClick={() => triggerPrint('daftar')} className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
+                    <button onClick={() => { if (!stageKepsek) return showToast('err', 'Cetak hanya bisa dilakukan setelah periode disetujui Kepala Sekolah.'); triggerPrint('daftar') }}
+                      className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
                       <FileCheck2 className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Cetak Daftar Honorarium (PDF)
                     </button>
-                    <button onClick={() => triggerPrint('slip')} className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
+                    <button onClick={printOwnSlip}
+                      className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
                       <Landmark className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Cetak Slip Tanda Terima
                     </button>
                   </div>
@@ -1966,8 +2206,8 @@ export default function HonorariumPage() {
                       <h3 className="text-xs font-extrabold flex items-center gap-1.5 text-indigo-400">
                         <Banknote className="w-4 h-4" /> Rekap Honorarium {bulanLabel} {periodeTahun}
                       </h3>
-                      <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${isPaidPeriode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40' : isApprovedPeriode ? 'bg-sky-500/15 text-sky-400 border border-sky-500/40' : isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-300'}`}>
-                        {isPaidPeriode ? 'PAID' : isApprovedPeriode ? 'DISAHKAN' : 'DRAFT'}
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${statusPeriodeCls}`}>
+                        {statusPeriode}
                       </span>
                     </div>
 
@@ -2000,19 +2240,20 @@ export default function HonorariumPage() {
                             <th className="p-1.5">Potongan</th>
                             <th className="p-1.5 text-right">Total Potongan</th>
                             <th className="p-1.5 text-right">Total Bersih</th>
+                            <th className="p-1.5 text-center">Status</th>
                           </tr>
                         </thead>
                         <tbody>
 
                           {rekapRows.length === 0 && (
                             <tr>
-                              <td colSpan={11} className="p-4 text-center text-xs font-medium text-slate-500">
+                              <td colSpan={12} className="p-4 text-center text-xs font-medium text-slate-500">
                                 Belum ada penerima aktif. Atur di tab Master, lalu klik "Tarik &amp; Hitung Otomatis".
                               </td>
                             </tr>
                           )}
                           {rekapRows.map((r) => {
-                            const disabled = isPaidPeriode || !canManageRekap
+                            const disabled = isPaidPeriode || !!stageYayasan || !canManageRekap
                             const cellCls = `w-20 border rounded px-1.5 py-0.5 text-[10px] font-bold focus:outline-none ${disabled ? 'opacity-50' : ''} ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`
                             const nama = r.guru_nama || guruNama(r.guru_id)
                             return (
@@ -2021,6 +2262,10 @@ export default function HonorariumPage() {
                                   <button onClick={() => setDetailGuruId(r.guru_id)}
                                     className="mr-1.5 align-middle text-[9px] font-black px-1.5 py-0.5 rounded border border-indigo-400 text-indigo-500 hover:bg-indigo-50 cursor-pointer">
                                     Detail
+                                  </button>
+                                  <button onClick={() => { if (!stageKepsek) return showToast('err', 'Cetak hanya bisa dilakukan setelah periode disetujui Kepala Sekolah.'); triggerPrint('slip', r.guru_id) }}
+                                    className="mr-1.5 align-middle text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-400 text-emerald-500 hover:bg-emerald-50 cursor-pointer">
+                                    Slip
                                   </button>
                                   {nama}
                                 </td>
@@ -2099,6 +2344,25 @@ export default function HonorariumPage() {
                                 </td>
                                 <td className="p-1.5 text-right font-black text-rose-400 whitespace-nowrap">{formatRupiah(r.total_potongan)}</td>
                                 <td className="p-1.5 text-right font-black text-emerald-400 whitespace-nowrap">{formatRupiah(r.total_bersih)}</td>
+                                <td className="p-1.5 text-center">
+                                  {isPaidPeriode ? (
+                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400">
+                                      <CheckCircle2 className="w-2.5 h-2.5" /> PAID
+                                    </span>
+                                  ) : stageYayasan ? (
+                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/40 text-violet-400">
+                                      <ShieldCheck className="w-2.5 h-2.5" /> Yayasan
+                                    </span>
+                                  ) : stageKepsek ? (
+                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/40 text-sky-400">
+                                      <BadgeCheck className="w-2.5 h-2.5" /> K.S.
+                                    </span>
+                                  ) : (
+                                    <span className={`inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-100 border-slate-300 text-slate-500'}`}>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" /> Menunggu
+                                    </span>
+                                  )}
+                                </td>
 
                               </tr>
                             )
@@ -2111,7 +2375,7 @@ export default function HonorariumPage() {
 
                 </>
               )}
-              {!(isPengurus || isKepalaSekolah || isBendahara) && (
+              {!showFullRekap && (
                 <>
 
                   <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
@@ -2187,7 +2451,7 @@ export default function HonorariumPage() {
                             <option value="f4">F4 / Folio Landscape (330×215mm)</option>
                             <option value="a4">A4 Landscape (297×210mm)</option>
                           </select>
-                          <button onClick={() => triggerPrint('slip')} className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
+                          <button onClick={printOwnSlip} className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
                             <FileCheck2 className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Cetak Slip Pribadi
                           </button>
                         </div>
@@ -2236,7 +2500,7 @@ export default function HonorariumPage() {
                         <span className="text-[11px] font-black tracking-wide text-emerald-600">{STATUS_BADGE}</span>
                       </div>
                       <p className={`text-[10px] font-bold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                        Periode {riwayatPeriode} · Disahkan {formatTanggal(riwayatList[0]?.confirmed_at)}
+                        Periode {riwayatPeriode} · KS {formatTanggal(riwayatList[0]?.disahkan_kepsek_at)} · Yayasan {formatTanggal(riwayatList[0]?.disahkan_yayasan_at)} · Dibayar {formatTanggal(riwayatList[0]?.dibayar_bendahara_at)}
                       </p>
                     </div>
                   </div>
@@ -2255,7 +2519,7 @@ export default function HonorariumPage() {
                     ))}
                   </div>
 
-                  {isPengurus && (
+                  {showFullRekap && (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-[11px] min-w-[760px]">
                         <thead>
@@ -2266,7 +2530,7 @@ export default function HonorariumPage() {
                             <th className="p-1.5 text-right">Total Kotor</th>
                             <th className="p-1.5 text-right">Potongan</th>
                             <th className="p-1.5 text-right">Total Bersih</th>
-                            <th className="p-1.5">Dikonfirmasi</th>
+                            <th className="p-1.5">Alur Persetujuan</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2278,7 +2542,11 @@ export default function HonorariumPage() {
                               <td className="p-1.5 text-right">{formatRupiah(r.jumlah_jp * n(pengaturan?.tarif_jp) + r.transport_hari * n(pengaturan?.tarif_transport_harian) + r.tunjangan_jabatan + r.tunjangan_masa_kerja + r.pembina + r.wali_kelas + r.tugas_tambahan)}</td>
                               <td className="p-1.5 text-right text-rose-400">{formatRupiah(r.total_potongan)}</td>
                               <td className="p-1.5 text-right font-black text-emerald-400">{formatRupiah(r.total_bersih)}</td>
-                              <td className="p-1.5 text-[10px] text-slate-400">{r.confirmed_by || '-'}<br/>{formatTanggal(r.confirmed_at)}</td>
+                              <td className="p-1.5 text-[10px] text-slate-400 space-y-0.5">
+                                <div><span className="font-bold">KS:</span> {r.disahkan_kepsek_by || '-'} — {formatTanggal(r.disahkan_kepsek_at)}</div>
+                                <div><span className="font-bold">Yayasan:</span> {r.disahkan_yayasan_by || '-'} — {formatTanggal(r.disahkan_yayasan_at)}</div>
+                                <div><span className="font-bold">Bendahara:</span> {r.dibayar_bendahara_by || '-'} — {formatTanggal(r.dibayar_bendahara_at)}</div>
+                              </td>
                             </tr>
                           ))}
                           {riwayatList.length === 0 && (
@@ -2289,7 +2557,7 @@ export default function HonorariumPage() {
                     </div>
                   )}
 
-                  {!isPengurus && (
+                  {!showFullRekap && (
                     <div className={`rounded-xl border p-4 space-y-2 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                       {riwayatList.filter((r) => r.guru_id === currentGuruId).map((r) => (
                         <div key={r.guru_id} className="space-y-1">
@@ -2453,7 +2721,7 @@ export default function HonorariumPage() {
       <PrintDocument
         mode={printMode}
         paperSize={paperSize}
-        rows={rekapRows}
+        rows={slipRows}
         tarifJp={n(pengaturan?.tarif_jp)}
         tarifTransport={n(pengaturan?.tarif_transport_harian)}
         isPaid={isPaidPeriode}

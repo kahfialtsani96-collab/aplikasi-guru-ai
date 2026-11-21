@@ -51,3 +51,6 @@ nip_check.txt
 nip_check2.txt
 nuptk_count.txt
 scan_depth.js
+._persist_test.txt
+tsc-out.txt
+*.bak
