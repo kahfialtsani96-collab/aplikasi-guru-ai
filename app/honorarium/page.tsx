@@ -171,6 +171,7 @@ interface GuruRow {
   jabatan?: string | null
   unit_mengajar?: string | null
   role?: string | null
+  NUPTK?: string | null
 }
 
 interface PengaturanRow {
@@ -291,7 +292,38 @@ function AuditLogBox({ logs, isDarkMode }: { logs: AuditLogRow[]; isDarkMode: bo
   )
 }
 
-function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid, bulanLabel, periodeTahun, ketuaYayasan, kepalaSekolah, bendahara }: {
+// Komponen TTD digital dengan fallback: menampilkan gambar bila file tersedia;
+// jika belum ada, tampilkan placeholder garis putus-putus. Otomatis beralih ke
+// TTD asli begitu file diunggah ke /public (tanpa mengubah kode).
+function TtdImage({
+  src,
+  alt,
+  className,
+  placeholderClassName,
+}: {
+  src: string
+  alt: string
+  className?: string
+  placeholderClassName?: string
+}) {
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className="relative flex items-center justify-center h-full w-full">
+      {!failed ? (
+        <img
+          src={src}
+          alt={alt}
+          className={className}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className={placeholderClassName} />
+      )}
+    </div>
+  )
+}
+
+function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid, bulanLabel, periodeTahun, ketuaYayasan, kepalaSekolah, bendahara, kepalaSekolahNuptk }: {
   mode: 'none' | 'daftar' | 'slip'
   paperSize: 'f4' | 'a4'
   rows: RekapRow[]
@@ -302,6 +334,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
   periodeTahun: string
   ketuaYayasan: string
   kepalaSekolah: string
+  kepalaSekolahNuptk: string
   bendahara: string
 }) {
   if (mode === 'none') return null
@@ -333,20 +366,64 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
     </div>
   )
 
+  // TTD/stempel digital: menampilkan gambar asli bila file tersedia; jika belum,
+  // TtdImage otomatis menampilkan placeholder garis putus-putus (ganti ke TTD
+  // asli begitu file diunggah ke /public, tanpa mengubah kode).
+  const renderSignatureVisual = ({
+    stempelSrc,
+    ttdSrc,
+  }: {
+    stempelSrc?: string
+    ttdSrc?: string
+  }) => (
+    <div className="relative flex items-center justify-center h-16">
+      {stempelSrc && (
+        <img
+          src={stempelSrc}
+          alt="Stempel"
+          className="absolute inset-0 m-auto h-[115%] max-w-none object-contain opacity-85"
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+        />
+      )}
+      {ttdSrc && (
+        <TtdImage
+          src={ttdSrc}
+          alt="TTD"
+          className="relative z-10 h-[88%] max-w-none object-contain"
+          placeholderClassName="absolute inset-0 rounded-md border-2 border-dashed border-slate-400"
+        />
+      )}
+    </div>
+  )
+
   const SignatureBlock = () => (
-    <div className="flex justify-between items-end pt-8 no-break">
-      {[
-        { role: 'Ketua Yayasan', name: ketuaYayasan || BLANK_TTD, sub: 'Yayasan Muna Mustofa' },
-        { role: 'Kepala Sekolah', name: kepalaSekolah || BLANK_TTD, sub: 'SMP/SMK Muna Mustofa' },
-        { role: 'Bendahara', name: bendahara || BLANK_TTD, sub: 'Honorarium Guru & Staf' },
-      ].map((s) => (
-        <div key={s.role} className="text-center w-1/3">
-          <div className="text-[9px] font-medium text-black">{s.role},</div>
-          <div className="h-16" />
-          <div className="text-[10px] font-black underline text-black">{s.name}</div>
-          <div className="text-[8px] text-black">{s.sub}</div>
+    <div className="pt-8 no-break">
+      {/* Baris atas: Ketua Yayasan & Bendahara berdampingan */}
+      <div className="flex justify-between items-end">
+        <div className="text-center w-1/2">
+          <div className="text-[9px] font-medium text-black">Mengetahui, Ketua/Wakil Ketua Yayasan</div>
+          {isPaid ? renderSignatureVisual({ ttdSrc: '/ttd-yayasan.png' }) : <div className="h-16" />}
+          <div className="text-[10px] font-black underline text-black">{ketuaYayasan || BLANK_TTD}</div>
+          <div className="text-[8px] text-black">Yayasan Muna Mustofa</div>
         </div>
-      ))}
+        <div className="text-center w-1/2">
+          <div className="text-[9px] font-medium text-black">Bendahara,</div>
+          {isPaid ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-16" />}
+          <div className="text-[10px] font-black underline text-black">{bendahara || BLANK_TTD}</div>
+          <div className="text-[8px] text-black">Honorarium Guru & Staf</div>
+        </div>
+      </div>
+      {/* Baris bawah: Kepala Sekolah di tengah (tidak sejajar) */}
+      <div className="flex justify-center pt-12">
+        <div className="text-center">
+          <div className="text-[9px] font-medium text-black">Mengetahui, Kepala SMP Muna Mustofa</div>
+          {isPaid ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' }) : <div className="h-16" />}
+          <div className="text-[10px] font-black underline text-black">{kepalaSekolah || BLANK_TTD}</div>
+          <div className="text-[8px] text-black">
+            {kepalaSekolahNuptk ? `NUPTK. ${kepalaSekolahNuptk}` : ''}
+          </div>
+        </div>
+      </div>
     </div>
   )
 
@@ -462,8 +539,16 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
               </div>
               <div className="text-center w-1/2">
                 <div className="text-[9px] font-medium text-black">Mengetahui, Bendahara</div>
-                <div className="h-14" />
+                {isPaid ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-14" />}
                 <div className="text-[10px] font-black underline text-black">{bendahara || BLANK_TTD}</div>
+              </div>
+            </div>
+            <div className="text-center mt-10 no-break">
+              <div className="text-[9px] font-medium text-black">Mengetahui, Kepala SMP Muna Mustofa</div>
+              {isPaid ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' }) : <div className="h-14" />}
+              <div className="text-[10px] font-black underline text-black">{kepalaSekolah || BLANK_TTD}</div>
+              <div className="text-[8px] text-black">
+                {kepalaSekolahNuptk ? `NUPTK. ${kepalaSekolahNuptk}` : ''}
               </div>
             </div>
           </div>
@@ -562,7 +647,21 @@ export default function HonorariumPage() {
   const namaKetuaYayasan =
     resolveSignatoryNama((j) => j.includes('ketua yayasan')) ||
     resolveSignatoryNama((j) => j.includes('yayasan'))
-  const namaKepalaSekolah = resolveSignatoryNama((j) => j.includes('kepala sekolah'))
+  // Kepala Sekolah: prioritaskan SMP (jabatan tanpa kata "SMK", mis. "Kepala Sekolah").
+  // Fallback ke "Kepala Sekolah SMK" bila tidak ada yang murni SMP.
+  const namaKepalaSekolah =
+    resolveSignatoryNama((j) => j.includes('kepala sekolah') && !j.includes('smk')) ||
+    resolveSignatoryNama((j) => j.includes('kepala sekolah'))
+  const resolveSignatoryNuptk = (predicate: (jabatanLower: string) => boolean): string => {
+    const hit = guruList.find((g) => {
+      const j = String(g.jabatan ?? '').trim().toLowerCase()
+      return j.length > 0 && predicate(j)
+    })
+    return String(hit?.NUPTK ?? '').trim()
+  }
+  const nuptkKepalaSekolah =
+    resolveSignatoryNuptk((j) => j.includes('kepala sekolah') && !j.includes('smk')) ||
+    resolveSignatoryNuptk((j) => j.includes('kepala sekolah'))
   const namaBendahara = resolveSignatoryNama((j) => j.includes('bendahara'))
 
   // =====================================================================
@@ -593,7 +692,7 @@ export default function HonorariumPage() {
       }
 
       // Master data
-      const fetchGuru = supabase.from('guru').select('id, nama_lengkap, email, jabatan, unit_mengajar').order('nama_lengkap')
+      const fetchGuru = supabase.from('guru').select('id, nama_lengkap, email, jabatan, unit_mengajar, NUPTK').order('nama_lengkap')
       const fetchPengaturan = supabase.from('honorarium_pengaturan').select('*').limit(1).maybeSingle()
       const fetchPotongan = supabase.from('honorarium_potongan').select('*').order('urutan')
       const fetchPenerima = supabase.from('honorarium_penerima').select('*')
@@ -662,13 +761,15 @@ export default function HonorariumPage() {
 
     const rows = activePenerima.map((p) => {
       const existing = savedMap.get(p.guru_id)
+      const nama = existing?.guru_nama || guruById(p.guru_id)?.nama_lengkap || ''
       if (existing) {
-        return computeTotalsRow({ ...existing, periode })
+        return computeTotalsRow({ ...existing, periode, guru_nama: nama })
       }
       return computeTotalsRow({
         id: undefined,
         periode,
         guru_id: p.guru_id,
+        guru_nama: nama,
         jumlah_jp: 0,
         transport_hari: 0,
         tunjangan_jabatan: n(p.tunjangan_jabatan),
@@ -2163,6 +2264,7 @@ export default function HonorariumPage() {
         periodeTahun={periodeTahun}
         ketuaYayasan={namaKetuaYayasan}
         kepalaSekolah={namaKepalaSekolah}
+        kepalaSekolahNuptk={nuptkKepalaSekolah}
         bendahara={namaBendahara}
       />
     </>

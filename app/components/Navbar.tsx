@@ -149,7 +149,7 @@ export default function Navbar() {
     <>
       {/* BOTTOM NAV DOCK GLOBAL */}
       <div
-        className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg transition-colors duration-300 ${
+        className={`border-t fixed bottom-0 left-0 right-0 z-50 shadow-lg print:hidden transition-colors duration-300 ${
           safeDarkMode
             ? 'bg-slate-900/95 border-slate-800 backdrop-blur-md'
             : 'bg-slate-100/95 border-slate-300 backdrop-blur-md'
