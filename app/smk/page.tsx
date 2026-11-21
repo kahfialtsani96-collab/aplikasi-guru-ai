@@ -10,6 +10,7 @@ import { SMK_COLORS, useSmkColor, type SmkColorKey } from './smkTheme'
 import {
   Users,
   BookOpen,
+  CreditCard,
   CalendarCheck,
   FileSpreadsheet,
   NotebookPen,
@@ -205,6 +206,12 @@ export default function SmkDashboardPage() {
       sub: 'Catatan pembinaan siswa',
       href: '/smk/bimbingan',
       icon: HeartHandshake,
+    },
+    {
+      title: 'Cetak Kartu',
+      sub: 'Kartu pelajar & peserta ujian SMK',
+      href: '/smk/kartu',
+      icon: CreditCard,
     },
   ]
 
