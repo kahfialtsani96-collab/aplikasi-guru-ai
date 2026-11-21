@@ -245,6 +245,13 @@ interface RekapRow {
   status: 'DRAFT' | 'PAID'
   confirmed_by?: string | null
   confirmed_at?: string | null
+  disahkan_kepsek_by?: string | null
+  disahkan_kepsek_at?: string | null
+  disahkan_yayasan_by?: string | null
+  disahkan_yayasan_at?: string | null
+  dibayar_bendahara_by?: string | null
+  dibayar_bendahara_at?: string | null
+  alur?: string | null
   catatan?: string | null
   updated_by?: string | null
   updated_at?: string | null
@@ -323,13 +330,16 @@ function TtdImage({
   )
 }
 
-function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid, bulanLabel, periodeTahun, ketuaYayasan, kepalaSekolah, bendahara, kepalaSekolahNuptk }: {
+function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid, bulanLabel, periodeTahun, ketuaYayasan, kepalaSekolah, bendahara, kepalaSekolahNuptk, showKepsekTtd, showYayasanTtd, showBendaharaTtd }: {
   mode: 'none' | 'daftar' | 'slip'
   paperSize: 'f4' | 'a4'
   rows: RekapRow[]
   tarifJp: number
   tarifTransport: number
   isPaid: boolean
+  showKepsekTtd: boolean
+  showYayasanTtd: boolean
+  showBendaharaTtd: boolean
   bulanLabel: string
   periodeTahun: string
   ketuaYayasan: string
@@ -402,13 +412,13 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
       <div className="flex justify-between items-end">
         <div className="text-center w-1/2">
           <div className="text-[9px] font-medium text-black">Mengetahui, Ketua/Wakil Ketua Yayasan</div>
-          {isPaid ? renderSignatureVisual({ ttdSrc: '/ttd-yayasan.png' }) : <div className="h-16" />}
+          {showYayasanTtd ? renderSignatureVisual({ ttdSrc: '/ttd-yayasan.png' }) : <div className="h-16" />}
           <div className="text-[10px] font-black underline text-black">{ketuaYayasan || BLANK_TTD}</div>
           <div className="text-[8px] text-black">Yayasan Muna Mustofa</div>
         </div>
         <div className="text-center w-1/2">
           <div className="text-[9px] font-medium text-black">Bendahara,</div>
-          {isPaid ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-16" />}
+          {showBendaharaTtd ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-16" />}
           <div className="text-[10px] font-black underline text-black">{bendahara || BLANK_TTD}</div>
           <div className="text-[8px] text-black">Honorarium Guru & Staf</div>
         </div>
@@ -417,7 +427,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
       <div className="flex justify-center pt-12">
         <div className="text-center">
           <div className="text-[9px] font-medium text-black">Mengetahui, Kepala SMP Muna Mustofa</div>
-          {isPaid ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' }) : <div className="h-16" />}
+          {showKepsekTtd ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' }) : <div className="h-16" />}
           <div className="text-[10px] font-black underline text-black">{kepalaSekolah || BLANK_TTD}</div>
           <div className="text-[8px] text-black">
             {kepalaSekolahNuptk ? `NUPTK. ${kepalaSekolahNuptk}` : ''}
@@ -539,13 +549,13 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
               </div>
               <div className="text-center w-1/2">
                 <div className="text-[9px] font-medium text-black">Mengetahui, Bendahara</div>
-                {isPaid ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-14" />}
+                {showBendaharaTtd ? renderSignatureVisual({ ttdSrc: '/ttd-bendahara.png' }) : <div className="h-14" />}
                 <div className="text-[10px] font-black underline text-black">{bendahara || BLANK_TTD}</div>
               </div>
             </div>
             <div className="text-center mt-10 no-break">
               <div className="text-[9px] font-medium text-black">Mengetahui, Kepala SMP Muna Mustofa</div>
-              {isPaid ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' }) : <div className="h-14" />}
+              {showKepsekTtd ? renderSignatureVisual({ stempelSrc: '/stempel-sekolah.png', ttdSrc: '/ttd-kepsek.png' }) : <div className="h-14" />}
               <div className="text-[10px] font-black underline text-black">{kepalaSekolah || BLANK_TTD}</div>
               <div className="text-[8px] text-black">
                 {kepalaSekolahNuptk ? `NUPTK. ${kepalaSekolahNuptk}` : ''}
@@ -587,8 +597,21 @@ export default function HonorariumPage() {
 
   const [activeTab, setActiveTab] = useState<'master' | 'rekap' | 'riwayat'>('rekap')
   const [riwayatPeriode, setRiwayatPeriode] = useState('')
+  const [detailGuruId, setDetailGuruId] = useState<number | null>(null)
 
   const [guruList, setGuruList] = useState<GuruRow[]>([])
+
+  // Deteksi peran berbasis jabatan (transparansi & alur persetujuan)
+  const currentJabatanLower = (() => {
+    const em = (currentEmail || '').trim().toLowerCase()
+    const g = guruList.find((x) => (x.email || '').trim().toLowerCase() === em)
+    return String(g?.jabatan ?? '').trim().toLowerCase()
+  })()
+  const isKepalaSekolah = currentJabatanLower.includes('kepala') && !currentJabatanLower.includes('smk')
+  const isBendahara = currentJabatanLower.includes('bendahara')
+  const isYayasan = currentJabatanLower.includes('yayasan')
+  const canManageRekap = isPengurus || isOperator
+  const showFullRekap = canManageRekap || isKepalaSekolah || isBendahara
   const [pengaturan, setPengaturan] = useState<PengaturanRow | null>(null)
   const [potonganList, setPotonganList] = useState<PotonganRow[]>([])
   const [penerimaList, setPenerimaList] = useState<PenerimaRow[]>([])
@@ -1387,17 +1410,16 @@ export default function HonorariumPage() {
   // =====================================================================
   // KONFIRMASI SUDAH DIBAYARKAN (kunci permanen PAID)
   // =====================================================================
-  const handleConfirmPaid = async () => {
-    if (!confirm('Konfirmasi bahwa seluruh honorarium bulan ini sudah DIPERIKSA dan DIBAYARKAN? Data akan TERKUNCI permanen (status PAID).')) return
+  const handleApprove = async () => {
+    if (!isKepalaSekolah) return showToast('err', 'Hanya Kepala Sekolah yang dapat menyetujui.')
+    if (isPaidPeriode) return showToast('err', 'Periode sudah dibayar & terkunci.')
+    if (isApprovedPeriode) return showToast('err', 'Periode ini sudah disetujui.')
+    if (!confirm('Setujui honorarium bulan ini sebagai KEPALA SEKOLAH?')) return
     setSaving(true)
     try {
-      const saveErr = await persistRekap()
-      if (saveErr) throw saveErr
-
       const { error } = await supabase
         .from('honorarium_rekap')
         .update({
-          status: 'PAID',
           confirmed_by: currentName,
           confirmed_at: new Date().toISOString(),
           updated_by: currentName,
@@ -1409,14 +1431,43 @@ export default function HonorariumPage() {
       setRekapList((prev) =>
         prev.map((r) =>
           r.periode === periode
-            ? { ...r, status: 'PAID', confirmed_by: currentName, confirmed_at: new Date().toISOString() }
+            ? { ...r, confirmed_by: currentName, confirmed_at: new Date().toISOString() }
             : r
         )
       )
-      showToast('ok', 'Pembayaran dikonfirmasi. Bulan terkunci permanen sebagai PAID.')
-      await logAudit('riwayat', 'Konfirmasi Sudah Dibayarkan')
+      showToast('ok', 'Rekap disetujui oleh Kepala Sekolah.')
+      await logAudit('riwayat', 'Disetujui Kepala Sekolah')
     } catch (e: any) {
-      showToast('err', 'Gagal konfirmasi: ' + e.message)
+      showToast('err', 'Gagal setujui: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePay = async () => {
+    if (!isBendahara) return showToast('err', 'Hanya Bendahara yang dapat menandai dibayar.')
+    if (isPaidPeriode) return showToast('err', 'Periode sudah dibayar & terkunci.')
+    if (!isApprovedPeriode) return showToast('err', 'Belum disetujui Kepala Sekolah.')
+    if (!confirm('Konfirmasi pembayaran honorarium bulan ini sebagai BENDAHARA? Data akan terkunci (PAID).')) return
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('honorarium_rekap')
+        .update({
+          status: 'PAID',
+          updated_by: currentName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('periode', periode)
+
+      if (error) throw error
+      setRekapList((prev) =>
+        prev.map((r) => (r.periode === periode ? { ...r, status: 'PAID' } : r))
+      )
+      showToast('ok', 'Pembayaran dikonfirmasi Bendahara. Periode terkunci (PAID).')
+      await logAudit('riwayat', 'Dibayar Bendahara')
+    } catch (e: any) {
+      showToast('err', 'Gagal bayar: ' + e.message)
     } finally {
       setSaving(false)
     }
@@ -1533,6 +1584,12 @@ export default function HonorariumPage() {
   const bulanLabel = BLN_NAMES[Number(periodeBulan) - 1] || periodeBulan
   const rekapRows = rekapList.filter((r) => r.periode === periode)
   const isPaidPeriode = rekapRows.some((r) => r.status === 'PAID')
+  const isApprovedPeriode = rekapRows.some((r) => !!r.confirmed_at)
+  const stageKepsek = rekapRows[0]?.disahkan_kepsek_at || rekapRows[0]?.confirmed_at
+  const stageYayasan = rekapRows[0]?.disahkan_yayasan_at
+  const showKepsekTtd = !!stageKepsek
+  const showYayasanTtd = !!stageYayasan
+  const showBendaharaTtd = isPaidPeriode
   const personalRow = rekapRows.find((r) => r.guru_id === currentGuruId)
 
   if (loading) {
@@ -1590,7 +1647,7 @@ export default function HonorariumPage() {
             <select
               value={periodeBulan}
               onChange={(e) => setPeriodeBulan(e.target.value)}
-              className={`bg-transparent text-xs font-bold focus:outline-none cursor-pointer ${isDarkMode ? 'text-white' : 'text-slate-900'}`}
+              className={`text-xs font-bold focus:outline-none cursor-pointer ${isDarkMode ? 'bg-slate-800 text-white border border-slate-700 rounded px-1.5 py-0.5' : 'bg-transparent text-slate-900'}`}
             >
               {BLN_NAMES.map((b, i) => (
                 <option key={b} value={String(i + 1).padStart(2, '0')}>{b}</option>
@@ -1599,7 +1656,7 @@ export default function HonorariumPage() {
             <select
               value={periodeTahun}
               onChange={(e) => setPeriodeTahun(e.target.value)}
-              className={`bg-transparent text-xs font-bold focus:outline-none cursor-pointer ${isDarkMode ? 'text-white' : 'text-slate-900'}`}
+              className={`text-xs font-bold focus:outline-none cursor-pointer ${isDarkMode ? 'bg-slate-800 text-white border border-slate-700 rounded px-1.5 py-0.5' : 'bg-transparent text-slate-900'}`}
             >
               {tahunOptions.map((t) => (
                 <option key={t} value={t}>{t}</option>
@@ -1811,11 +1868,55 @@ export default function HonorariumPage() {
           {activeTab === 'rekap' && (
             <>
               <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
-              {isPengurus && (
+
+              {(isKepalaSekolah || isBendahara) && (
+                <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-xs font-extrabold text-indigo-400">Alur Persetujuan — {bulanLabel} {periodeTahun}</h3>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${isPaidPeriode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40' : isApprovedPeriode ? 'bg-sky-500/15 text-sky-400 border border-sky-500/40' : isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-300'}`}>
+                      {isPaidPeriode ? 'PAID' : isApprovedPeriode ? 'DISAHKAN' : 'DRAFT'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      ['Total Honor', formatRupiah(rekapRows.reduce((a, r) => a + n(r.total_bersih), 0))],
+                      ['Total JP', String(rekapRows.reduce((a, r) => a + n(r.jumlah_jp), 0))],
+                      ['Total Transport', String(rekapRows.reduce((a, r) => a + n(r.transport_hari), 0)) + ' hari'],
+                      ['Jml Guru', String(rekapRows.length)],
+                    ].map(([label, val]) => (
+                      <div key={label} className={`rounded-lg border px-3 py-2 ${isDarkMode ? 'bg-slate-800/60 border-slate-700' : 'bg-white/60 border-slate-200'}`}>
+                        <div className={`text-[9px] uppercase font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</div>
+                        <div className={`text-sm font-black ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!isPaidPeriode && !isApprovedPeriode && isKepalaSekolah && (
+                      <button onClick={handleApprove} disabled={saving}
+                        className="text-[10px] font-black px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40 cursor-pointer">
+                        <CheckCircle2 className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Setujui (Disahkan)
+                      </button>
+                    )}
+                    {!isPaidPeriode && isApprovedPeriode && isBendahara && (
+                      <button onClick={handlePay} disabled={saving}
+                        className="text-[10px] font-black px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-40 cursor-pointer">
+                        <Landmark className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Tandai Dibayar
+                      </button>
+                    )}
+                    {isApprovedPeriode && !isPaidPeriode && (
+                      <span className="text-[10px] font-bold text-sky-400">
+                        Disahkan oleh {rekapRows[0]?.confirmed_by || '-'} · {formatTanggal(rekapRows[0]?.confirmed_at)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {showFullRekap && (
                 <>
                   {/* AKSI BIL */}
                   <div className={`border rounded-2xl p-3 flex flex-wrap items-center gap-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
-                    <button onClick={() => setShowTugasModal(true)} disabled={isPaidPeriode}
+                    <button onClick={() => setShowTugasModal(true)} disabled={isPaidPeriode || !canManageRekap}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-40 cursor-pointer">
                       <Plus className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Catat Tugas Tambahan
                     </button>
@@ -1825,21 +1926,18 @@ export default function HonorariumPage() {
                     >
                       <CalendarDays className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Buka Absensi Guru
                     </Link>
-                    <button onClick={handleAutoCalc} disabled={saving || isPaidPeriode}
+                    <button onClick={handleAutoCalc} disabled={saving || isPaidPeriode || !canManageRekap}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40 cursor-pointer">
                       <RefreshCw className={`w-3.5 h-3.5 inline-block align-middle mr-1 ${saving ? 'animate-spin' : ''}`} /> Tarik &amp; Hitung Otomatis
                     </button>
                     <span className={`text-[10px] font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>
                       {jurnalSahCount > 0 ? `${jurnalSahCount} entri jurnal sah ditarik` : 'Belum ada penarikan jurnal'}
                     </span>
-                    <button onClick={handleSaveRekap} disabled={saving || isPaidPeriode}
+                    <button onClick={handleSaveRekap} disabled={saving || isPaidPeriode || !canManageRekap}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 cursor-pointer">
                       <Save className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Simpan Rekap
                     </button>
-                    <button onClick={handleConfirmPaid} disabled={saving || isPaidPeriode}
-                      className="text-[10px] font-black px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-40 cursor-pointer">
-                      <CheckCircle2 className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Konfirmasi Sudah Dibayarkan
-                    </button>
+
                     {isPaidPeriode && (
                       <span className="text-[10px] font-black px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 ml-auto">
                         <BadgeCheck className="w-3.5 h-3.5 inline-block align-middle mr-1" /> PERIODE TERKUNCI (PAID)
@@ -1868,9 +1966,23 @@ export default function HonorariumPage() {
                       <h3 className="text-xs font-extrabold flex items-center gap-1.5 text-indigo-400">
                         <Banknote className="w-4 h-4" /> Rekap Honorarium {bulanLabel} {periodeTahun}
                       </h3>
-                      <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${isPaidPeriode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40' : isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-300'}`}>
-                        {isPaidPeriode ? 'PAID' : 'DRAFT'}
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${isPaidPeriode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40' : isApprovedPeriode ? 'bg-sky-500/15 text-sky-400 border border-sky-500/40' : isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-300'}`}>
+                        {isPaidPeriode ? 'PAID' : isApprovedPeriode ? 'DISAHKAN' : 'DRAFT'}
                       </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        ['Total Honor', formatRupiah(rekapRows.reduce((a, r) => a + n(r.total_bersih), 0))],
+                        ['Total JP', String(rekapRows.reduce((a, r) => a + n(r.jumlah_jp), 0))],
+                        ['Total Transport', String(rekapRows.reduce((a, r) => a + n(r.transport_hari), 0)) + ' hari'],
+                        ['Jml Guru', String(rekapRows.length)],
+                      ].map(([label, val]) => (
+                        <div key={label} className={`rounded-lg border px-3 py-2 ${isDarkMode ? 'bg-slate-800/60 border-slate-700' : 'bg-white/60 border-slate-200'}`}>
+                          <div className={`text-[9px] uppercase font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</div>
+                          <div className={`text-sm font-black ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>{val}</div>
+                        </div>
+                      ))}
                     </div>
 
                     <div className="overflow-x-auto">
@@ -1900,12 +2012,18 @@ export default function HonorariumPage() {
                             </tr>
                           )}
                           {rekapRows.map((r) => {
-                            const disabled = isPaidPeriode
+                            const disabled = isPaidPeriode || !canManageRekap
                             const cellCls = `w-20 border rounded px-1.5 py-0.5 text-[10px] font-bold focus:outline-none ${disabled ? 'opacity-50' : ''} ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`
                             const nama = r.guru_nama || guruNama(r.guru_id)
                             return (
                               <tr key={r.guru_id} className={`border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
-                                <td className="p-1.5 font-bold whitespace-nowrap">{nama}</td>
+                                <td className="p-1.5 font-bold whitespace-nowrap">
+                                  <button onClick={() => setDetailGuruId(r.guru_id)}
+                                    className="mr-1.5 align-middle text-[9px] font-black px-1.5 py-0.5 rounded border border-indigo-400 text-indigo-500 hover:bg-indigo-50 cursor-pointer">
+                                    Detail
+                                  </button>
+                                  {nama}
+                                </td>
                                 <td className="p-1.5 text-center">
                                   <div className="relative inline-block group">
                                     <input type="number" value={r.jumlah_jp} disabled={disabled}
@@ -1993,7 +2111,7 @@ export default function HonorariumPage() {
 
                 </>
               )}
-              {!isPengurus && (
+              {!(isPengurus || isKepalaSekolah || isBendahara) && (
                 <>
 
                   <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
@@ -2123,6 +2241,20 @@ export default function HonorariumPage() {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      ['Total Honor', formatRupiah(riwayatList.reduce((a, r) => a + n(r.total_bersih), 0))],
+                      ['Total JP', String(riwayatList.reduce((a, r) => a + n(r.jumlah_jp), 0))],
+                      ['Total Transport', String(riwayatList.reduce((a, r) => a + n(r.transport_hari), 0)) + ' hari'],
+                      ['Jml Guru', String(riwayatList.length)],
+                    ].map(([label, val]) => (
+                      <div key={label} className={`rounded-lg border px-3 py-2 ${isDarkMode ? 'bg-slate-800/60 border-slate-700' : 'bg-white/60 border-slate-200'}`}>
+                        <div className={`text-[9px] uppercase font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</div>
+                        <div className={`text-sm font-black ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+
                   {isPengurus && (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-[11px] min-w-[760px]">
@@ -2244,6 +2376,71 @@ export default function HonorariumPage() {
       )}
 
 
+      {detailGuruId !== null && (() => {
+        const drow = rekapRows.find((r) => r.guru_id === detailGuruId)
+        if (!drow) return null
+        const kotor =
+          n(drow.jumlah_jp) * n(pengaturan?.tarif_jp) +
+          n(drow.transport_hari) * n(pengaturan?.tarif_transport_harian) +
+          n(drow.tunjangan_jabatan) + n(drow.tunjangan_masa_kerja) +
+          n(drow.pembina) + n(drow.wali_kelas) + n(drow.tugas_tambahan)
+        return (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3" onClick={() => setDetailGuruId(null)}>
+            <div className={`w-full max-w-lg rounded-2xl border shadow-2xl max-h-[85vh] overflow-y-auto p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200'}`} onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold">Detail Honor — {guruNama(detailGuruId)}</h3>
+                <button onClick={() => setDetailGuruId(null)} className="text-slate-500 hover:text-slate-900 cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className={`rounded-lg border p-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}><div className="text-[9px] uppercase text-slate-400">JP</div><div className={`font-black text-lg ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>{drow.jumlah_jp}</div></div>
+                <div className={`rounded-lg border p-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}><div className="text-[9px] uppercase text-slate-400">Transport</div><div className={`font-black text-lg ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>{drow.transport_hari} hr</div></div>
+                <div className={`rounded-lg border p-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}><div className="text-[9px] uppercase text-slate-400">Potongan</div><div className={`font-black text-${isDarkMode ? 'rose-400' : 'rose-500'}`}>-{formatRupiah(drow.total_potongan)}</div></div>
+                <div className={`rounded-lg border p-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}><div className="text-[9px] uppercase text-slate-400">Bersih</div><div className={`font-black text-${isDarkMode ? 'emerald-400' : 'emerald-600'}`}>{formatRupiah(drow.total_bersih)}</div></div>
+              </div>
+              <div className="space-y-1 text-[11px]">
+                {[
+                  ['Jam Mengajar', formatRupiah(n(drow.jumlah_jp) * n(pengaturan?.tarif_jp))],
+                  ['Transport', formatRupiah(n(drow.transport_hari) * n(pengaturan?.tarif_transport_harian))],
+                  ['Tunjangan Jabatan', formatRupiah(drow.tunjangan_jabatan)],
+                  ['Masa Kerja', formatRupiah(drow.tunjangan_masa_kerja)],
+                  ['Pembina', formatRupiah(drow.pembina)],
+                  ['Wali Kelas', formatRupiah(drow.wali_kelas)],
+                  ['Tugas Tambahan', formatRupiah(drow.tugas_tambahan)],
+                  ['Total Kotor', formatRupiah(kotor)],
+                ].map(([l, v]) => (
+                  <div key={l} className="flex justify-between border-b border-slate-100 py-1"><span>{l}</span><span className="font-bold">{v}</span></div>
+                ))}
+              </div>
+              {(drow.potongan || []).length > 0 && (
+                <div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Potongan</div>
+                  <div className="space-y-1 text-[11px]">
+                    {(drow.potongan || []).map((po: any, i) => (
+                      <div key={i} className="flex justify-between border-b border-slate-100 py-1">
+                        <span>{po.nama || 'Potongan'}{po.tipe === 'persen' ? ` (${po.nilai}%)` : ''}</span>
+                        <span className="font-bold text-rose-500">-{formatRupiah(Number(po.nilai) || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {drow.detailJp && drow.detailJp.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian JP</div>
+                  <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
+                    {drow.detailJp.map((d, i) => (
+                      <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
+                        <span>{formatTanggalSingkat(d.tanggal)} — Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* TOAST */}
       {toast && (
         <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[95] px-4 py-2.5 rounded-xl text-xs font-bold shadow-lg ${toast.tipe === 'ok' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
@@ -2260,6 +2457,9 @@ export default function HonorariumPage() {
         tarifJp={n(pengaturan?.tarif_jp)}
         tarifTransport={n(pengaturan?.tarif_transport_harian)}
         isPaid={isPaidPeriode}
+        showKepsekTtd={showKepsekTtd}
+        showYayasanTtd={showYayasanTtd}
+        showBendaharaTtd={showBendaharaTtd}
         bulanLabel={bulanLabel}
         periodeTahun={periodeTahun}
         ketuaYayasan={namaKetuaYayasan}
