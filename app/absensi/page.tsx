@@ -263,6 +263,8 @@ export default function AbsensiPage() {
           `
           )
           .ilike('guru_email', email.trim())
+          .eq('semester', selectedSemester)
+          .eq('tahun_ajaran', selectedTahunAjaran)
 
         if (!error && data) {
           const uniqueKelasMap = new Map<number, string>()
@@ -372,7 +374,7 @@ export default function AbsensiPage() {
         console.error('Error fetching jadwal guru SMP:', err)
       }
     },
-    [isOperator]
+    [isOperator, selectedSemester, selectedTahunAjaran]
   )
 
   useEffect(() => {
@@ -774,6 +776,8 @@ export default function AbsensiPage() {
         .from('jadwal')
         .select('guru_email')
         .or('jenjang.eq.SMP,jenjang.is.null')
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
         .eq('mapel_id', mapelIdNum)
         .eq('hari', dayName)
       if (kelasIdVal !== 'ALL' && kelasIdVal != null) q = q.eq('kelas_id', Number(kelasIdVal))

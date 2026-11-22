@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
 import { SMK_COLORS, useSmkColor } from '../smkTheme'
+import KenaikanKelasPanel from '@/app/components/KenaikanKelasPanel'
 import {
   ArrowLeft,
   GraduationCap,
@@ -98,6 +99,9 @@ export default function SmkMasterOperatorPage() {
 
   const [activeTab, setActiveTab] = useState<TabKey>('kelas')
   const activeTabIndex = TABS.findIndex((t) => t.key === activeTab)
+
+  // Segmented sub-tab dalam menu Siswa DKV: Input & Kelola | Kenaikan Kelas
+  const [siswaTab, setSiswaTab] = useState<'input' | 'kenaikan'>('input')
 
   const [loadingData, setLoadingData] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -239,6 +243,7 @@ export default function SmkMasterOperatorPage() {
           .from('siswa')
           .select('id, nisn, nama_lengkap, jenis_kelamin, kelas_id')
           .eq('jenjang', 'SMK')
+          .not('kelas_id', 'is', null)
           .order('nama_lengkap', { ascending: true }),
         supabase
           .from('mapel')
@@ -1181,6 +1186,34 @@ export default function SmkMasterOperatorPage() {
                =============================================================== */}
             {activeTab === 'siswa' && (
               <>
+                {/* SEGMENTED SUB-TAB: INPUT & KELOLA vs KENAIKAN KELAS */}
+                <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/40 p-1 shrink-0 self-start text-[10px] sm:text-[11px] font-extrabold">
+                  <button
+                    type="button"
+                    onClick={() => setSiswaTab('input')}
+                    className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+                      siswaTab === 'input'
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" /> Input & Kelola Siswa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSiswaTab('kenaikan')}
+                    className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+                      siswaTab === 'kenaikan'
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <GraduationCap className="w-3.5 h-3.5" /> Kenaikan Kelas
+                  </button>
+                </div>
+
+                {siswaTab === 'input' ? (
+                  <>
                 <form
                   onSubmit={handleAddSiswa}
                   className="rounded-xl bg-amber-400/[0.04] border border-amber-400/25 p-3 space-y-2.5"
@@ -1380,6 +1413,15 @@ export default function SmkMasterOperatorPage() {
                     </div>
                   )}
                 </div>
+                  </>
+                ) : (
+                  <KenaikanKelasPanel
+                    supabase={supabase}
+                    jenjang="SMK"
+                    mode="smk"
+                    onChanged={fetchAllSmkMaster}
+                  />
+                )}
               </>
             )}
 

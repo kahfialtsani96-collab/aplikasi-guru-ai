@@ -18,13 +18,9 @@ import {
   UserRound,
   History,
   Printer,
-  Clock,
-  Users,
-  BookOpen,
   Plus,
   Pencil,
   X,
-  Sparkles,
 } from 'lucide-react'
 
 // Helper aman: mencegah error prerender/SSG Vercel & membersihkan tanda kutip env
@@ -113,7 +109,7 @@ interface SiswaRowUntukKartu {
 export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
   const router = useRouter()
   const [userDisplayName, setUserDisplayName] = useState('GURU')
-  const { isOperator } = useAuthRole()
+  useAuthRole()
 
   const { isDarkMode } = useDarkMode()
 

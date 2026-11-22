@@ -30,6 +30,7 @@ import {
   BookOpen,
   UserRound,
   Pencil,
+  CopyPlus,
 } from 'lucide-react'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
@@ -83,6 +84,8 @@ interface Jadwal {
   mapel_id?: number
   guru_email?: string
   jenjang?: string | null
+  semester?: string | null
+  tahun_ajaran?: string | null
   kelas?: { nama_kelas: string; jenjang?: string | null } | string
   mapel?: { nama_mapel: string; kode_mapel: string; jenjang?: string | null } | string
 }
@@ -108,6 +111,11 @@ const JS_DAY_TO_HARI: Record<number, string> = {
   5: 'Jumat',
   6: 'Sabtu',
 }
+
+// Periode Akademik (Tahun Ajaran & Semester)
+const TAHUN_AJARAN_LIST = ['2026/2027', '2027/2028']
+const SEMESTER_LIST = ['Ganjil', 'Genap'] as const
+type SemesterType = (typeof SEMESTER_LIST)[number]
 
 // Helper format tanggal lokal YYYY-MM-DD (dipanggil hanya di useEffect)
 function getLocalTodayIso(): string {
@@ -241,6 +249,11 @@ export default function JadwalMengajarPage() {
   const [filterHari, setFilterHari] = useState('')
   const [filterKelasId, setFilterKelasId] = useState('')
   const [filterMapelId, setFilterMapelId] = useState('')
+
+  // Periode Akademik Aktif (Tahun Ajaran & Semester)
+  const [selectedSemester, setSelectedSemester] = useState<SemesterType>('Ganjil')
+  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
+  const [copyingPrevSemester, setCopyingPrevSemester] = useState(false)
 
   // Inisialisasi tanggal klien setelah mount (menghindari Blocking Route prerender)
   useEffect(() => {
@@ -436,7 +449,6 @@ export default function JadwalMengajarPage() {
       }
 
       await fetchMasterData()
-      await fetchJadwal()
     }
 
     if (!loadingRole) {
@@ -494,10 +506,14 @@ export default function JadwalMengajarPage() {
           kelas_id,
           mapel_id,
           guru_email,
+          semester,
+          tahun_ajaran,
           kelas:kelas_id(nama_kelas, jenjang),
           mapel:mapel_id(nama_mapel, kode_mapel, jenjang)
         `
         )
+        .eq('semester', selectedSemester)
+        .eq('tahun_ajaran', selectedTahunAjaran)
 
       if (!error && data) {
         const onlySmp = (data as any[]).filter((row) => {
@@ -532,6 +548,14 @@ export default function JadwalMengajarPage() {
       setLoading(false)
     }
   }
+
+  // Muat ulang jadwal ketika periode akademik (semester/tahun ajaran) berubah
+  useEffect(() => {
+    if (!loadingRole) {
+      fetchJadwal()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSemester, selectedTahunAjaran, loadingRole])
 
   // Map email -> Nama Lengkap Guru
   const guruNameMap = useMemo(() => {
@@ -810,6 +834,8 @@ export default function JadwalMengajarPage() {
             guru_email: selectedGuruEmail,
             kelas: selectedKelasObj?.nama_kelas || '',
             mapel: selectedMapelObj?.nama_mapel || '',
+            semester: selectedSemester,
+            tahun_ajaran: selectedTahunAjaran,
           })
           .eq('id', editingJadwalId)
 
@@ -829,6 +855,8 @@ export default function JadwalMengajarPage() {
           guru_email: selectedGuruEmail,
           kelas: k.nama_kelas,
           mapel: selectedMapelObj?.nama_mapel || '',
+          semester: selectedSemester,
+          tahun_ajaran: selectedTahunAjaran,
         }))
 
         const { error } = await supabase.from('jadwal').insert(rowsToInsert)
@@ -850,6 +878,8 @@ export default function JadwalMengajarPage() {
             guru_email: selectedGuruEmail,
             kelas: selectedKelasObj?.nama_kelas || '',
             mapel: selectedMapelObj?.nama_mapel || '',
+            semester: selectedSemester,
+            tahun_ajaran: selectedTahunAjaran,
           },
         ])
 
@@ -879,6 +909,88 @@ export default function JadwalMengajarPage() {
       }
     } catch (err) {
       console.error('Error deleting jadwal:', err)
+    }
+  }
+
+  // Tentukan periode sumber "semester sebelumnya" dari periode yang aktif
+  const getPrevPeriode = (): { semester: SemesterType; tahun: string } | null => {
+    if (selectedSemester === 'Genap') {
+      return { semester: 'Ganjil', tahun: selectedTahunAjaran }
+    }
+    const idx = TAHUN_AJARAN_LIST.indexOf(selectedTahunAjaran)
+    if (idx > 0) {
+      return { semester: 'Genap', tahun: TAHUN_AJARAN_LIST[idx - 1] }
+    }
+    return null
+  }
+  const prevPeriode = getPrevPeriode()
+  const isPrevSemesterEmpty = allSmpJadwal.length === 0
+
+  // Salin seluruh jadwal SMP dari periode (semester) sebelumnya ke periode aktif
+  const handleSalinJadwalSebelumnya = async () => {
+    if (!isOperator || !prevPeriode || isPrevSemesterEmpty) return
+    if (
+      !confirm(
+        `Salin seluruh jadwal SMP dari Semester ${prevPeriode.semester} ${prevPeriode.tahun} ke Semester ${selectedSemester} ${selectedTahunAjaran}?`
+      )
+    ) {
+      return
+    }
+    setCopyingPrevSemester(true)
+    try {
+      const { data, error } = await supabase
+        .from('jadwal')
+        .select(
+          'hari, jam, jam_ke, kelas_id, mapel_id, guru_email, kelas, mapel, jenjang'
+        )
+        .eq('semester', prevPeriode.semester)
+        .eq('tahun_ajaran', prevPeriode.tahun)
+      if (error) throw error
+
+      const sourceRows = (data || []).filter((row: any) => {
+        const kelasJenjang =
+          typeof row.kelas === 'object' && row.kelas !== null ? row.kelas.jenjang : null
+        const mapelJenjang =
+          typeof row.mapel === 'object' && row.mapel !== null ? row.mapel.jenjang : null
+        const kelasName =
+          typeof row.kelas === 'object' && row.kelas !== null
+            ? row.kelas.nama_kelas || ''
+            : String(row.kelas || '')
+        if (kelasJenjang === 'SMK' || mapelJenjang === 'SMK' || row.jenjang === 'SMK') return false
+        if (kelasName.toUpperCase().includes('DKV')) return false
+        return true
+      })
+
+      if (sourceRows.length === 0) {
+        alert('Tidak ada jadwal SMP pada periode sebelumnya untuk disalin.')
+        return
+      }
+
+      const rowsToInsert = sourceRows.map((r: any) => ({
+        hari: r.hari,
+        jam: r.jam,
+        jam_ke: r.jam_ke,
+        kelas_id: r.kelas_id,
+        mapel_id: r.mapel_id,
+        guru_email: r.guru_email,
+        kelas: r.kelas,
+        mapel: r.mapel,
+        jenjang: r.jenjang || 'SMP',
+        semester: selectedSemester,
+        tahun_ajaran: selectedTahunAjaran,
+      }))
+
+      const { error: insErr } = await supabase.from('jadwal').insert(rowsToInsert)
+      if (insErr) throw insErr
+
+      alert(
+        `Berhasil menyalin ${rowsToInsert.length} jadwal SMP dari Semester ${prevPeriode.semester} ${prevPeriode.tahun}.`
+      )
+      await fetchJadwal()
+    } catch (err: any) {
+      alert('Gagal menyalin jadwal: ' + err.message)
+    } finally {
+      setCopyingPrevSemester(false)
     }
   }
 
@@ -1108,6 +1220,65 @@ export default function JadwalMengajarPage() {
                 >
                   <HeartHandshake className="w-4 h-4" /> Bimbingan
                 </Link>
+              )}
+            </div>
+
+            {/* Periode Akademik: Tahun Ajaran & Semester */}
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`text-[9px] uppercase font-extrabold ${
+                  isDarkMode ? 'text-indigo-300' : 'text-indigo-800'
+                }`}
+              >
+                <CalendarDays className="w-4 h-4 inline-block align-middle" /> Periode:
+              </span>
+              <select
+                value={selectedTahunAjaran}
+                onChange={(e) => setSelectedTahunAjaran(e.target.value)}
+                className={`border rounded px-1.5 py-0.5 text-[10px] font-bold focus:outline-none cursor-pointer ${
+                  isDarkMode
+                    ? 'bg-slate-800 border-slate-700 text-white'
+                    : 'bg-white border-slate-300 text-slate-900'
+                }`}
+              >
+                {TAHUN_AJARAN_LIST.map((ta) => (
+                  <option key={ta} value={ta}>
+                    {ta}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(e.target.value as SemesterType)}
+                className={`border rounded px-1.5 py-0.5 text-[10px] font-bold focus:outline-none cursor-pointer ${
+                  isDarkMode
+                    ? 'bg-slate-800 border-slate-700 text-white'
+                    : 'bg-white border-slate-300 text-slate-900'
+                }`}
+              >
+                {SEMESTER_LIST.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              {isOperator && prevPeriode && isPrevSemesterEmpty && (
+                <button
+                  type="button"
+                  onClick={handleSalinJadwalSebelumnya}
+                  disabled={copyingPrevSemester}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-black flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                    isDarkMode
+                      ? 'bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900'
+                      : 'bg-indigo-100 text-indigo-800 border border-indigo-300 hover:bg-indigo-200'
+                  }`}
+                  title={`Salin jadwal dari Semester ${prevPeriode.semester} ${prevPeriode.tahun}`}
+                >
+                  <CopyPlus className="w-3 h-3" />
+                  {copyingPrevSemester
+                    ? 'Menyalin...'
+                    : `Salin dari ${prevPeriode.semester} ${prevPeriode.tahun}`}
+                </button>
               )}
             </div>
 

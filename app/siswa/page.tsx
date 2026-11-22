@@ -8,14 +8,12 @@ import { motion } from 'framer-motion'
 import { useRequireOperator } from '@/hooks/useRequireOperator'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import DarkModeToggle from '@/app/components/DarkModeToggle'
+import KenaikanKelasPanel from '@/app/components/KenaikanKelasPanel'
 import { sortKelas } from '@/lib/utils'
 import {
   Trash2,
-  Clock,
   Users,
   GraduationCap,
-  BookOpen,
-  Printer,
   Pencil,
 } from 'lucide-react'
 
@@ -68,6 +66,9 @@ export default function MasterSiswaPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Segmented Tab: Input & Kelola Siswa | Kenaikan Kelas
+  const [pageTab, setPageTab] = useState<'input' | 'kenaikan'>('input')
+
   const { isDarkMode } = useDarkMode()
 
 
@@ -81,6 +82,7 @@ export default function MasterSiswaPage() {
       }
     }
     getUserData()
+    // eslint-disable-next-line react-hooks/immutability
     fetchInitialData()
   }, [])
 
@@ -104,6 +106,7 @@ export default function MasterSiswaPage() {
     const { data: dataSiswa, error } = await supabase
       .from('siswa')
       .select('*')
+      .not('kelas_id', 'is', null)
       .order('nama_lengkap', { ascending: true })
       .or('jenjang.eq.SMP,jenjang.is.null')
 
@@ -138,6 +141,7 @@ export default function MasterSiswaPage() {
       )
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilteredSiswa(result)
   }, [filterKelas, searchQuery, siswaList])
 
@@ -185,8 +189,9 @@ export default function MasterSiswaPage() {
           alert('Gagal menyimpan siswa: ' + error.message)
         }
       }
-    } catch (err: any) {
-      alert('Terjadi kesalahan: ' + err.message)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      alert('Terjadi kesalahan: ' + msg)
     } finally {
       setLoading(false)
     }
@@ -227,7 +232,7 @@ export default function MasterSiswaPage() {
       initial={{ opacity: 0, x: -60 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`h-screen overflow-hidden font-sans flex flex-col selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
+      className={`min-h-screen overflow-y-auto overflow-x-hidden font-sans flex flex-col selection:bg-indigo-500 selection:text-white relative transition-colors duration-300 ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#E2E8F0] text-slate-800'
       }`}
     >
@@ -236,10 +241,11 @@ export default function MasterSiswaPage() {
       <div className={`fixed inset-0 pointer-events-none z-0 flex items-center justify-center select-none transition-opacity duration-300 ${
         isDarkMode ? 'opacity-[0.05]' : 'opacity-[0.15]'
       }`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-smp.jpg" alt="Watermark SMP Muna Mustofa" className="w-[850px] h-[850px] object-contain max-w-none" />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full flex-1">
+      <div className="relative z-10 flex flex-col">
         
         {/* TOPBAR HEADER - RESPONSIVE */}
         <header className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 shadow-xs transition-colors duration-300 ${
@@ -255,6 +261,7 @@ export default function MasterSiswaPage() {
               <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                 isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
               }`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logo-smp.jpg" alt="Logo SMP Muna Mustofa" className="w-full h-full object-contain" />
               </div>
               <div>
@@ -308,7 +315,36 @@ export default function MasterSiswaPage() {
           </div>
         </header>
 
-        <main className="max-w-6xl w-full mx-auto px-3 sm:px-4 pt-3 sm:pt-4 pb-1 flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
+        <main className="max-w-6xl w-full mx-auto px-3 sm:px-4 pt-3 sm:pt-4 pb-28 flex flex-col space-y-4">
+          {/* SEGMENTED TAB: INPUT & KELOLA vs KENAIKAN KELAS */}
+          <div className={`flex items-center gap-1 rounded-xl border p-1 shrink-0 self-start shadow-xs ${isDarkMode ? 'border-slate-700 bg-slate-900/90' : 'border-slate-300 bg-white/90'}`}>
+            <button
+              type="button"
+              onClick={() => setPageTab('input')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                pageTab === 'input'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" /> Input & Kelola Siswa
+            </button>
+            <button
+              type="button"
+              onClick={() => setPageTab('kenaikan')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                pageTab === 'kenaikan'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" /> Kenaikan Kelas
+            </button>
+          </div>
+
+          {pageTab === 'input' ? (
+            <>
+
           
           {/* PANEL FORM INPUT */}
           <form onSubmit={handleSubmit} className={`backdrop-blur-md border rounded-2xl p-3.5 sm:p-4 shadow-xs shrink-0 ${
@@ -592,6 +628,17 @@ export default function MasterSiswaPage() {
             </div>
 
           </div>
+
+          </>
+        ) : (
+          <KenaikanKelasPanel
+            supabase={supabase}
+            jenjang="SMP"
+            mode="smp"
+            isDarkMode={isDarkMode}
+            onChanged={fetchInitialData}
+          />
+        )}
 
         </main>
 
