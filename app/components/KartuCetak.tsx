@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import DarkModeToggle from '@/app/components/DarkModeToggle'
-import { sortKelas } from '@/lib/utils'
+import { sortKelas, getKelasGradeWeight, compareKelasName } from '@/lib/utils'
 import {
   CreditCard,
   FileText,
@@ -41,12 +41,38 @@ const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 const buildNomorPeserta = (prefix: string, noUrut: string): string =>
   `${(prefix || '').replace(/[^0-9]/g, '')}${noUrut}`
 
+// NIS::Generate Otomatis — Prefix Tahun Ajaran (4 digit) dari tanggal sistem
+// Bulan ≥ 7 (Jul–Des) → YY tahun ini + YY tahun depan (contoh: 2627)
+// Bulan < 7 (Jan–Jun) → YY tahun lalu + YY tahun ini (contoh: 2526)
+const getTahunAjaranPrefix = (): string => {
+  const now = new Date()
+  const month = now.getMonth() + 1 // 1–12
+  const yySekarang = now.getFullYear() % 100
+  const fmt = (n: number) => String(n).padStart(2, '0')
+  if (month >= 7) {
+    return fmt(yySekarang) + fmt((yySekarang + 1) % 100)
+  }
+  return fmt((yySekarang - 1 + 100) % 100) + fmt(yySekarang)
+}
+
+// Kode 2 digit tingkat kelas (VII→07 … XII→12); jatuh ke fallback bila tidak dikenali.
+const getTingkatCode = (
+  namaKelas: string,
+  tingkatDb?: string | null,
+  fallback = 7
+): string => {
+  const w = getKelasGradeWeight(namaKelas, tingkatDb)
+  const valid = w >= 7 && w <= 12 ? w : fallback
+  return String(valid).padStart(2, '0')
+}
+
 type JenisKartu = 'pelajar' | 'ujian' | 'guru'
 
 interface KelasOption {
   id: number
   nama_kelas: string
   jenjang?: string
+  tingkat?: string | null
 }
 
 interface ItemKartu {
@@ -95,12 +121,13 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
   const isSmk = jenjang === 'SMK'
   const sekolahNama = isSmk ? 'SMK MUNA MUSTOFA' : 'SMP MUNA MUSTOFA'
   const sekolahNamaIndo = isSmk ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'
-  const prefixDefaultUjian = isSmk ? '262710' : '262707'
 
   // STATE JENIS KARTU & UJIAN
   const [jenisKartu, setJenisKartu] = useState<JenisKartu>('pelajar')
   const [namaUjian, setNamaUjian] = useState('ASESMEN SUMATIF AKHIR SEMESTER (SAS)')
-  const [prefixNoUjian, setPrefixNoUjian] = useState(prefixDefaultUjian)
+  const [prefixNoUjian, setPrefixNoUjian] = useState(() =>
+    getTahunAjaranPrefix() + (isSmk ? '10' : '07')
+  )
 
   // DATA KEPALA SEKOLAH DARI DATABASE SUPABASE (dipisah per jenjang SMP/SMK)
   const [kepsekSmp, setKepsekSmp] = useState({
@@ -214,7 +241,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
       try {
         const { data, error } = await supabase
           .from('kelas')
-          .select('id, nama_kelas, jenjang')
+          .select('id, nama_kelas, jenjang, tingkat')
           .eq('jenjang', jenjang)
           .order('id', { ascending: true })
 
@@ -248,7 +275,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
     setSelectedKelasNama('')
     setSearchQuery('')
     setCardItems([])
-    setPrefixNoUjian(jenjang === 'SMK' ? '262710' : '262707')
+    setPrefixNoUjian(getTahunAjaranPrefix() + (jenjang === 'SMK' ? '10' : '07'))
   }, [jenjang])
 
   // FETCH DATA KARTU DINAMIS (GURU/SISWA) DENGAN SAFE FALLBACK
@@ -303,13 +330,48 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
             return
           }
 
+          if (!selectedKelasId) {
+            setCardItems([])
+            setLoading(false)
+            return
+          }
+
+          // Tentukan tingkat (7–12) dari kelas terpilih
+          const targetKelas = daftarKelas.find((k) => k.id === Number(selectedKelasId))
+          const tingkatWeight = targetKelas
+            ? getKelasGradeWeight(targetKelas.nama_kelas, targetKelas.tingkat)
+            : 99
+          if (tingkatWeight < 7 || tingkatWeight > 12) {
+            setCardItems([])
+            setLoading(false)
+            return
+          }
+
+          // 1) Ambil SEMUA kelas pada jenjang aktif yang tingkatnya sama (lintas rombel)
+          const { data: kelasLintas, error: errKelas } = await supabase
+            .from('kelas')
+            .select('id, nama_kelas, tingkat')
+            .eq('jenjang', jenjang)
+
+          if (errKelas || !kelasLintas) {
+            setCardItems([])
+            setLoading(false)
+            return
+          }
+
+          const kelasSamaTingkat = (kelasLintas as KelasOption[]).filter(
+            (k) => getKelasGradeWeight(k.nama_kelas, k.tingkat) === tingkatWeight
+          )
+          const kelasIds = kelasSamaTingkat.map((k) => k.id)
+
+          // 2) Ambil semua siswa pada seluruh kelas di tingkat tersebut
           const { data, error } = await supabase
             .from('siswa')
             .select('*')
-            .eq('kelas_id', selectedKelasId)
+            .in('kelas_id', kelasIds)
             .eq('jenjang', jenjang)
 
-          if (!error && data) {
+          if (!error && data && data.length > 0) {
             // Filter definitif: hanya tampilkan siswa sesuai jenjang aktif
             const hanyaSiswaJenjang = (data as SiswaRowUntukKartu[]).filter(
               (s: SiswaRowUntukKartu) => {
@@ -317,20 +379,45 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                 return jenjang === 'SMK' ? sj === 'SMK' : sj !== 'SMK'
               }
             )
+
+            // 3) Urutkan kelas dulu (abjad pada tingkat sama), lalu abjad nama siswa
+            const kelasTerurut = [...kelasSamaTingkat].sort((a, b) =>
+              compareKelasName(a.nama_kelas, b.nama_kelas)
+            )
+            const urutanKelas = new Map<number, number>()
+            kelasTerurut.forEach((k, i) => urutanKelas.set(Number(k.id), i))
+
+            const siswaTerurut = [...hanyaSiswaJenjang].sort((a, b) => {
+              const idxA = urutanKelas.get(Number(a.kelas_id)) ?? 999
+              const idxB = urutanKelas.get(Number(b.kelas_id)) ?? 999
+              if (idxA !== idxB) return idxA - idxB
+              return (a.nama_lengkap || '').localeCompare(b.nama_lengkap || '', 'id')
+            })
+
+            // 4) Nomor urut GLOBAL 3 digit (berlanjut antar rombel)
+            const siswaBernomor = siswaTerurut.map((s, idx) => ({
+              s,
+              noUrut: String(idx + 1).padStart(3, '0'),
+            }))
+
+            // 5) Tampilkan hanya siswa pada kelas terpilih (nomor tetap global)
             const cleanKelas = selectedKelasNama.replace(/^kelas\s+/i, '')
-            const mapped: ItemKartu[] = hanyaSiswaJenjang.map((s: SiswaRowUntukKartu, idx: number) => {
-              const noUrut = String(idx + 1).padStart(3, '0')
-              return {
+            const mapped: ItemKartu[] = siswaBernomor
+              .filter(({ s }) => Number(s.kelas_id) === Number(selectedKelasId))
+              .map(({ s, noUrut }) => ({
                 id: s.id,
                 nama: s.nama_lengkap || s.nama || 'SISWA',
                 nomorId: s.nisn || '-',
                 subInfo: cleanKelas,
-                nomorUjian: jenisKartu === 'ujian' ? buildNomorPeserta(prefixNoUjian, noUrut) : undefined,
+                nomorUjian: jenisKartu === 'ujian'
+                  ? buildNomorPeserta(prefixNoUjian, noUrut)
+                  : undefined,
                 customField: jenisKartu === 'ujian' ? 'Ruang 01 / Sesi 1' : undefined,
-                tipe: 'siswa'
-              }
-            })
+                tipe: 'siswa',
+              }))
             setCardItems(mapped)
+          } else {
+            setCardItems([])
           }
         }
       } catch (err) {
@@ -355,6 +442,11 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
     const foundKelas = daftarKelas.find((k) => k.id === classId)
     if (foundKelas) {
       setSelectedKelasNama(foundKelas.nama_kelas)
+      // NIS::Generate Otomatis 6 Digit Prefix (TahunAjaran + KodeTingkat)
+      setPrefixNoUjian(
+        getTahunAjaranPrefix() +
+          getTingkatCode(foundKelas.nama_kelas, foundKelas.tingkat, isSmk ? 10 : 7)
+      )
     }
   }
 
@@ -423,7 +515,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                       <table style="width: 100%; margin-top: 2pt; font-size: 6.5pt;">
                         ${jenisKartu !== 'ujian' ? `<tr><td style="width: 1.4cm; color: #475569; font-weight: bold;">${jenisKartu === 'guru' ? 'NUPTK' : 'NISN'}</td><td>: <b>${item.nomorId}</b></td></tr>` : ''}
                         <tr><td style="color: #475569; font-weight: bold;">${jenisKartu === 'guru' ? 'JABATAN' : 'KELAS'}</td><td>: <b>${item.subInfo}</b></td></tr>
-                        ${jenisKartu === 'ujian' ? `<tr><td style="color: #047857; font-weight: bold;">NO. PESERTA</td><td>: <b style="color: #047857;">${noUjianFinal}</b></td></tr>` : ''}
+                        ${jenisKartu === 'ujian' ? `<tr><td style="color: #047857; font-weight: bold;">NIS</td><td>: <b style="color: #047857;">${noUjianFinal}</b></td></tr>` : ''}
                         ${jenisKartu === 'ujian' && item.customField ? `<tr><td style="color: #475569; font-weight: bold;">RUANG/SESI</td><td>: <b>${item.customField}</b></td></tr>` : ''}
                       </table>
                     </td>
@@ -517,7 +609,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                 <p class="value-name">${item.nama}</p>
                 <div class="info-container">
                   <div class="info-row"><span class="info-label">KELAS</span><span class="info-val">: ${item.subInfo}</span></div>
-                  <div class="info-row info-highlight"><span class="info-label">NO. PESERTA</span><span class="info-val">: ${noUjianFinal}</span></div>
+                  <div class="info-row info-highlight"><span class="info-label">NIS</span><span class="info-val">: ${noUjianFinal}</span></div>
                   ${item.customField ? `<div class="info-row"><span class="info-label">RUANG/SESI</span><span class="info-val">: ${item.customField}</span></div>` : ''}
                 </div>
               </div>
@@ -1073,7 +1165,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
 
                           {jenisKartu === 'ujian' && (
                             <p className="text-[10px] text-emerald-400 font-bold">
-                              NO. PESERTA: <span className="font-mono">{item.nomorUjian || '-'}</span>
+                              NIS: <span className="font-mono">{item.nomorUjian || '-'}</span>
                             </p>
                           )}
 
@@ -1182,7 +1274,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                 {jenisKartu === 'ujian' && (
                   <>
                     <div>
-                      <label className="font-bold block mb-1 text-emerald-400">Nomor Peserta Ujian:</label>
+                      <label className="font-bold block mb-1 text-emerald-400">NIS:</label>
                       <input
                         type="text"
                         value={editingItem.nomorUjian || ''}
@@ -1331,7 +1423,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                         </p>
                         {jenisKartu === 'ujian' && (
                           <p className="text-[10px] text-emerald-400 font-extrabold">
-                            <b>NO. PESERTA:</b> {selectedModalItem.nomorUjian || '-'}
+                            <b>NIS:</b> {selectedModalItem.nomorUjian || '-'}
                           </p>
                         )}
                         {jenisKartu === 'ujian' && selectedModalItem.customField && (
