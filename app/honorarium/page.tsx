@@ -43,12 +43,12 @@ type DiffParts = string[]
 function diffNum(parts: DiffParts, label: string, oldV: unknown, newV: unknown) {
   const o = Number(oldV) || 0
   const n = Number(newV) || 0
-  if (o !== n) parts.push(`${label} (${o} → ${n})`)
+  if (o !== n) parts.push(`${label} (${o} â†’ ${n})`)
 }
 function diffRupiah(parts: DiffParts, label: string, oldV: unknown, newV: unknown) {
   const o = Number(oldV) || 0
   const n = Number(newV) || 0
-  if (o !== n) parts.push(`${label} (${formatRupiah(o)} → ${formatRupiah(n)})`)
+  if (o !== n) parts.push(`${label} (${formatRupiah(o)} â†’ ${formatRupiah(n)})`)
 }
 
 function formatTanggal(iso?: string | null) {
@@ -78,7 +78,7 @@ function extractSlots(jamKe: unknown): number[] {
   const slots = new Set<number>()
 
   // 2a) Rentang dua angka: "Jam Ke-7 s/d 8" -> 7..8 => {7,8}
-  const rangeRe = /(\d{1,2})\s*(?:s\.?\/?d\.?|sampai|hingga|\bto\b|[-–—])\s*(\d{1,2})/gi
+  const rangeRe = /(\d{1,2})\s*(?:s\.?\/?d\.?|sampai|hingga|\bto\b|[-â€“â€”])\s*(\d{1,2})/gi
   let m: RegExpExecArray | null
   while ((m = rangeRe.exec(cleanStr)) !== null) {
     const a = Number(m[1])
@@ -104,7 +104,7 @@ function extractSlots(jamKe: unknown): number[] {
 const normalizeMapelKey = (s: string) =>
   String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
-// Mapel gabungan jenjang SMK yang diajarkan ke seluruh kelas X–XII SECARA BERSAMAAN
+// Mapel gabungan jenjang SMK yang diajarkan ke seluruh kelas Xâ€“XII SECARA BERSAMAAN
 // dalam satu sesi (mis. PJOK, Qiro'ah, Pramuka). Satu sesi (tanggal + mapel) dihitung
 // TETAP 2 JP, dan tidak boleh diakumulasi meskipun tercatat di beberapa baris jurnal.
 const EXCLUDED_PEMBINA_MAPEL_KEYS = new Set(['pramuka', 'qiroah', 'presentasi'])
@@ -155,7 +155,7 @@ function formatWaktuAudit(iso?: string | null): string {
 const BLN_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 
-const STATUS_BADGE = 'SAH & SUDAH DIBAYARKAN — Disahkan oleh Kepala Sekolah, Bendahara, dan Ketua Yayasan SMP/SMK Muna Mustofa Lampung'
+const STATUS_BADGE = 'SAH & SUDAH DIBAYARKAN â€” Disahkan oleh Kepala Sekolah, Bendahara, dan Ketua Yayasan SMP/SMK Muna Mustofa Lampung'
 
 // Nama pejabat penandatangan (Kepala Sekolah / Bendahara / Ketua Yayasan) kini
 // diambil LANGSUNG dari kolom `jabatan` tabel public.guru (lihat resolver
@@ -287,7 +287,7 @@ function AuditLogBox({ logs, isDarkMode }: { logs: AuditLogRow[]; isDarkMode: bo
           {logs.map((lg) => (
             <li key={lg.id} className="flex items-start gap-2 text-[10px] leading-snug">
               <span className="font-black text-emerald-400 whitespace-nowrap shrink-0">{formatWaktuAudit(lg.created_at)}</span>
-              <span className="text-slate-500 shrink-0">—</span>
+              <span className="text-slate-500 shrink-0">â€”</span>
               <span className="flex-1 font-medium text-slate-300">
                 {lg.nama_lengkap}: <span className="text-slate-400">{lg.aksi}</span>
               </span>
@@ -480,7 +480,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                   <td className={`${tdCls} text-right`}>
                     {r.potongan.length > 0
                       ? r.potongan.map((p) => `${p.nama}: ${formatRupiah(p.hasil)}`).map((ln, k) => <div key={k}>{ln}</div>)
-                      : '–'}
+                      : 'â€“'}
                   </td>
                   <td className={`${tdCls} text-right font-black`}>{formatRupiah(r.total_bersih)}</td>
                 </tr>
@@ -499,7 +499,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
     )
   }
 
-  // mode === 'slip' — slip tanda terima per penerima
+  // mode === 'slip' â€” slip tanda terima per penerima
   return (
     <div className="hidden print:block bg-white text-black p-2" style={{ fontFamily: "'Times New Roman', serif" }}>
       <style>{`@media print { @page { size: ${paperCss} !important; margin: 8mm !important; } .no-break { break-inside: avoid; } }`}</style>
@@ -525,8 +525,8 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                   const trAmt = toNum(r.transport_hari) * toNum(tarifTransport)
                   return (
                     <>
-                      {rowsL('Jam Mengajar (JP)', `${r.jumlah_jp} JP × ${formatRupiah(tarifJp)}`, formatRupiah(jpAmt))}
-                      {rowsL('Transport Harian', `${r.transport_hari} hari × ${formatRupiah(tarifTransport)}`, formatRupiah(trAmt))}
+                      {rowsL('Jam Mengajar (JP)', `${r.jumlah_jp} JP Ã— ${formatRupiah(tarifJp)}`, formatRupiah(jpAmt))}
+                      {rowsL('Transport Harian', `${r.transport_hari} hari Ã— ${formatRupiah(tarifTransport)}`, formatRupiah(trAmt))}
                       {rowsL('Tunjangan Jabatan', '', formatRupiah(r.tunjangan_jabatan))}
                       {rowsL('Tunjangan Masa Kerja', '', formatRupiah(r.tunjangan_masa_kerja))}
                       {rowsL('Pembina', '', formatRupiah(r.pembina))}
@@ -562,7 +562,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                 )
               }
 
-              // Penerima = Kepala Sekolah → gabung jadi satu blok (pakai stempel), Bendahara tersendiri.
+              // Penerima = Kepala Sekolah â†’ gabung jadi satu blok (pakai stempel), Bendahara tersendiri.
               if (sameKepsek) {
                 return (
                   <div className="flex justify-between items-end pt-8 mt-4 no-break">
@@ -583,7 +583,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                 )
               }
 
-              // Penerima = Bendahara → gabung jadi satu blok, Kepala Sekolah tersendiri (tetap pakai stempel).
+              // Penerima = Bendahara â†’ gabung jadi satu blok, Kepala Sekolah tersendiri (tetap pakai stempel).
               if (sameBendahara) {
                 return (
                   <div className="flex justify-between items-end pt-8 mt-4 no-break">
@@ -651,7 +651,7 @@ export default function HonorariumPage() {
   const [loading, setLoading] = useState(true)
 
   // Identitas 3 Pengurus Utama ditentukan via pencocokan nama (case-insensitive, trim +
-  // rapatkan spasi) terhadap whitelist tetap PENGURUS_NAMES — BUKAN berdasarkan role akun.
+  // rapatkan spasi) terhadap whitelist tetap PENGURUS_NAMES â€” BUKAN berdasarkan role akun.
   // Pattern sama dengan server-side public.honorarium_current_access() (docs/migrasi-
   // rpc-otorisasi-honor.sql). Operator biasa TIDAK otomatis menjadi Pengurus Utama.
   const isPengurusUtama = isPengurusName(currentName)
@@ -664,7 +664,7 @@ export default function HonorariumPage() {
   const periode = `${periodeTahun}-${periodeBulan}`
 
   // Batas tanggal 27 untuk persetujuan Kepala Sekolah (dihitung setelah hydration,
-  // bukan saat prerender — menghindari "unstable value new Date()" di Next.js 16).
+  // bukan saat prerender â€” menghindari "unstable value new Date()" di Next.js 16).
   const [canKirimKepsek, setCanKirimKepsek] = useState(false)
   useEffect(() => {
     const [cY, cM] = periode.split('-').map(Number)
@@ -1010,7 +1010,7 @@ export default function HonorariumPage() {
     )
 
     // Deduplikasi anti-dobel kelas gabungan: himpunan slot jam per tanggal per guru.
-    // Satu kegiatan gabungan (ekskul Pramuka/Qiroah VII–XII, Presentasi X–XII) tercatat
+    // Satu kegiatan gabungan (ekskul Pramuka/Qiroah VIIâ€“XII, Presentasi Xâ€“XII) tercatat
     // di beberapa baris kelas sekaligus pada jam yang sama; slot jam digabung lewat Set
     // sehingga tetap dihitung 1x (mis. {7,8} = 2 JP), bukan dikali jumlah kelas/bukan 1 JP.
     const jurnalMap = new Map<string, { dateSlots: Map<string, Set<number>> }>()
@@ -1031,7 +1031,7 @@ export default function HonorariumPage() {
       if (data) {
         // --- Muat mapel resmi per guru (guru_mapel + mapel) untuk validasi JP riil ---
         // Daftar mata pelajaran resmi yang diampu masing-masing guru diperoleh dari
-        // tabel relasi `guru_mapel` (guru_id → mapel_id) yang digabung dengan tabel
+        // tabel relasi `guru_mapel` (guru_id â†’ mapel_id) yang digabung dengan tabel
         // `mapel` untuk mendapatkan nama mapel-nya.
         const [guruMapelRes, mapelRes] = await Promise.all([
           supabase.from('guru_mapel').select('guru_id, mapel_id'),
@@ -1045,7 +1045,7 @@ export default function HonorariumPage() {
           }
         })
 
-        // guru_id → himpunan nama mapel resmi (ternormalisasi: huruf kecil + rapatkan spasi).
+        // guru_id â†’ himpunan nama mapel resmi (ternormalisasi: huruf kecil + rapatkan spasi).
         const guruMapelByGuru = new Map<number, Set<string>>()
         ;(guruMapelRes.data || []).forEach((gm: any) => {
           const gid = Number(gm.guru_id)
@@ -1057,7 +1057,7 @@ export default function HonorariumPage() {
           guruMapelByGuru.get(gid)!.add(norm)
         })
 
-        // email → guru_id agar bisa mencocokkan mapel jurnal ke guru pemiliknya.
+        // email â†’ guru_id agar bisa mencocokkan mapel jurnal ke guru pemiliknya.
         const emailToGuruId = new Map<string, number>()
         guruList.forEach((g) => {
           if (g.email) emailToGuruId.set(String(g.email).trim().toLowerCase(), g.id)
@@ -1077,14 +1077,14 @@ export default function HonorariumPage() {
           const kelasTxt = String(row.kelas ?? '').trim().toLowerCase()
           const materiTxt = String(row.materi ?? '').trim().toLowerCase()
 
-          // 1) mapel atau kelas kosong (null/string kosong) → abaikan
+          // 1) mapel atau kelas kosong (null/string kosong) â†’ abaikan
           if (!mapelTxt || !kelasTxt) return
 
           // 2) kata kunci PIKET/IZIN pada materi (case-insensitive, semua variasi):
-          //    'TIDAK HADIR', 'IZIN', 'IJIN', 'PRESENSI KELAS' → abaikan
+          //    'TIDAK HADIR', 'IZIN', 'IJIN', 'PRESENSI KELAS' â†’ abaikan
           if (/(tidak hadir|\bizin\b|\bijin\b|presensi kelas)/i.test(materiTxt)) return
 
-          // 3) kegiatan luar kelas / ekskul penuh 'Tadabur Alam' (materi atau mapel) → abaikan
+          // 3) kegiatan luar kelas / ekskul penuh 'Tadabur Alam' (materi atau mapel) â†’ abaikan
           if (materiTxt.includes('tadabur alam') || mapelTxt.includes('tadabur alam')) return
 
           const jenjangTxt = String(row.jenjang ?? '').trim().toUpperCase();
@@ -1092,11 +1092,11 @@ export default function HonorariumPage() {
           if (isPembina) return;
 
           // 4) VALIDASI MAPEL RESMI GURU:
-          //    Jika jurnal mencatat mapel yang BUKAN milik guru tsb. → itu inputan guru
+          //    Jika jurnal mencatat mapel yang BUKAN milik guru tsb. â†’ itu inputan guru
           //    piket menggantikan guru lain (mis. PJOK/PKn/Bahasa Arab/Matematika saat
-          //    menjaga ujian/piket) → jangan dihitung ke JP mengajar.
+          //    menjaga ujian/piket) â†’ jangan dihitung ke JP mengajar.
           //    Pengecualian: kegiatan gabungan resmi (Pramuka/Qiro'ah/Presentasi).
-          const mapelTxtClean = mapelTxt.replace(/['’‘`]/g, '')
+          const mapelTxtClean = mapelTxt.replace(/['â€™â€˜`]/g, '')
           const isKegiatanGabungan = COMBINED_KEYWORDS.some((k) => mapelTxtClean.includes(k))
           if (!isKegiatanGabungan) {
             const guruId = emailToGuruId.get(em)
@@ -1107,7 +1107,7 @@ export default function HonorariumPage() {
                 Array.from(officialSet).some(
                   (off) => off.includes(mapelTxt) || mapelTxt.includes(off)
                 )
-              if (!matchResmi) return // inputan guru piket → tidak dihitung
+              if (!matchResmi) return // inputan guru piket â†’ tidak dihitung
             }
           }
 
@@ -1131,7 +1131,7 @@ export default function HonorariumPage() {
     // --- ABSENSI GURU (SUMBER UTAMA TRANSPORT HARI) -------------------------
     // Kehadiran 'Hadir' dari tabel absensi_guru menjadi sumber utama hari
     // transport. Tanggal unik (tanggal,guru_email) digabung ke himpunan hari
-    // transport yang sama dengan jurnal → anti double-count otomatis
+    // transport yang sama dengan jurnal â†’ anti double-count otomatis
     // (1 hari tetap 1 hari). Jika tabel absensi_guru belum dibuat, dimuat aman
     // (graceful fallback).
     // ------------------------------------------------------------------------
@@ -1168,7 +1168,7 @@ export default function HonorariumPage() {
               })
             }
           } catch {
-            /* tabel absensi_guru belum dibuat → abaikan */
+            /* tabel absensi_guru belum dibuat â†’ abaikan */
           }
         }
       }
@@ -1213,8 +1213,8 @@ export default function HonorariumPage() {
         }
       })
 
-      // Kehadiran 'Hadir' absensi_guru → tambah ke hari transport (TIDAK menambah JP).
-      // Nilai Set `transportDates` yang sama dipakai jurnal/tugas → anti double-count.
+      // Kehadiran 'Hadir' absensi_guru â†’ tambah ke hari transport (TIDAK menambah JP).
+      // Nilai Set `transportDates` yang sama dipakai jurnal/tugas â†’ anti double-count.
       const absensiDates = absensiGuruByEmail.get(email)
       if (absensiDates && absensiDates.size > 0) {
         absensiDates.forEach((tgl) => transportDates.add(tgl))
@@ -1259,8 +1259,8 @@ export default function HonorariumPage() {
       rows.forEach((r) => {
         const old = oldMap.get(r.guru_id)
         if (old) {
-          if (old.jumlah_jp !== r.jumlah_jp) parts.push(`JP ${guruNama(r.guru_id)} (${old.jumlah_jp} → ${r.jumlah_jp})`)
-          if (old.transport_hari !== r.transport_hari) parts.push(`Transport ${guruNama(r.guru_id)} (${old.transport_hari} → ${r.transport_hari})`)
+          if (old.jumlah_jp !== r.jumlah_jp) parts.push(`JP ${guruNama(r.guru_id)} (${old.jumlah_jp} â†’ ${r.jumlah_jp})`)
+          if (old.transport_hari !== r.transport_hari) parts.push(`Transport ${guruNama(r.guru_id)} (${old.transport_hari} â†’ ${r.transport_hari})`)
         } else if (r.jumlah_jp > 0 || r.transport_hari > 0) {
           parts.push(`JP ${guruNama(r.guru_id)} (baru ${r.jumlah_jp}, transport ${r.transport_hari})`)
         }
@@ -1321,8 +1321,8 @@ export default function HonorariumPage() {
       targetRows.forEach((r) => {
         const old = baseMap.get(r.guru_id)
         if (old) {
-          if (old.jumlah_jp !== r.jumlah_jp) parts.push(`JP ${guruNama(r.guru_id)} (${old.jumlah_jp} → ${r.jumlah_jp})`)
-          if (old.transport_hari !== r.transport_hari) parts.push(`Transport ${guruNama(r.guru_id)} (${old.transport_hari} → ${r.transport_hari})`)
+          if (old.jumlah_jp !== r.jumlah_jp) parts.push(`JP ${guruNama(r.guru_id)} (${old.jumlah_jp} â†’ ${r.jumlah_jp})`)
+          if (old.transport_hari !== r.transport_hari) parts.push(`Transport ${guruNama(r.guru_id)} (${old.transport_hari} â†’ ${r.transport_hari})`)
         }
       })
       const aksi = parts.length
@@ -1340,7 +1340,7 @@ export default function HonorariumPage() {
   // KONFIRMASI SUDAH DIBAYARKAN (kunci permanen PAID)
   // =====================================================================
   // =====================================================================
-  // TAB MASTER — PENGATURAN, POTONGAN, PENERIMA
+  // TAB MASTER â€” PENGATURAN, POTONGAN, PENERIMA
   // =====================================================================
   const setPengaturanField = (key: keyof PengaturanRow, value: number) => {
     setPengaturan((prev) => ({ ...(prev as PengaturanRow), [key]: value }))
@@ -1386,7 +1386,7 @@ export default function HonorariumPage() {
   }
 
   // =====================================================================
-  // TAB REKAP — TUGAS TAMBAHAN
+  // TAB REKAP â€” TUGAS TAMBAHAN
   // =====================================================================
   const reloadTugas = async () => {
     const { data } = await supabase
@@ -1660,10 +1660,10 @@ export default function HonorariumPage() {
         if (!np) {
           parts.push(`Hapus Potongan "${op.nama}"`)
         } else {
-          if (op.nama !== np.nama) parts.push(`Ubah Nama Potongan "${op.nama}" → "${np.nama}"`)
+          if (op.nama !== np.nama) parts.push(`Ubah Nama Potongan "${op.nama}" â†’ "${np.nama}"`)
           diffRupiah(parts, `Potongan ${np.nama}: Nilai`, op.nilai, np.nilai)
-          if (op.tipe !== np.tipe) parts.push(`Potongan ${np.nama}: Tipe (${op.tipe} → ${np.tipe})`)
-          if (op.aktif !== np.aktif) parts.push(`Potongan ${np.nama}: Aktif (${op.aktif ? 'YA' : 'TIDAK'} → ${np.aktif ? 'YA' : 'TIDAK'})`)
+          if (op.tipe !== np.tipe) parts.push(`Potongan ${np.nama}: Tipe (${op.tipe} â†’ ${np.tipe})`)
+          if (op.aktif !== np.aktif) parts.push(`Potongan ${np.nama}: Aktif (${op.aktif ? 'YA' : 'TIDAK'} â†’ ${np.aktif ? 'YA' : 'TIDAK'})`)
         }
       })
       potonganList.forEach((np) => {
@@ -1681,9 +1681,9 @@ export default function HonorariumPage() {
           diffRupiah(parts, `${gm}: Tunjangan Masa Kerja`, op.tunjangan_masa_kerja, np.tunjangan_masa_kerja)
           diffRupiah(parts, `${gm}: Pembina`, op.pembina, np.pembina)
           diffRupiah(parts, `${gm}: Infaq`, op.infaq_nominal, np.infaq_nominal)
-          if (op.wali_kelas !== np.wali_kelas) parts.push(`${gm}: Wali Kelas (${op.wali_kelas ? 'YA' : 'TIDAK'} → ${np.wali_kelas ? 'YA' : 'TIDAK'})`)
-          if (op.status !== np.status) parts.push(`${gm}: Status (${op.status} → ${np.status})`)
-          if (op.aktif !== np.aktif) parts.push(`${gm}: Aktif (${op.aktif ? 'YA' : 'TIDAK'} → ${np.aktif ? 'YA' : 'TIDAK'})`)
+          if (op.wali_kelas !== np.wali_kelas) parts.push(`${gm}: Wali Kelas (${op.wali_kelas ? 'YA' : 'TIDAK'} â†’ ${np.wali_kelas ? 'YA' : 'TIDAK'})`)
+          if (op.status !== np.status) parts.push(`${gm}: Status (${op.status} â†’ ${np.status})`)
+          if (op.aktif !== np.aktif) parts.push(`${gm}: Aktif (${op.aktif ? 'YA' : 'TIDAK'} â†’ ${np.aktif ? 'YA' : 'TIDAK'})`)
         }
       })
       const aksi = parts.length
@@ -1718,7 +1718,7 @@ export default function HonorariumPage() {
 
   // Baris yang dicetak pada slip tanda terima.
   // - Admin/Pengurus/Kepala Sekolah/Bendahara/Yayasan (showFullRekap): semua penerima
-  //   (bisa dipersempit ke satu guru via tombol cetak per baris → slipGuruId).
+  //   (bisa dipersempit ke satu guru via tombol cetak per baris â†’ slipGuruId).
   // - Guru biasa: HANYA slip miliknya sendiri (dicocokkan via guru_id / nama akun login),
   //   sehingga tidak pernah ikut merender slip guru lain.
   const slipRows = showFullRekap
@@ -1793,7 +1793,7 @@ export default function HonorariumPage() {
             <div>
               <h1 className="text-sm font-extrabold leading-tight">HONORARIUM GURU &amp; STAF</h1>
               <p className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                Rekap gabungan SMP &amp; SMK Muna Mustofa — {bulanLabel} {periodeTahun}
+                Rekap gabungan SMP &amp; SMK Muna Mustofa â€” {bulanLabel} {periodeTahun}
               </p>
             </div>
           </div>
@@ -1801,10 +1801,10 @@ export default function HonorariumPage() {
             <DarkModeToggle />
             <span className={`hidden sm:flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-300' : 'bg-white border-slate-300 text-emerald-700'}`}>
               <ShieldCheck className="w-3.5 h-3.5" />
-              {isPengurusUtama ? 'PENGURUS UTAMA' : isOperator ? 'OPERATOR · VIEW ONLY' : 'GURU / STAF'}
+              {isPengurusUtama ? 'PENGURUS UTAMA' : isOperator ? 'OPERATOR Â· VIEW ONLY' : 'GURU / STAF'}
             </span>
             <Link href="/" className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:text-slate-950'}`}>
-              ← Dashboard
+              â† Dashboard
             </Link>
           </div>
         </header>
@@ -1904,7 +1904,7 @@ export default function HonorariumPage() {
                 {pengaturan?.updated_by && (
                   <p className={`text-[9px] font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
                     <Info className="w-3 h-3 inline-block align-middle mr-1" />
-                    Terakhir diubah oleh {pengaturan.updated_by} · {formatTanggal(pengaturan.updated_at)}
+                    Terakhir diubah oleh {pengaturan.updated_by} Â· {formatTanggal(pengaturan.updated_at)}
                   </p>
                 )}
               </div>
@@ -2041,7 +2041,7 @@ export default function HonorariumPage() {
               {(isKepalaSekolah || isBendahara || isYayasan) && (
                 <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-xs font-extrabold text-indigo-400">Alur Persetujuan — {bulanLabel} {periodeTahun}</h3>
+                    <h3 className="text-xs font-extrabold text-indigo-400">Alur Persetujuan â€” {bulanLabel} {periodeTahun}</h3>
                     <span className={`text-[10px] font-black px-2 py-1 rounded-full ${statusPeriodeCls}`}>
                       {statusPeriode}
                     </span>
@@ -2116,7 +2116,7 @@ export default function HonorariumPage() {
                     )}
                     {!showBendaharaTtd && (
                       <span className={`text-[9px] font-bold ml-auto ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {!showKepsekTtd ? '• Menunggu Kepala Sekolah' : !showYayasanTtd ? `• Disahkan K.S. ${rekapRows[0]?.disahkan_kepsek_by || rekapRows[0]?.confirmed_by || '-'} ${formatTanggal(rekapRows[0]?.disahkan_kepsek_at || rekapRows[0]?.confirmed_at)}` : `• Disahkan Yayasan ${rekapRows[0]?.disahkan_yayasan_by || '-'} ${formatTanggal(rekapRows[0]?.disahkan_yayasan_at)}`}
+                        {!showKepsekTtd ? 'â€¢ Menunggu Kepala Sekolah' : !showYayasanTtd ? `â€¢ Disahkan K.S. ${rekapRows[0]?.disahkan_kepsek_by || rekapRows[0]?.confirmed_by || '-'} ${formatTanggal(rekapRows[0]?.disahkan_kepsek_at || rekapRows[0]?.confirmed_at)}` : `â€¢ Disahkan Yayasan ${rekapRows[0]?.disahkan_yayasan_by || '-'} ${formatTanggal(rekapRows[0]?.disahkan_yayasan_at)}`}
                       </span>
                     )}
                   </div>
@@ -2138,14 +2138,14 @@ export default function HonorariumPage() {
                     >
                       <CalendarDays className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Buka Absensi Guru
                     </Link>
-                    <button onClick={handleAutoCalc} disabled={saving || isPaidPeriode || !!stageYayasan || !canManageRekap}
+                    <button onClick={handleAutoCalc} disabled={saving || isPaidPeriode || !!stageYayasan || (!canManageRekap && !(isYayasan && !!stageKepsek))}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40 cursor-pointer">
                       <RefreshCw className={`w-3.5 h-3.5 inline-block align-middle mr-1 ${saving ? 'animate-spin' : ''}`} /> Tarik &amp; Hitung Otomatis
                     </button>
                     <span className={`text-[10px] font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>
                       {jurnalSahCount > 0 ? `${jurnalSahCount} entri jurnal sah ditarik` : 'Belum ada penarikan jurnal'}
                     </span>
-                    <button onClick={handleSaveRekap} disabled={saving || isPaidPeriode || !!stageYayasan || !canManageRekap}
+                    <button onClick={handleSaveRekap} disabled={saving || isPaidPeriode || !!stageYayasan || (!canManageRekap && !(isYayasan && !!stageKepsek))}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 cursor-pointer">
                       <Save className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Simpan Rekap
                     </button>
@@ -2163,8 +2163,8 @@ export default function HonorariumPage() {
                     <span className={`text-[10px] font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Ukuran Kertas:</span>
                     <select value={paperSize} onChange={(e) => setPaperSize(e.target.value as 'f4' | 'a4')}
                       className={`border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`}>
-                      <option value="f4">F4 / Folio Landscape (330×215mm)</option>
-                      <option value="a4">A4 Landscape (297×210mm)</option>
+                      <option value="f4">F4 / Folio Landscape (330Ã—215mm)</option>
+                      <option value="a4">A4 Landscape (297Ã—210mm)</option>
                     </select>
                     <button onClick={() => { if (!stageKepsek) return showToast('err', 'Cetak hanya bisa dilakukan setelah periode disetujui Kepala Sekolah.'); triggerPrint('daftar') }}
                       className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
@@ -2228,7 +2228,7 @@ export default function HonorariumPage() {
                             </tr>
                           )}
                           {rekapRows.map((r) => {
-                            const disabled = isPaidPeriode || !!stageYayasan || !canManageRekap
+                            const disabled = isPaidPeriode || !!stageYayasan || (!canManageRekap && !(isYayasan && !!stageKepsek))
                             const cellCls = `w-20 border rounded px-1.5 py-0.5 text-[10px] font-bold focus:outline-none ${disabled ? 'opacity-50' : ''} ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`
                             const nama = r.guru_nama || guruNama(r.guru_id)
                             return (
@@ -2314,7 +2314,7 @@ export default function HonorariumPage() {
                                         <span className="font-bold">{p.tipe === 'persen' ? p.nilai + '%' : formatRupiah(p.nilai)}</span>
                                       </div>
                                     ))}
-                                    {r.potongan.length === 0 && <span className="text-slate-500">—</span>}
+                                    {r.potongan.length === 0 && <span className="text-slate-500">â€”</span>}
                                   </div>
                                 </td>
                                 <td className="p-1.5 text-right font-black text-rose-400 whitespace-nowrap">{formatRupiah(r.total_potongan)}</td>
@@ -2361,7 +2361,7 @@ export default function HonorariumPage() {
                       <div>
                         <h3 className="text-sm font-extrabold">{guruNama(currentGuruId ?? 0)}</h3>
                         <p className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                          Rincian Honorarium Pribadi — {bulanLabel} {periodeTahun}
+                          Rincian Honorarium Pribadi â€” {bulanLabel} {periodeTahun}
                         </p>
                       </div>
                       {personalRow?.status === 'PAID' && (
@@ -2393,8 +2393,8 @@ export default function HonorariumPage() {
                                 )
                                 return (
                                   <>
-                                    {rowL('Jam Mengajar (JP)', `${personalRow.jumlah_jp} JP × ${formatRupiah(tj)}`, formatRupiah(personalRow.jumlah_jp * tj))}
-                                    {rowL('Transport Harian', `${personalRow.transport_hari} hari × ${formatRupiah(tt)}`, formatRupiah(personalRow.transport_hari * tt))}
+                                    {rowL('Jam Mengajar (JP)', `${personalRow.jumlah_jp} JP Ã— ${formatRupiah(tj)}`, formatRupiah(personalRow.jumlah_jp * tj))}
+                                    {rowL('Transport Harian', `${personalRow.transport_hari} hari Ã— ${formatRupiah(tt)}`, formatRupiah(personalRow.transport_hari * tt))}
                                     {rowL('Tunjangan Jabatan', '', formatRupiah(personalRow.tunjangan_jabatan))}
                                     {rowL('Tunjangan Masa Kerja', '', formatRupiah(personalRow.tunjangan_masa_kerja))}
                                     {rowL('Pembina', '', formatRupiah(personalRow.pembina))}
@@ -2416,15 +2416,15 @@ export default function HonorariumPage() {
                         {personalRow.updated_by && (
                           <p className={`text-[9px] font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
                             <Info className="w-3 h-3 inline-block align-middle mr-1" />
-                            Terakhir diperbarui oleh {personalRow.updated_by} · {formatTanggal(personalRow.updated_at)}
+                            Terakhir diperbarui oleh {personalRow.updated_by} Â· {formatTanggal(personalRow.updated_at)}
                           </p>
                         )}
                         <div className={`flex flex-wrap items-center gap-2 pt-2 border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
                           <span className={`text-[10px] font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Ukuran Kertas:</span>
                           <select value={paperSize} onChange={(e) => setPaperSize(e.target.value as 'f4' | 'a4')}
                             className={`border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`}>
-                            <option value="f4">F4 / Folio Landscape (330×215mm)</option>
-                            <option value="a4">A4 Landscape (297×210mm)</option>
+                            <option value="f4">F4 / Folio Landscape (330Ã—215mm)</option>
+                            <option value="a4">A4 Landscape (297Ã—210mm)</option>
                           </select>
                           <button onClick={printOwnSlip} className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
                             <FileCheck2 className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Cetak Slip Pribadi
@@ -2475,7 +2475,7 @@ export default function HonorariumPage() {
                         <span className="text-[11px] font-black tracking-wide text-emerald-600">{STATUS_BADGE}</span>
                       </div>
                       <p className={`text-[10px] font-bold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                        Periode {riwayatPeriode} · KS {formatTanggal(riwayatList[0]?.disahkan_kepsek_at)} · Yayasan {formatTanggal(riwayatList[0]?.disahkan_yayasan_at)} · Dibayar {formatTanggal(riwayatList[0]?.dibayar_bendahara_at)}
+                        Periode {riwayatPeriode} Â· KS {formatTanggal(riwayatList[0]?.disahkan_kepsek_at)} Â· Yayasan {formatTanggal(riwayatList[0]?.disahkan_yayasan_at)} Â· Dibayar {formatTanggal(riwayatList[0]?.dibayar_bendahara_at)}
                       </p>
                     </div>
                   </div>
@@ -2518,9 +2518,9 @@ export default function HonorariumPage() {
                               <td className="p-1.5 text-right text-rose-400">{formatRupiah(r.total_potongan)}</td>
                               <td className="p-1.5 text-right font-black text-emerald-400">{formatRupiah(r.total_bersih)}</td>
                               <td className="p-1.5 text-[10px] text-slate-400 space-y-0.5">
-                                <div><span className="font-bold">KS:</span> {r.disahkan_kepsek_by || '-'} — {formatTanggal(r.disahkan_kepsek_at)}</div>
-                                <div><span className="font-bold">Yayasan:</span> {r.disahkan_yayasan_by || '-'} — {formatTanggal(r.disahkan_yayasan_at)}</div>
-                                <div><span className="font-bold">Bendahara:</span> {r.dibayar_bendahara_by || '-'} — {formatTanggal(r.dibayar_bendahara_at)}</div>
+                                <div><span className="font-bold">KS:</span> {r.disahkan_kepsek_by || '-'} â€” {formatTanggal(r.disahkan_kepsek_at)}</div>
+                                <div><span className="font-bold">Yayasan:</span> {r.disahkan_yayasan_by || '-'} â€” {formatTanggal(r.disahkan_yayasan_at)}</div>
+                                <div><span className="font-bold">Bendahara:</span> {r.dibayar_bendahara_by || '-'} â€” {formatTanggal(r.dibayar_bendahara_at)}</div>
                               </td>
                             </tr>
                           ))}
@@ -2537,7 +2537,7 @@ export default function HonorariumPage() {
                       {riwayatList.filter((r) => r.guru_id === currentGuruId).map((r) => (
                         <div key={r.guru_id} className="space-y-1">
                           <p className="text-xs font-extrabold">{guruNama(r.guru_id)}</p>
-                          <p className="text-[11px] text-slate-400">JP: {r.jumlah_jp} · Transport: {r.transport_hari} hari</p>
+                          <p className="text-[11px] text-slate-400">JP: {r.jumlah_jp} Â· Transport: {r.transport_hari} hari</p>
                           <p className="text-[11px] text-slate-400">Total Kotor: {formatRupiah(r.jumlah_jp * n(pengaturan?.tarif_jp) + r.transport_hari * n(pengaturan?.tarif_transport_harian) + r.tunjangan_jabatan + r.tunjangan_masa_kerja + r.pembina + r.wali_kelas + r.tugas_tambahan)}</p>
                           <p className="text-[11px] text-rose-400">Potongan: {formatRupiah(r.total_potongan)}</p>
                           <p className="text-sm font-black text-emerald-400">Total Bersih: {formatRupiah(r.total_bersih)}</p>
@@ -2603,7 +2603,7 @@ export default function HonorariumPage() {
                         onClick={() => toggleTugasGuru(g.id)}
                         className={`text-left text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition ${on ? 'bg-indigo-600 text-white border-indigo-600' : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-300 text-slate-700'}`}
                       >
-                        {on ? '✓ ' : ''}{g.nama_lengkap}
+                        {on ? 'âœ“ ' : ''}{g.nama_lengkap}
                       </button>
                     )
                   })}
@@ -2631,7 +2631,7 @@ export default function HonorariumPage() {
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3" onClick={() => setDetailGuruId(null)}>
             <div className={`w-full max-w-lg rounded-2xl border shadow-2xl max-h-[85vh] overflow-y-auto p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200'}`} onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-extrabold">Detail Honor — {guruNama(detailGuruId)}</h3>
+                <h3 className="text-sm font-extrabold">Detail Honor â€” {guruNama(detailGuruId)}</h3>
                 <button onClick={() => setDetailGuruId(null)} className="text-slate-500 hover:text-slate-900 cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -2673,7 +2673,7 @@ export default function HonorariumPage() {
                   <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
                     {drow.detailJp.map((d, i) => (
                       <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
-                        <span>{formatTanggalSingkat(d.tanggal)} — Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
+                        <span>{formatTanggalSingkat(d.tanggal)} â€” Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
                       </div>
                     ))}
                   </div>

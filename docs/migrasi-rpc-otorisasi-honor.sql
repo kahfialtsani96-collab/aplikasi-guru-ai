@@ -168,8 +168,11 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.honorarium_save_master(jsonb, jsonb, jsonb) TO authenticated;
 
 -- ============================================================================
--- 3. SIMPAN REKAP BULANAN — Pengurus/Operator
---    Menolak jika periode sudah melewati persetujuan Yayasan / PAID (terkunci).
+-- 3. SIMPAN REKAP BULANAN — Pengurus/Operator atau Yayasan (tahap Yayasan)
+--    Pengurus/Operator: selalu boleh menyimpan.
+--    Yayasan: boleh menyimpan HANYA untuk periode yang sudah disahkan Kepsek dan
+--    belum disahkan Yayasan. Menolak jika periode sudah melewati persetujuan
+--    Yayasan / PAID (terkunci).
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.honorarium_save_rekap(
   p_rows jsonb
@@ -185,8 +188,20 @@ DECLARE
 BEGIN
   SELECT * INTO acc FROM public.honorarium_current_access();
   IF NOT acc.can_manage THEN
-    RAISE EXCEPTION 'Akses ditolak: hanya Pengurus/Operator yang dapat menyimpan Rekap'
-      USING ERRCODE = '42501';
+    IF acc.jabatan NOT LIKE '%yayasan%' THEN
+      RAISE EXCEPTION 'Akses ditolak: hanya Pengurus/Operator atau Yayasan yang dapat menyimpan Rekap'
+        USING ERRCODE = '42501';
+    END IF;
+    -- Yayasan hanya boleh mengedit periode yang SUDAH disahkan Kepala Sekolah.
+    IF EXISTS (
+      SELECT 1
+      FROM public.honorarium_rekap r
+      WHERE r.periode IN (SELECT x->>'periode' FROM jsonb_array_elements(p_rows) x)
+        AND (r.disahkan_kepsek_at IS NULL AND r.confirmed_at IS NULL)
+    ) THEN
+      RAISE EXCEPTION 'Periode belum disahkan Kepala Sekolah — Yayasan belum dapat mengedit'
+        USING ERRCODE = '42501';
+    END IF;
   END IF;
   v_by := acc.nama_txt;
 
