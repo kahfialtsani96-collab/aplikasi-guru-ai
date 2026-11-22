@@ -121,9 +121,19 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
   // STATE JENIS KARTU & UJIAN
   const [jenisKartu, setJenisKartu] = useState<JenisKartu>('pelajar')
   const [namaUjian, setNamaUjian] = useState('ASESMEN SUMATIF AKHIR SEMESTER (SAS)')
-  const [prefixNoUjian, setPrefixNoUjian] = useState(() =>
-    getTahunAjaranPrefix() + (isSmk ? '10' : '07')
-  )
+  const [prefixNoUjian, setPrefixNoUjian] = useState('')
+  // Prefix Tahun Ajaran dihitung di client-side via useEffect agar aman saat
+  // static prerendering (menghindari `new Date()` di server render/SSG).
+  const [tahunAjaranPrefix, setTahunAjaranPrefix] = useState('')
+  useEffect(() => {
+    setTahunAjaranPrefix(getTahunAjaranPrefix())
+  }, [])
+  useEffect(() => {
+    // Set prefix awal setelah prefix tahun ajaran tersedia (client-side), hanya sekali.
+    if (tahunAjaranPrefix && !prefixNoUjian) {
+      setPrefixNoUjian(tahunAjaranPrefix + (isSmk ? '10' : '07'))
+    }
+  }, [tahunAjaranPrefix, prefixNoUjian, isSmk])
 
   // DATA KEPALA SEKOLAH DARI DATABASE SUPABASE (dipisah per jenjang SMP/SMK)
   const [kepsekSmp, setKepsekSmp] = useState({
@@ -271,7 +281,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
     setSelectedKelasNama('')
     setSearchQuery('')
     setCardItems([])
-    setPrefixNoUjian(getTahunAjaranPrefix() + (jenjang === 'SMK' ? '10' : '07'))
+    setPrefixNoUjian((tahunAjaranPrefix || getTahunAjaranPrefix()) + (jenjang === 'SMK' ? '10' : '07'))
   }, [jenjang])
 
   // FETCH DATA KARTU DINAMIS (GURU/SISWA) DENGAN SAFE FALLBACK
@@ -440,7 +450,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
       setSelectedKelasNama(foundKelas.nama_kelas)
       // NIS::Generate Otomatis 6 Digit Prefix (TahunAjaran + KodeTingkat)
       setPrefixNoUjian(
-        getTahunAjaranPrefix() +
+        (tahunAjaranPrefix || getTahunAjaranPrefix()) +
           getTingkatCode(foundKelas.nama_kelas, foundKelas.tingkat, isSmk ? 10 : 7)
       )
     }
