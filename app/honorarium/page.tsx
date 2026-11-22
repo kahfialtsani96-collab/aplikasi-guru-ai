@@ -107,7 +107,7 @@ const normalizeMapelKey = (s: string) =>
 // Mapel gabungan jenjang SMK yang diajarkan ke seluruh kelas X–XII SECARA BERSAMAAN
 // dalam satu sesi (mis. PJOK, Qiro'ah, Pramuka). Satu sesi (tanggal + mapel) dihitung
 // TETAP 2 JP, dan tidak boleh diakumulasi meskipun tercatat di beberapa baris jurnal.
-const GABUNGAN_SMK_MAPEL = new Set(['pjok', 'qiroah', 'pramuka'])
+const EXCLUDED_PEMBINA_MAPEL_KEYS = new Set(['pramuka', 'qiroah', 'presentasi'])
 
 const bulanAkhir = (tahun: number, bulan: number) => new Date(tahun, bulan, 0).getDate()
 
@@ -1014,9 +1014,6 @@ export default function HonorariumPage() {
     // di beberapa baris kelas sekaligus pada jam yang sama; slot jam digabung lewat Set
     // sehingga tetap dihitung 1x (mis. {7,8} = 2 JP), bukan dikali jumlah kelas/bukan 1 JP.
     const jurnalMap = new Map<string, { dateSlots: Map<string, Set<number>> }>()
-    // Sesi mapel gabungan jenjang SMK (PJOK/Qiro'ah/Pramuka, kelas X–XII serentak).
-    // Kunci sesi = `<tanggal>|<mapel ternormalisasi>`; setiap sesi = 2 JP tetap.
-    const gabunganSessions = new Map<string, Set<string>>()
     let validJurnal = 0
     if (emails.length > 0) {
       const [tahunStr, bulanStr] = targetPeriode.split('-')
@@ -1090,6 +1087,10 @@ export default function HonorariumPage() {
           // 3) kegiatan luar kelas / ekskul penuh 'Tadabur Alam' (materi atau mapel) → abaikan
           if (materiTxt.includes('tadabur alam') || mapelTxt.includes('tadabur alam')) return
 
+          const jenjangTxt = String(row.jenjang ?? '').trim().toUpperCase();
+          const isPembina = EXCLUDED_PEMBINA_MAPEL_KEYS.has(normalizeMapelKey(mapelTxt)) || (jenjangTxt === 'SMK' && /^pjok/.test(normalizeMapelKey(mapelTxt)));
+          if (isPembina) return;
+
           // 4) VALIDASI MAPEL RESMI GURU:
           //    Jika jurnal mencatat mapel yang BUKAN milik guru tsb. → itu inputan guru
           //    piket menggantikan guru lain (mis. PJOK/PKn/Bahasa Arab/Matematika saat
@@ -1117,22 +1118,6 @@ export default function HonorariumPage() {
 
           // Entri jurnal sah yang benar-benar dipakai perhitungan JP
           validJurnal++
-
-          // --- MAPEL GABUNGAN JENJANG SMK (kelas X–XII serentak) ---
-          // PJOK/Qiro'ah/Pramuka SMK diajarkan ke seluruh kelas X–XII sekaligus dalam
-          // satu sesi. Satu sesi (tanggal + mapel) dihitung TETAP 2 JP. Jika sesi yang
-          // sama tercatat lebih dari satu baris jurnal (mis. per kelas X/XI/XII), semua
-          // baris menyatu jadi satu sesi sehingga TIDAK diakumulasi. Baris ini juga TIDAK
-          // ikut ditambahkan ke daySet umum agar tidak dihitung dobel (double-count).
-          const jenjangTxt = String(row.jenjang ?? '').trim().toUpperCase()
-          const isGabunganSmk =
-            jenjangTxt === 'SMK' && GABUNGAN_SMK_MAPEL.has(normalizeMapelKey(mapelTxt))
-          if (isGabunganSmk) {
-            const sessKey = `${tgl}|${normalizeMapelKey(mapelTxt)}`
-            if (!gabunganSessions.has(em)) gabunganSessions.set(em, new Set())
-            gabunganSessions.get(em)!.add(sessKey)
-            return
-          }
 
           if (!jurnalMap.has(em)) jurnalMap.set(em, { dateSlots: new Map() })
           const rec = jurnalMap.get(em)!
@@ -1204,16 +1189,6 @@ export default function HonorariumPage() {
       if (p.status === 'staf_piket') {
         jumlahJp = 0
       } else {
-        // Mapel gabungan SMK: tiap sesi (tanggal+mapel) = 2 JP, tidak diakumulasi.
-        const gSessions = gabunganSessions.get(email)
-        if (gSessions && gSessions.size > 0) {
-          gSessions.forEach((sessKey) => {
-            const tgl = sessKey.split('|')[0] || ''
-            if (tgl) transportDates.add(tgl)
-            jumlahJp += 2
-            detailJp.push({ tanggal: tgl, jam: '-', jp: 2, slots: [] })
-          })
-        }
         if (jurnalRec) {
           // Agregasi per tanggal: total JP = jumlah slot unik hari itu (deduplikasi gabungan)
           jurnalRec.dateSlots.forEach((daySet, tgl) => {
