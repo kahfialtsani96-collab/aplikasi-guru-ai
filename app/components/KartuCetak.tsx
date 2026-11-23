@@ -153,6 +153,10 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
   const kepsekJabatanLabel = (_item?: ItemKartu) =>
     isSmk ? 'Kepala SMK Muna Mustofa' : 'Kepala SMP Muna Mustofa'
 
+  // Sumber gambar TTD Kepsek: jenjang SMK memakai ttd-yayasan.png (Rizieq Nizar
+  // merangkap Ketua Yayasan), jenjang SMP tetap memakai ttd-kepsek.png (Sulastri).
+  const kepsekSignatureSrc = isSmk ? '/ttd-yayasan.png' : '/ttd-kepsek.png'
+
   // OPSI PENGATURAN CETAK
   const [includeBackSide, setIncludeBackSide] = useState(true)
   const [includeDigitalSignature, setIncludeDigitalSignature] = useState(true)
@@ -626,7 +630,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                 <p class="sign-title">Kepala Sekolah,</p>
                 <div class="signature-area">
                   ${includeStamp ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img-ujian" />` : ''}
-                  ${includeDigitalSignature ? `<img src="/ttd-kepsek.png" alt="TTD" class="signature-img-ujian" />` : ''}
+                  ${includeDigitalSignature ? `<img src="${kepsekSignatureSrc}" alt="TTD" class="signature-img-ujian" />` : ''}
                 </div>
                 <p class="sign-name"><b><u>${kepsekFor(item).nama}</u></b></p>
                 <p class="sign-nip">NUPTK. ${kepsekFor(item).nuptk}</p>
@@ -739,7 +743,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
               
               <div class="signature-area">
                 ${includeStamp ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img" />` : ''}
-                ${includeDigitalSignature ? `<img src="/ttd-kepsek.png" alt="TTD" class="signature-img" />` : ''}
+                ${includeDigitalSignature ? `<img src="${kepsekSignatureSrc}" alt="TTD" class="signature-img" />` : ''}
               </div>
 
               <p class="sign-name"><b><u>${penandatanganNama}</u></b></p>
@@ -1504,7 +1508,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                         <img src="/stempel-sekolah.png" alt="Stempel" className="h-14 absolute right-10 -top-1 opacity-80 pointer-events-none" />
                       )}
                       {includeDigitalSignature && (
-                        <img src="/ttd-kepsek.png" alt="TTD" className="h-12 relative z-10 pointer-events-none" />
+                        <img src={kepsekSignatureSrc} alt="TTD" className="h-12 relative z-10 pointer-events-none" />
                       )}
                     </div>
 

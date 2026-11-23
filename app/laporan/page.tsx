@@ -1698,16 +1698,16 @@ export default function LaporanPage() {
               <strong>Kepala ${isSmkSoal ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'}</strong><br/>
               <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
                 ${
-                  !isSmkSoal && pakaiCapKepsek
+                  pakaiCapKepsek && !isSmkSoal
                     ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
                     : ''
                 }
                 ${
-                  !isSmkSoal && pakaiTtdKepsek
-                    ? '<img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />'
+                  pakaiTtdKepsek
+                    ? `<img src="${isSmkSoal ? '/ttd-yayasan.png' : '/ttd-kepsek.png'}" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />`
                     : ''
                 }
-                ${!isSmkSoal && !pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
+                ${!pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
               </div>
               <u><strong>${kepsekNamaDoc}</strong></u><br/>
               ${kepsekNipDoc}
@@ -1858,16 +1858,16 @@ export default function LaporanPage() {
               <strong>Kepala ${isSmkSoal ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'}</strong><br/>
               <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
                 ${
-                  !isSmkSoal && pakaiCapKepsek
+                  pakaiCapKepsek && !isSmkSoal
                     ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
                     : ''
                 }
                 ${
-                  !isSmkSoal && pakaiTtdKepsek
-                    ? '<img src="/ttd-kepsek.png" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />'
+                  pakaiTtdKepsek
+                    ? `<img src="${isSmkSoal ? '/ttd-yayasan.png' : '/ttd-kepsek.png'}" alt="TTD Kepsek" style="position: absolute; left: 35%; top: 5px; height: 60px; z-index: 2;" />`
                     : ''
                 }
-                ${!isSmkSoal && !pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
+                ${!pakaiCapKepsek && !pakaiTtdKepsek ? '<br/><br/>' : ''}
               </div>
               <u><strong>${kepsekNamaDoc}</strong></u><br/>
               ${kepsekNipDoc}
