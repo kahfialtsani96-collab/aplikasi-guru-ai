@@ -62,6 +62,14 @@ const getTingkatCode = (
   return String(valid).padStart(2, '0')
 }
 
+// Ruang ujian otomatis sesuai tingkat kelas: VII→Ruang 01, VIII→02, … XII→06.
+// Rumus: ruang = tingkat − 6 (dibatasi 1–6).
+const getRuangUjian = (tingkat: number): string => {
+  const valid = tingkat >= 7 && tingkat <= 12 ? tingkat : 7
+  const ruang = Math.min(6, Math.max(1, valid - 6))
+  return `Ruang ${String(ruang).padStart(2, '0')} / Sesi 1`
+}
+
 type JenisKartu = 'pelajar' | 'ujian' | 'guru'
 
 interface KelasOption {
@@ -156,6 +164,10 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
   // Sumber gambar TTD Kepsek: jenjang SMK memakai ttd-yayasan.png (Rizieq Nizar
   // merangkap Ketua Yayasan), jenjang SMP tetap memakai ttd-kepsek.png (Sulastri).
   const kepsekSignatureSrc = isSmk ? '/ttd-yayasan.png' : '/ttd-kepsek.png'
+
+  // Sumber gambar Stempel: jenjang SMK memakai stempel-sekolah-smk.png,
+  // jenjang SMP tetap memakai stempel-sekolah.png.
+  const stempelSrc = isSmk ? '/stempel-sekolah-smk.png' : '/stempel-sekolah.png'
 
   // OPSI PENGATURAN CETAK
   const [includeBackSide, setIncludeBackSide] = useState(true)
@@ -422,7 +434,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                 nomorUjian: jenisKartu === 'ujian'
                   ? buildNomorPeserta(prefixNoUjian, noUrut)
                   : undefined,
-                customField: jenisKartu === 'ujian' ? 'Ruang 01 / Sesi 1' : undefined,
+                customField: jenisKartu === 'ujian' ? getRuangUjian(tingkatWeight) : undefined,
                 tipe: 'siswa',
               }))
             setCardItems(mapped)
@@ -477,7 +489,9 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
       nomorId: '1234567890',
       subInfo: selectedKelasNama ? selectedKelasNama.replace(/^kelas\s+/i, '') : 'VII-A',
       nomorUjian: jenisKartu === 'ujian' ? buildNomorPeserta(prefixNoUjian, noUrut) : undefined,
-      customField: jenisKartu === 'ujian' ? 'Ruang 01 / Sesi 1' : undefined,
+      customField: jenisKartu === 'ujian'
+        ? getRuangUjian(getKelasGradeWeight(selectedKelasNama))
+        : undefined,
       tipe: jenisKartu === 'guru' ? 'guru' : 'siswa'
     }
     setCardItems((prev) => [newItem, ...prev])
@@ -543,7 +557,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                         <td style="text-align: right; vertical-align: bottom; font-size: 4.5pt; color: #0f172a;">
                           Kepala Sekolah,<br/><br/>
                           <b><u>${kepsekFor(item).nama}</u></b><br/>
-                          NUPTK. ${kepsekFor(item).nuptk}
+                          <span style="display: inline-block; margin-top: 2pt;">NUPTK. ${kepsekFor(item).nuptk}</span>
                         </td>
                       </tr>
                     </table>
@@ -629,7 +643,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
               <div class="footer-right" style="width: 100%;">
                 <p class="sign-title">Kepala Sekolah,</p>
                 <div class="signature-area">
-                  ${includeStamp ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img-ujian" />` : ''}
+                  ${includeStamp ? `<img src="${stempelSrc}" alt="Stempel" class="stamp-img-ujian" />` : ''}
                   ${includeDigitalSignature ? `<img src="${kepsekSignatureSrc}" alt="TTD" class="signature-img-ujian" />` : ''}
                 </div>
                 <p class="sign-name"><b><u>${kepsekFor(item).nama}</u></b></p>
@@ -742,7 +756,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
               <p class="sign-title">${penandatanganJabatan},</p>
               
               <div class="signature-area">
-                ${includeStamp ? `<img src="/stempel-sekolah.png" alt="Stempel" class="stamp-img" />` : ''}
+                ${includeStamp ? `<img src="${stempelSrc}" alt="Stempel" class="stamp-img" style="right: ${isSmk ? '4mm' : '12mm'};" />` : ''}
                 ${includeDigitalSignature ? `<img src="${kepsekSignatureSrc}" alt="TTD" class="signature-img" />` : ''}
               </div>
 
@@ -807,7 +821,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
             .footer-right .signature-img-ujian { height: 100%; object-fit: contain; z-index: 2; position: relative; }
             .footer-right .stamp-img-ujian { height: 8.5mm; position: absolute; right: 4mm; top: -1mm; z-index: 1; opacity: 0.85; }
             .footer-right .sign-name { margin: 0; font-size: 5.5pt; color: #0f172a; }
-            .footer-right .sign-nip { margin: 0; font-size: 4.5pt; color: #475569; }
+            .footer-right .sign-nip { margin: 1.2mm 0 0 0; font-size: 4.5pt; color: #475569; }
 
             /* SISI BELAKANG */
             .card-back { background: #fafafa; }
@@ -827,7 +841,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
             .stamp-img { height: 12mm; position: absolute; right: 12mm; top: -2mm; z-index: 1; opacity: 0.85; }
 
             .sign-name { margin: 0; font-size: 6pt; color: #0f172a; }
-            .sign-nip { margin: 0; font-size: 5pt; color: #475569; }
+            .sign-nip { margin: 1.2mm 0 0 0; font-size: 5pt; color: #475569; }
           </style>
         <style>
           @page { margin: 0; }
@@ -1193,7 +1207,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                           <div className="text-right w-full">
                             <p className="font-bold text-slate-300">Kepala Sekolah</p>
                             <p className="font-extrabold text-slate-100 underline leading-tight">{kepsekFor(item).nama}</p>
-                            <p className="text-[8px] text-slate-400 font-mono">NUPTK. {kepsekFor(item).nuptk}</p>
+                            <p className="text-[8px] text-slate-400 font-mono mt-0.5">NUPTK. {kepsekFor(item).nuptk}</p>
                           </div>
                         </div>
                       ) : (
@@ -1453,7 +1467,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                       <div className="text-right w-full">
                         <p className={`text-[10px] font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Kepala Sekolah,</p>
                         <p className={`font-black text-xs underline ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{kepsekFor(selectedModalItem).nama}</p>
-                        <p className={`text-[9px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK. {kepsekFor(selectedModalItem).nuptk}</p>
+                        <p className={`text-[9px] font-mono mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>NUPTK. {kepsekFor(selectedModalItem).nuptk}</p>
                       </div>
                     </div>
                   ) : (
@@ -1505,7 +1519,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
 
                     <div className="h-12 relative flex items-center justify-end my-1">
                       {includeStamp && (
-                        <img src="/stempel-sekolah.png" alt="Stempel" className="h-14 absolute right-10 -top-1 opacity-80 pointer-events-none" />
+                        <img src={stempelSrc} alt="Stempel" className="h-14 absolute right-10 -top-1 opacity-80 pointer-events-none" />
                       )}
                       {includeDigitalSignature && (
                         <img src={kepsekSignatureSrc} alt="TTD" className="h-12 relative z-10 pointer-events-none" />
@@ -1515,7 +1529,7 @@ export function CetakKartu({ jenjang = 'SMP' }: { jenjang?: 'SMP' | 'SMK' }) {
                     <p className={`font-extrabold text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                       <u>{selectedModalItem.isKepalaSekolah ? 'PENGURUS YAYASAN' : kepsekFor(selectedModalItem).nama}</u>
                     </p>
-                    <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <p className={`text-[10px] font-mono mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                       {selectedModalItem.isKepalaSekolah ? 'Yayasan Muna Mustofa' : `NUPTK. ${kepsekFor(selectedModalItem).nuptk}`}
                     </p>
                   </div>
