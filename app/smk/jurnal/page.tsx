@@ -310,6 +310,11 @@ export default function SmkJurnalPage() {
   const [saving, setSaving] = useState(false)
   const [loadingAutoAbsen, setLoadingAutoAbsen] = useState(false)
 
+  // State deteksi sesi belum absen (SMK)
+  const [isAbsenMissing, setIsAbsenMissing] = useState(false)
+  const [absenBlockSave, setAbsenBlockSave] = useState(false)
+  const [absenSessionInfo, setAbsenSessionInfo] = useState<{ kelas: string; mapel: string; jam: string } | null>(null)
+
   // State Riwayat Jurnal SMK
   const [rekapList, setRekapList] = useState<JurnalRecord[]>([])
   const [filterKelasId, setFilterKelasId] = useState('')
@@ -664,6 +669,94 @@ export default function SmkJurnalPage() {
     }
   }, [tanggal, selectedKelasId, selectedMapelId, fetchAbsensiOtomatisSmk])
 
+  // DETEKSI SESI BELUM ABSEN (SMK): cek tabel `absensi` untuk kombinasi Tanggal+Kelas+Mapel.
+  useEffect(() => {
+    let cancelled = false
+    async function checkAbsen() {
+      // Reset jika belum ada kombinasi lengkap.
+      if (!tanggal || !selectedMapelId) {
+        setIsAbsenMissing(false)
+        setAbsenBlockSave(false)
+        setAbsenSessionInfo(null)
+        return
+      }
+      const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+      const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
+      const isGabungan = selectedKelasId === 'GABUNGAN'
+
+      // Sesi kelas non-gabungan wajib memiliki kelas untuk validasi absensi.
+      if (!isGabungan && !selectedKelasId) {
+        setIsAbsenMissing(false)
+        setAbsenBlockSave(false)
+        setAbsenSessionInfo(null)
+        return
+      }
+
+      // Apakah sesi ini berasal dari jadwal resmi?
+      // Jika bukan (manual/insidental), pengecekan hanya jadi peringatan, tidak memblokir simpan.
+      let fromResmi = false
+      if (!cancelled) {
+        try {
+          const hariNama = getHariNama(tanggal)
+          if (hariNama) {
+            let q = supabase
+              .from('jadwal')
+              .select('id')
+              .eq('jenjang', 'SMK')
+              .eq('mapel_id', Number(selectedMapelId))
+              .eq('hari', hariNama)
+              .limit(1)
+            q = isGabungan ? q.is('kelas_id', null) : q.eq('kelas_id', Number(selectedKelasId))
+            const { data } = await q
+            fromResmi = !!data && data.length > 0
+          }
+        } catch {
+          fromResmi = false
+        }
+      }
+
+      // Cek apakah catatan absensi sudah ada untuk sesi ini.
+      let exists = false
+      if (!cancelled) {
+        try {
+          let q = supabase
+            .from('absensi')
+            .select('id')
+            .eq('jenjang', 'SMK')
+            .eq('tanggal', tanggal)
+            .eq('mapel_id', Number(selectedMapelId))
+          if (!isOperator && userEmail) q = q.ilike('guru_email', userEmail.trim())
+          if (!isGabungan) q = q.eq('kelas_id', Number(selectedKelasId))
+          const { data } = await q.limit(1)
+          exists = !!data && data.length > 0
+        } catch {
+          exists = false
+        }
+      }
+
+      if (cancelled) return
+
+      if (!exists) {
+        const jamText = `Jam Ke-${jamMulai}${Number(jamSelesai) !== Number(jamMulai) ? ` s/d ${jamSelesai}` : ''}`
+        const kelasLabel = isGabungan ? 'Gabungan (DKV)' : selectedKelasObj?.nama || `Kelas ${selectedKelasId}`
+        const mapelLabel = selectedMapelObj?.nama || ''
+        setIsAbsenMissing(true)
+        setAbsenSessionInfo({ kelas: kelasLabel, mapel: mapelLabel, jam: jamText })
+        // Blokir simpan untuk sesi jadwal resmi, baik guru maupun operator;
+        // sesi manual/insidental hanya peringatan.
+        setAbsenBlockSave(fromResmi)
+      } else {
+        setIsAbsenMissing(false)
+        setAbsenBlockSave(false)
+        setAbsenSessionInfo(null)
+      }
+    }
+    checkAbsen()
+    return () => {
+      cancelled = true
+    }
+  }, [tanggal, selectedKelasId, selectedMapelId, jamMulai, jamSelesai, userEmail, isOperator, mapelList, kelasList])
+
   useEffect(() => {
     if (userEmail) {
       // Memuat rekap saat kondisi berubah
@@ -769,6 +862,11 @@ export default function SmkJurnalPage() {
     }
 
     if (!userEmail) return
+
+    if (isAbsenMissing && absenBlockSave) {
+      alert('Absensi sesi ini belum diisi. Silakan isi absensi siswa terlebih dahulu sebelum menyimpan jurnal.')
+      return
+    }
 
     setSaving(true)
     try {
@@ -1498,16 +1596,29 @@ export default function SmkJurnalPage() {
                       </div>
                     </div>
 
+                    {isAbsenMissing && absenSessionInfo && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-400/30 rounded-xl px-2.5 py-1.5 mt-0.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          Absensi sesi {absenSessionInfo.kelas} • {absenSessionInfo.mapel} •{' '}
+                          {absenSessionInfo.jam} belum diisi.
+                          {absenBlockSave
+                            ? ' Sesi ini dari jadwal resmi — simpan diblokir hingga absensi diisi.'
+                            : ' Ini bukan sesi dari jadwal resmi — Anda tetap dapat menyimpan jurnal (disarankan isi absensi dahulu).'}
+                        </span>
+                      </div>
+                    )}
+
                     {/* Tombol Submit Pill Hangat Persis Video */}
                     <motion.button
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
                       type="submit"
-                      disabled={saving}
+                      disabled={saving || (isAbsenMissing && absenBlockSave)}
                       className="w-full mt-2 py-2.5 rounded-full bg-gradient-to-r from-[#dfb17b] to-[#f1cfa4] hover:from-[#e6bc8a] hover:to-[#f6d9b4] disabled:opacity-50 text-stone-950 font-bold text-xs tracking-wide shadow-lg shadow-[#dfb17b]/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      <span>{saving ? 'Menyimpan...' : 'Simpan Agenda →'}</span>
+                      <span>{saving ? 'Menyimpan...' : isAbsenMissing && absenBlockSave ? 'ISI ABSENSI DULU' : 'Simpan Agenda →'}</span>
                     </motion.button>
                   </form>
                 </motion.div>

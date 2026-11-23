@@ -508,7 +508,6 @@ export default function AgendaMengajarPage() {
               .eq('kelas_id', Number(selectedKelasId))
               .eq('mapel_id', Number(selectedMapelId))
               .eq('hari', hariNama)
-              .ilike('guru_email', (userEmail || '').trim())
               .limit(1)
             fromResmi = !!data && data.length > 0
           }
@@ -545,8 +544,9 @@ export default function AgendaMengajarPage() {
         const mapelLabel = selectedMapelObj?.nama || ''
         setIsAbsenMissing(true)
         setAbsenSessionInfo({ kelas: kelasLabel, mapel: mapelLabel, jam: jamText })
-        // Blokir simpan hanya untuk sesi jadwal resmi; sesi manual/insidental & operator hanya peringatan.
-        setAbsenBlockSave(!isOperator && fromResmi)
+        // Blokir simpan untuk sesi jadwal resmi, baik guru maupun operator;
+        // sesi manual/insidental hanya peringatan.
+        setAbsenBlockSave(fromResmi)
       } else {
         setIsAbsenMissing(false)
         setAbsenBlockSave(false)
