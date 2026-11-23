@@ -8,8 +8,10 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import DarkModeToggle from '@/app/components/DarkModeToggle'
+import DynamicIslandNotification from '@/app/components/DynamicIslandNotification'
 import { sortKelas, parseJamKeNum } from '@/lib/utils'
 import {
+  AlertTriangle,
   Clock,
   ClipboardList,
   NotebookPen,
@@ -170,6 +172,11 @@ export default function AgendaMengajarPage() {
   const [jadwalAutoList, setJadwalAutoList] = useState<any[]>([])
   const [replaceMode, setReplaceMode] = useState(false)
   const [hariWarning, setHariWarning] = useState('')
+
+  // State deteksi sesi belum absen (SMP)
+  const [isAbsenMissing, setIsAbsenMissing] = useState(false)
+  const [absenBlockSave, setAbsenBlockSave] = useState(false)
+  const [absenSessionInfo, setAbsenSessionInfo] = useState<{ kelas: string; mapel: string; jam: string } | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -460,6 +467,98 @@ export default function AgendaMengajarPage() {
     }
   }, [tanggal, selectedKelasId, selectedMapelId])
 
+  // DETEKSI SESI BELUM ABSEN (SMP): cek tabel `absensi` untuk kombinasi Tanggal+Kelas+Mapel.
+  useEffect(() => {
+    let cancelled = false
+    async function checkAbsen() {
+      // Reset jika belum ada kombinasi lengkap.
+      if (!tanggal || !selectedMapelId) {
+        setIsAbsenMissing(false)
+        setAbsenBlockSave(false)
+        setAbsenSessionInfo(null)
+        return
+      }
+      const selectedMapelObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+      const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
+      const namaMapelLower = selectedMapelObj?.nama?.toLowerCase() || ''
+      const isEkskulGabungan =
+        selectedKelasId === 'GABUNGAN' ||
+        namaMapelLower.includes('pramuka') ||
+        namaMapelLower.includes('qiro')
+
+      // Sesi kelas non-ekskul wajib memiliki kelas untuk validasi absensi.
+      if (!isEkskulGabungan && !selectedKelasId) {
+        setIsAbsenMissing(false)
+        setAbsenBlockSave(false)
+        setAbsenSessionInfo(null)
+        return
+      }
+
+      // Apakah sesi ini berasal dari jadwal resmi?
+      // Jika bukan (manual/insidental), pengecekan hanya jadi peringatan, tidak memblokir simpan.
+      let fromResmi = false
+      if (!cancelled) {
+        try {
+          const hariNama = getHariNama(tanggal)
+          if (!isEkskulGabungan && hariNama) {
+            const { data } = await supabase
+              .from('jadwal')
+              .select('id')
+              .or('jenjang.eq.SMP,jenjang.is.null')
+              .eq('kelas_id', Number(selectedKelasId))
+              .eq('mapel_id', Number(selectedMapelId))
+              .eq('hari', hariNama)
+              .ilike('guru_email', (userEmail || '').trim())
+              .limit(1)
+            fromResmi = !!data && data.length > 0
+          }
+        } catch {
+          fromResmi = false
+        }
+      }
+
+      // Cek apakah catatan absensi sudah ada untuk sesi ini.
+      let exists = false
+      if (!cancelled) {
+        try {
+          let q = supabase
+            .from('absensi')
+            .select('id')
+            .or('jenjang.eq.SMP,jenjang.is.null')
+            .eq('tanggal', tanggal)
+            .eq('mapel_id', Number(selectedMapelId))
+          if (!isOperator && userEmail) q = q.ilike('guru_email', userEmail.trim())
+          // Ekskul/Gabungan disimpan hanya dengan mapel_id (tanpa kelas_id).
+          if (!isEkskulGabungan) q = q.eq('kelas_id', Number(selectedKelasId))
+          const { data } = await q.limit(1)
+          exists = !!data && data.length > 0
+        } catch {
+          exists = false
+        }
+      }
+
+      if (cancelled) return
+
+      if (!exists) {
+        const jamText = `Jam Ke-${jamMulai}${Number(jamSelesai) !== Number(jamMulai) ? ` s/d ${jamSelesai}` : ''}`
+        const kelasLabel = isEkskulGabungan ? 'Gabungan (Ekskul)' : selectedKelasObj?.nama || `Kelas ${selectedKelasId}`
+        const mapelLabel = selectedMapelObj?.nama || ''
+        setIsAbsenMissing(true)
+        setAbsenSessionInfo({ kelas: kelasLabel, mapel: mapelLabel, jam: jamText })
+        // Blokir simpan hanya untuk sesi jadwal resmi; sesi manual/insidental & operator hanya peringatan.
+        setAbsenBlockSave(!isOperator && fromResmi)
+      } else {
+        setIsAbsenMissing(false)
+        setAbsenBlockSave(false)
+        setAbsenSessionInfo(null)
+      }
+    }
+    checkAbsen()
+    return () => {
+      cancelled = true
+    }
+  }, [tanggal, selectedKelasId, selectedMapelId, jamMulai, jamSelesai, userEmail, isOperator, mapelList, kelasList])
+
   // Peringatan libur Jumat (Pondok Pesantren)
   useEffect(() => {
     if (tanggal) {
@@ -675,6 +774,11 @@ export default function AgendaMengajarPage() {
 
     if (!userEmail) {
       alert('Sesi login tidak valid. Silakan login ulang.')
+      return
+    }
+
+    if (isAbsenMissing && absenBlockSave) {
+      alert('Absensi sesi ini belum diisi. Silakan isi absensi siswa terlebih dahulu sebelum menyimpan jurnal.')
       return
     }
 
@@ -993,6 +1097,23 @@ export default function AgendaMengajarPage() {
 
         {/* MAIN CONTENT CONTAINER (NO SCROLL CONTAINER) */}
         <main className="max-w-6xl w-full mx-auto p-2 flex-1 flex flex-col space-y-2 overflow-hidden mb-12">
+          {isAbsenMissing && absenBlockSave && absenSessionInfo && (
+            <DynamicIslandNotification
+              title="Absensi Belum Diisi"
+              subtitle={`Sesi ${absenSessionInfo.kelas} • ${absenSessionInfo.mapel} • ${absenSessionInfo.jam} belum di-absen. Isi absensi dahulu sebelum menyimpan jurnal.`}
+              badge={1}
+              accent="amber"
+              link="/absensi"
+              ctaLabel="Ke Absensi"
+              ctaIcon={ClipboardList}
+              centered
+              secondaryCtaLabel="Ganti Mapel/Sesi"
+              onSecondaryCta={() => {
+                setSelectedKelasId('')
+                setSelectedMapelId('')
+              }}
+            />
+          )}
           
           {/* TAB SWITCHER */}
           <div className={`grid grid-cols-2 p-0.5 rounded-lg border w-full text-[11px] font-extrabold shrink-0 shadow-xs ${
@@ -1023,6 +1144,7 @@ export default function AgendaMengajarPage() {
           {activeTab === 'input' && (
             <div className="flex flex-col h-full overflow-hidden space-y-2">
               
+              <div className="relative">
               <form onSubmit={handleSimpanJurnal} className={`border rounded-xl p-2 shrink-0 shadow-xs space-y-1.5 ${
                 isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-indigo-200'
               }`}>
@@ -1265,13 +1387,28 @@ export default function AgendaMengajarPage() {
                 {/* TOMBOL SIMPAN AGENDA */}
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || (isAbsenMissing && absenBlockSave)}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 text-white font-black py-1.5 rounded-lg text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer mt-1"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{saving ? 'Menyimpan...' : 'SIMPAN JURNAL AGENDA'}</span>
+                  <span>{saving ? 'Menyimpan...' : isAbsenMissing && absenBlockSave ? 'ISI ABSENSI DULU' : 'SIMPAN JURNAL AGENDA'}</span>
                 </button>
+                {isAbsenMissing && !absenBlockSave && absenSessionInfo && (
+                  <div className="mt-1 flex items-center gap-1 text-[10px] font-black text-amber-600 bg-amber-950/10 border border-amber-400/40 rounded-lg px-2 py-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      Absensi sesi {absenSessionInfo.kelas} • {absenSessionInfo.mapel} • {absenSessionInfo.jam} belum diisi.
+                      {absenBlockSave
+                        ? ' Sesi ini dari jadwal resmi — simpan diblokir hingga absensi diisi.'
+                        : ' Ini bukan sesi dari jadwal resmi — Anda tetap dapat menyimpan jurnal (disarankan isi absensi dahulu).'}
+                    </span>
+                  </div>
+                )}
               </form>
+              {isAbsenMissing && absenBlockSave && (
+                <div className="absolute inset-0 z-20 bg-black/75 backdrop-blur-sm rounded-xl cursor-not-allowed" />
+              )}
+              </div>
 
               {/* AREA 60% BAWAH: DAFTAR / RIWAYAT JURNAL HARI INI (INTERNAL SCROLL AREA) */}
               <div className={`border rounded-xl p-2 flex-1 flex flex-col overflow-hidden shadow-xs ${

@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, type ComponentType } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, X, ArrowRight, Wallet } from 'lucide-react'
@@ -13,6 +13,12 @@ interface DynamicIslandNotificationProps {
   accent?: Accent
   link?: string
   periode?: string
+  ctaLabel?: string
+  ctaIcon?: ComponentType<{ className?: string }>
+  centered?: boolean
+  secondaryCtaLabel?: string
+  onSecondaryCta?: () => void
+
 }
 
 const ACCENTS: Record<Accent, { icon: string; glow: string; ring: string }> = {
@@ -28,6 +34,11 @@ export default function DynamicIslandNotification({
   accent = 'indigo',
   link = '/honorarium',
   periode,
+  ctaLabel = 'Buka Honorarium',
+  ctaIcon: CtaIcon = ArrowRight,
+  centered = false,
+  secondaryCtaLabel,
+  onSecondaryCta,
 }: DynamicIslandNotificationProps) {
   const [expanded, setExpanded] = useState(false)
   if (!badge || badge <= 0) return null
@@ -35,7 +46,7 @@ export default function DynamicIslandNotification({
   const href = periode ? `/honorarium?periode=${encodeURIComponent(periode)}` : link
 
   return (
-    <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[80] w-full max-w-sm px-4 pointer-events-none">
+    <div className={centered ? 'fixed inset-0 z-[80] flex items-center justify-center pointer-events-none px-4' : 'fixed top-3 left-1/2 -translate-x-1/2 z-[80] w-full max-w-sm px-4 pointer-events-none'}>
       <AnimatePresence>
         <motion.div
           layout
@@ -45,7 +56,7 @@ export default function DynamicIslandNotification({
           transition={{ type: 'spring', stiffness: 260, damping: 24 }}
           onClick={() => setExpanded((v) => !v)}
           className={`relative mx-auto cursor-pointer rounded-full overflow-hidden shadow-2xl ${a.glow} ring-1 ${a.ring} pointer-events-auto transition-all duration-300 ${
-            expanded ? 'rounded-3xl' : ''
+            expanded ? (centered ? 'rounded-3xl w-full max-w-[760px] max-h-[85vh]' : 'rounded-3xl') : ''
           }`}
         >
           {/* Lapisan border gradien warna-warni yang berputar (hanya sebelum dikonfirmasi/expand) */}
@@ -78,7 +89,7 @@ export default function DynamicIslandNotification({
                 <span className="text-xs font-bold whitespace-nowrap">{title}</span>
               </div>
             ) : (
-              <div className="relative space-y-3">
+              <div className={"relative space-y-3" + (centered ? ' max-h-[85vh] overflow-y-auto' : '')}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -100,8 +111,20 @@ export default function DynamicIslandNotification({
                   onClick={(e) => e.stopPropagation()}
                   className="flex items-center justify-center gap-1.5 w-full text-[11px] font-black px-4 py-2 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all"
                 >
-                  Buka Honorarium <ArrowRight className="w-3.5 h-3.5" />
+                  {ctaLabel} <CtaIcon className="w-3.5 h-3.5" />
                 </Link>
+                {secondaryCtaLabel && onSecondaryCta && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSecondaryCta()
+                    }}
+                    className="flex items-center justify-center gap-1.5 w-full text-[11px] font-black px-4 py-2 rounded-full bg-white/10 text-white ring-1 ring-white/30 hover:bg-white/20 active:scale-95 transition-all"
+                  >
+                    {secondaryCtaLabel}
+                  </button>
+                )}
               </div>
             )}
           </div>
