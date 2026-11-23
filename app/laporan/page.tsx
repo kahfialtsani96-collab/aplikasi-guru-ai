@@ -1698,8 +1698,8 @@ export default function LaporanPage() {
               <strong>Kepala ${isSmkSoal ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'}</strong><br/>
               <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
                 ${
-                  pakaiCapKepsek && !isSmkSoal
-                    ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
+                  pakaiCapKepsek
+                    ? '<img src="' + (isSmkSoal ? '/stempel-sekolah-smk.png' : '/stempel-sekolah.png') + '" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
                     : ''
                 }
                 ${
@@ -1858,8 +1858,8 @@ export default function LaporanPage() {
               <strong>Kepala ${isSmkSoal ? 'SMK Muna Mustofa' : 'SMP Muna Mustofa'}</strong><br/>
               <div style="position: relative; height: 70px; display: flex; align-items: center; justify-content: center;">
                 ${
-                  pakaiCapKepsek && !isSmkSoal
-                    ? '<img src="/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
+                  pakaiCapKepsek
+                    ? '<img src="' + (isSmkSoal ? '/stempel-sekolah-smk.png' : '/stempel-sekolah.png') + '" alt="Stempel" style="position: absolute; left: 25%; top: 0px; height: 75px; opacity: 0.9; z-index: 1;" />'
                     : ''
                 }
                 ${

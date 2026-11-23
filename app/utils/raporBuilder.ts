@@ -486,14 +486,17 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
 
   // Blok TTD Kepala Sekolah
   const renderTtdKepsekVisual = (leftStempel: string, leftTtd: string, heightBox: string) => {
-    const showStempel = !isSmk && pakaiCapKepsek
+    const showStempel = pakaiCapKepsek
     const showTtd = pakaiTtdKepsek
+    const stempelSrc = isSmk
+      ? `${originUrl}/stempel-sekolah-smk.png`
+      : `${originUrl}/stempel-sekolah.png`
     if (!showStempel && !showTtd) {
       return `<div style="height: ${heightBox};"></div>`
     }
     return `
       <div style="position: relative; height: ${heightBox}; display: flex; align-items: center; justify-content: center;">
-        ${showStempel ? `<img src="${originUrl}/stempel-sekolah.png" alt="Stempel" style="position: absolute; left: ${leftStempel}; top: 0px; height: 72px; opacity: 0.9; z-index: 1;" />` : ''}
+        ${showStempel ? `<img src="${stempelSrc}" alt="Stempel" style="position: absolute; left: ${leftStempel}; top: 0px; height: 72px; opacity: 0.9; z-index: 1;" />` : ''}
         ${showTtd ? `<img src="${originUrl}${isSmk ? '/ttd-yayasan.png' : '/ttd-kepsek.png'}" alt="TTD Kepsek" style="position: absolute; left: ${leftTtd}; top: 4px; height: 58px; z-index: 2;" />` : ''}
       </div>
     `
