@@ -1030,30 +1030,25 @@ export default function SmkAbsensiPage() {
         }
       })
 
-      if (selectedKelasId === 'ALL') {
-        const studentIds = processedSiswa.map((s) => String(s.id))
-        await supabase
-          .from('absensi')
-          .delete()
-          .eq('jenjang', 'SMK')
-          .in('siswa_id', studentIds)
-          .eq('mapel_id', Number(selectedMapelId))
-          .eq('tanggal', tanggal)
-          .eq('semester', selectedSemester)
-          .eq('tahun_ajaran', selectedTahunAjaran)
-      } else {
-        await supabase
-          .from('absensi')
-          .delete()
-          .eq('jenjang', 'SMK')
-          .eq('kelas_id', Number(selectedKelasId))
-          .eq('mapel_id', Number(selectedMapelId))
-          .eq('tanggal', tanggal)
-          .eq('semester', selectedSemester)
-          .eq('tahun_ajaran', selectedTahunAjaran)
-      }
-
-      const { error } = await supabase.from('absensi').insert(rowsToInsert)
+      // Simpan lewat RPC simpan_absensi: DELETE sesi lama + INSERT baris
+      // baru berjalan dalam SATU transaksi database. Kalau INSERT gagal,
+      // DELETE ikut batal dan absensi lama tetap utuh (temuan audit #11).
+      // Fungsi SQL-nya ada di docs/migrasi-rpc-simpan-absensi.sql dan
+      // harus sudah dijalankan di Supabase SQL Editor sebelum kode ini
+      // dipakai. p_guru_email dikirim null karena kode lama SMK tidak
+      // memfilter guru_email saat menghapus.
+      const { error } = await supabase.rpc('simpan_absensi', {
+        p_jenjang: 'SMK',
+        p_kelas_id: selectedKelasId === 'ALL' ? null : Number(selectedKelasId),
+        p_siswa_ids:
+          selectedKelasId === 'ALL' ? processedSiswa.map((s) => String(s.id)) : null,
+        p_mapel_id: Number(selectedMapelId),
+        p_tanggal: tanggal,
+        p_semester: selectedSemester,
+        p_tahun_ajaran: selectedTahunAjaran,
+        p_guru_email: null,
+        p_rows: rowsToInsert,
+      })
 
       if (error) {
         alert('Gagal menyimpan absensi SMK: ' + error.message)
