@@ -204,7 +204,7 @@ export default function SmkDashboardPage() {
     {
       title: 'Bimbingan Wali',
       sub: 'Catatan pembinaan siswa',
-      href: '/smk/bimbingan',
+      href: '/bimbingan',
       icon: HeartHandshake,
     },
     {
