@@ -40,6 +40,7 @@ interface Mapel {
   semester: string
   tahun_ajaran: string
   urutan: number
+  jenjang?: string | null
 }
 
 export default function KelolaMapelPage() {
@@ -84,9 +85,13 @@ export default function KelolaMapelPage() {
   async function fetchMapel() {
     setLoading(true)
     try {
+      // Portal SMP hanya menampilkan mapel SMP. Pola .or(...) yang sama
+      // dipakai halaman /siswa: baris lama yang jenjang-nya NULL tetap
+      // tampil karena dulu halaman ini tidak pernah menulis jenjang.
       const { data, error } = await supabase
         .from('mapel')
         .select('*')
+        .or('jenjang.eq.SMP,jenjang.is.null')
         .order('urutan', { ascending: true })
 
       if (!error && data) {
@@ -120,6 +125,8 @@ export default function KelolaMapelPage() {
     }
 
     setLoading(true)
+    // Mapel baru dari portal SMP selalu ditandai jenjang SMP, supaya
+    // tidak tersimpan NULL dan tidak hilang dari portal SMK/SMP.
     const payload = {
       kode_mapel: kodeMapel.trim().toUpperCase(),
       nama_mapel: namaMapel.trim(),
@@ -129,6 +136,7 @@ export default function KelolaMapelPage() {
       semester: semester,
       tahun_ajaran: tahunAjaran.trim(),
       urutan: Number(urutan) || 1,
+      jenjang: 'SMP',
     }
 
     try {
@@ -160,6 +168,12 @@ export default function KelolaMapelPage() {
 
   const handleEdit = (item: Mapel) => {
     if (!item.id) return
+    // Pengaman lintas jenjang: daftar yang tampil sudah difilter SMP,
+    // tapi jangan pernah mengedit mapel SMK dari portal SMP.
+    if ((item.jenjang || '').toUpperCase() === 'SMK') {
+      alert('Mapel SMK hanya bisa diubah dari portal SMK.')
+      return
+    }
     setEditingId(item.id)
     setKodeMapel(item.kode_mapel || '')
     setNamaMapel(item.nama_mapel || '')
@@ -173,6 +187,13 @@ export default function KelolaMapelPage() {
 
   const handleDelete = async (id?: string | number) => {
     if (!id || !confirm('Yakin ingin menghapus mata pelajaran ini?')) return
+
+    // Pengaman lintas jenjang: jangan hapus mapel SMK dari portal SMP.
+    const target = mapelList.find((m) => String(m.id) === String(id))
+    if ((target?.jenjang || '').toUpperCase() === 'SMK') {
+      alert('Mapel SMK hanya bisa dihapus dari portal SMK.')
+      return
+    }
 
     try {
       const { error } = await supabase.from('mapel').delete().eq('id', id)

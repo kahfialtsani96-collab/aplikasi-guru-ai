@@ -58,6 +58,11 @@ export default function DataGuruPage() {
     fetchGuru()
   }, [])
 
+  // Daftar guru sengaja tanpa filter jenjang: guru dipakai bersama SMP
+  // & SMK, unit mengajarnya ada di kolom unit_mengajar ("SMP",
+  // "SMP & SMK") dan diatur dari portal SMK (/smk/master). Jangan
+  // memfilter ke unit_mengajar = 'SMP' saja, karena guru yang mengajar
+  // di kedua jenjang akan hilang dari daftar ini.
   const fetchGuru = async () => {
     const { data } = await supabase.from('guru').select('*').order('id', { ascending: false })
     if (data) setGuruList(data)
@@ -122,12 +127,16 @@ export default function DataGuruPage() {
         }
 
         // 2. SIMPAN DATA PROFIL KE TABEL GURU
+        // Guru baru dari portal SMP ditandai unit_mengajar 'SMP' supaya
+        // tidak tersimpan NULL. Kalau ia juga mengajar SMK, unitnya
+        // diubah dari portal SMK (/smk/master).
         const { error: dbError } = await supabase.from('guru').insert([
           {
             nama_lengkap: nama.trim(),
             NUPTK: nuptk.trim() ? nuptk.trim() : null,
             email: email.trim(),
             jabatan,
+            unit_mengajar: 'SMP',
           }
         ])
 
