@@ -164,7 +164,7 @@ Kodebase menggunakan **lebih dari satu pola** untuk bikin client Supabase. Saat 
 > Peringatan: Jangan inisialisasi client Supabase di **top-level file yang di-prerender** tanpa helper yang aman — bisa memicu error build. Gunakan pola helper atau init di dalam `useEffect`/fungsi.
 
 ### Tabel dalam database (dari `app/cek-struktur/page.tsx`)
-Daftar tabel `ALL_TABLES`: `absensi`, `bank_soal`, `bimbingan_wali`, `guru`, `guru_mapel`, `honorarium_pengaturan`, `honorarium_potongan`, `honorarium_penerima`, `honorarium_tugas_tambahan`, `honorarium_rekap`, `honorarium_audit_log`, `jadwal`, `jurnal_agenda`, `kelas`, `mapel`, `master_jam`, `nilai`, `profiles`, `siswa`, `surat_administrasi`.
+Daftar tabel `ALL_TABLES` (total **22 tabel**, sama dengan `app/cek-struktur/page.tsx`): `absensi`, `absensi_guru`, `bank_soal`, `bimbingan_wali`, `guru`, `guru_mapel`, `honorarium_pengaturan`, `honorarium_potongan`, `honorarium_penerima`, `honorarium_tugas_tambahan`, `honorarium_rekap`, `honorarium_audit_log`, `jadwal`, `jurnal_agenda`, `kelas`, `mapel`, `master_jam`, `nilai`, `profiles`, `presensi_piket`, `siswa`, `surat_administrasi`.
 
 Kolom penting yang teramati di kode:
 - **`guru`**: `id`, `nama_lengkap`, `email`, `password`, `role` (`'operator' | 'guru'`), `NUPTK`, `nip`, `jabatan`, `unit_mengajar`.
@@ -172,6 +172,7 @@ Kolom penting yang teramati di kode:
 - **`siswa`**: `id`, `nisn`, `nama_lengkap`, `jenis_kelamin`, `kelas_id` (FK → `kelas.id`), `jenjang`, plus data identitas (TTL, agama, alamat, ortu, dll.).
 - **`mapel`**: `id`, `kode_mapel`, `nama_mapel`, `kelompok`, `tingkat`, `jumlah_jp`, `semester`, `tahun_ajaran`, `urutan`, `jenjang`.
 - **`absensi`**, **`jadwal`** (hari, jam, guru_id, mapel_id, kelas_id), **`jurnal_agenda`**, **`nilai`** (siswa_id, mata_pelajaran, semester, dst.), **`bimbingan_wali`**, **`surat_administrasi`** (nomor_surat, jenis_surat, penerima, keterangan, semester, tahun_ajaran), **`master_jam`** (hari, jam_ke, waktu_mulai, waktu_selesai, keterangan, jenjang), **`bank_soal`**, **`profiles`**, **`guru_mapel`** (relasi guru↔mapel).
+- **`absensi_guru`** (presensi harian guru: tanggal, guru_email, nama_lengkap, status, keterangan, input_by — dipakai `app/components/absensi/AbsensiGuruTab.tsx` & honorarium) dan **`presensi_piket`** (piket guru: tanggal, guru_email, nama_guru, jenis_tugas, keterangan — ada di database, saat ini belum dipakai halaman mana pun).
 - **Tabel honorarium** (`/honorarium`): **`honorarium_pengaturan`** (tarif_jp, tarif_transport_harian, tarif_piket, tunjangan_wali_kelas — satu baris global), **`honorarium_potongan`** (nama, aktif, tipe `nominal`/`persen`, nilai, urutan), **`honorarium_penerima`**, **`honorarium_tugas_tambahan`** (periode, tanggal, kegiatan, guru_id, nominal), **`honorarium_rekap`** (rekap gaji per periode guru), **`honorarium_audit_log`** (kategori `master`/`rekap`/`riwayat`, catat perubahan nilai lama → baru). Skema lengkap di `docs/schema-honorarium.sql`.
 
 ### Relasi utama

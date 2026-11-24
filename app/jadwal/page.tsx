@@ -839,6 +839,7 @@ export default function JadwalMengajarPage() {
             mapel: selectedMapelObj?.nama_mapel || '',
             semester: selectedSemester,
             tahun_ajaran: selectedTahunAjaran,
+            jenjang: 'SMP',
           })
           .eq('id', editingJadwalId)
 
@@ -860,6 +861,7 @@ export default function JadwalMengajarPage() {
           mapel: selectedMapelObj?.nama_mapel || '',
           semester: selectedSemester,
           tahun_ajaran: selectedTahunAjaran,
+          jenjang: 'SMP',
         }))
 
         const { error } = await supabase.from('jadwal').insert(rowsToInsert)
@@ -883,6 +885,7 @@ export default function JadwalMengajarPage() {
             mapel: selectedMapelObj?.nama_mapel || '',
             semester: selectedSemester,
             tahun_ajaran: selectedTahunAjaran,
+            jenjang: 'SMP',
           },
         ])
 
