@@ -18,6 +18,7 @@ const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 // Daftar seluruh tabel di Supabase Anda
 const ALL_TABLES = [
   'absensi',
+  'absensi_guru',
   'bank_soal',
   'bimbingan_wali',
   'guru',
@@ -35,6 +36,7 @@ const ALL_TABLES = [
   'master_jam',
   'nilai',
   'profiles',
+  'presensi_piket',
   'siswa',
   'surat_administrasi'
 ]
