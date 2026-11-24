@@ -46,6 +46,7 @@ interface Kelas {
   tingkat: string
   wali_kelas_id: number | null
   nama_wali?: string
+  jenjang?: string | null
 }
 
 export default function KelolaKelasPage() {
@@ -82,7 +83,8 @@ export default function KelolaKelasPage() {
   const fetchData = async () => {
     setLoading(true)
 
-    // 1. Fetch Master Guru
+    // 1. Fetch Master Guru (sengaja tanpa filter jenjang: guru dipakai
+    // bersama SMP & SMK, unit mengajarnya diatur lewat kolom unit_mengajar)
     const { data: dataGuru } = await supabase
       .from('guru')
       .select('id, nama_lengkap, nip')
@@ -95,9 +97,13 @@ export default function KelolaKelasPage() {
     }
 
     // 2. Fetch Data Kelas (Tanpa join otomatis agar anti-fail)
+    // Portal SMP hanya menampilkan kelas SMP. Pola .or(...) yang sama
+    // dipakai halaman /siswa: baris lama yang jenjang-nya NULL tetap
+    // tampil karena dulu halaman ini tidak pernah menulis jenjang.
     const { data: dataKelas, error } = await supabase
       .from('kelas')
       .select('*')
+      .or('jenjang.eq.SMP,jenjang.is.null')
       .order('id', { ascending: true })
 
     if (error) {
@@ -130,10 +136,13 @@ export default function KelolaKelasPage() {
     }
 
     setLoading(true)
+    // Kelas baru dari portal SMP selalu ditandai jenjang SMP, supaya
+    // tidak tersimpan NULL dan tidak hilang dari portal SMK/SMP.
     const payload = {
       tingkat,
       nama_kelas: namaKelas.trim(),
       wali_kelas_id: waliKelasId ? Number(waliKelasId) : null,
+      jenjang: 'SMP',
     }
 
     try {
@@ -164,6 +173,12 @@ export default function KelolaKelasPage() {
   }
 
   const handleEdit = (kelas: Kelas) => {
+    // Pengaman lintas jenjang: daftar yang tampil sudah difilter SMP,
+    // tapi jangan pernah mengedit kelas SMK dari portal SMP.
+    if ((kelas.jenjang || '').toUpperCase() === 'SMK') {
+      alert('Kelas SMK hanya bisa diubah dari portal SMK.')
+      return
+    }
     setEditingId(kelas.id)
     setTingkat(kelas.tingkat || '7')
     setNamaKelas(kelas.nama_kelas || '')
@@ -172,6 +187,12 @@ export default function KelolaKelasPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Hapus kelas ini? Data siswa terkait kelas ini perlu disesuaikan kembali.')) return
+    // Pengaman lintas jenjang: jangan hapus kelas SMK dari portal SMP.
+    const target = kelasList.find((k) => k.id === id)
+    if ((target?.jenjang || '').toUpperCase() === 'SMK') {
+      alert('Kelas SMK hanya bisa dihapus dari portal SMK.')
+      return
+    }
     const { error } = await supabase.from('kelas').delete().eq('id', id)
     if (!error) {
       fetchData()
