@@ -658,17 +658,18 @@ export default function SmkPenilaianPage() {
         return
       }
 
+      // upsert di bawah hanya bekerja bila tabel nilai punya unique index
+      // (siswa_id, mapel_id, semester, tahun_ajaran) — lihat
+      // docs/migrasi-unique-nilai.sql. Jangan pernah jatuh ke insert biasa
+      // saat upsert gagal: insert itu yang dulu membuat baris nilai ganda
+      // untuk siswa + mapel + semester + tahun ajaran yang sama, lalu Leger
+      // dan Rapor membaca baris yang berbeda.
       const { error } = await supabase.from('nilai').upsert(rowsToUpsert, {
         onConflict: 'siswa_id,mapel_id,semester,tahun_ajaran',
       })
 
       if (error) {
-        const { error: insertErr } = await supabase.from('nilai').insert(rowsToUpsert)
-        if (insertErr) {
-          alert('Gagal menyimpan nilai SMK: ' + insertErr.message)
-        } else {
-          alert('Data nilai akademik SMK berhasil disimpan!')
-        }
+        alert('Gagal menyimpan nilai SMK: ' + error.message)
       } else {
         alert('Data nilai akademik SMK berhasil disimpan!')
       }

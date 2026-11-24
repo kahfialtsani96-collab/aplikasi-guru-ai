@@ -359,14 +359,20 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
   }
 
   const rowQiroah = (nilaiSiswa || []).find((n: any) => /qiro/i.test(n.mata_pelajaran || ''))
-  const nilaiQiroahNum = rowQiroah
-    ? Math.round(
-        [rowQiroah.nilai_tugas, rowQiroah.nilai_uts, rowQiroah.nilai_uas]
-          .filter((v): v is number => typeof v === 'number' && v > 0)
-          .reduce((a, b, _, arr) => a + b / arr.length, 0)
-      ) || 85
-    : 85
-  const predikatQiroah = getPredikatRapor(nilaiQiroahNum, "Qiro'ah & Tahfidz")
+  // Tanpa nilai Qiroah sama sekali, jangan tampilkan nilai palsu.
+  // Sama seperti mapel akademik: tidak ada komponen nilai > 0 berarti belum dinilai.
+  const kompsQiroah = rowQiroah
+    ? [rowQiroah.nilai_tugas, rowQiroah.nilai_uts, rowQiroah.nilai_uas].filter(
+        (v): v is number => typeof v === 'number' && v > 0
+      )
+    : []
+  const hasNilaiQiroah = kompsQiroah.length > 0
+  const nilaiQiroahNum = hasNilaiQiroah
+    ? Math.round(kompsQiroah.reduce((a, b) => a + b, 0) / kompsQiroah.length)
+    : null
+  const predikatQiroah = hasNilaiQiroah
+    ? getPredikatRapor(nilaiQiroahNum as number, "Qiro'ah & Tahfidz")
+    : null
 
   const mapelContexts: RaporMapelContextItem[] = []
   const groupedSections = new Map<string, typeof filteredAcademicMapel>()
@@ -708,8 +714,8 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
             <tr>
               <td style="text-align: center;">1</td>
               <td><b>Qiro&apos;ah &amp; Tahsin Al-Qur&apos;an</b></td>
-              <td style="text-align: center; font-weight: bold;">${predikatQiroah.huruf} (${predikatQiroah.keterangan})</td>
-              <td style="font-size: 8.8pt;">Mampu membaca Al-Qur&apos;an sesuai kaidah tajwid dan makharijul huruf dengan ${predikatQiroah.keterangan.toLowerCase()}.</td>
+              <td style="text-align: center; font-weight: bold;">${predikatQiroah ? `${predikatQiroah.huruf} (${predikatQiroah.keterangan})` : '-'}</td>
+              <td style="font-size: 8.8pt;">${predikatQiroah ? `Mampu membaca Al-Qur&apos;an sesuai kaidah tajwid dan makharijul huruf dengan ${predikatQiroah.keterangan.toLowerCase()}.` : 'Belum ada penilaian Qiro&apos;ah &amp; Tahsin Al-Qur&apos;an pada semester ini.'}</td>
             </tr>
             <tr>
               <td style="text-align: center;">2</td>
@@ -764,14 +770,23 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
                 ? mapelEkskul
                     .map((m, idx) => {
                       const rowN = findNilaiRow(m.id, m.nama) || {}
-                      const avg = rowN.nilai_uas ?? rowN.nilai_tugas ?? 85
-                      const predObj = getPredikatRapor(avg, m.nama)
+                      // Sama seperti mapel akademik: rata-rata hanya dari
+                      // komponen nilai yang benar-benar ada (> 0). Tanpa
+                      // nilai sama sekali, jangan tampilkan predikat palsu.
+                      const komps = [rowN.nilai_tugas, rowN.nilai_uts, rowN.nilai_uas].filter(
+                        (v): v is number => typeof v === 'number' && v > 0
+                      )
+                      const hasNilai = komps.length > 0
+                      const avg = hasNilai
+                        ? Math.round(komps.reduce((a, b) => a + b, 0) / komps.length)
+                        : null
+                      const predObj = hasNilai ? getPredikatRapor(avg as number, m.nama) : null
                       return `
                       <tr>
                         <td style="text-align: center;">${idx + 1}</td>
                         <td><b>${m.nama}</b></td>
-                        <td style="text-align: center; font-weight: bold;">${predObj.huruf} (${predObj.keterangan})</td>
-                        <td style="font-size: 8.8pt;">Aktif dan disiplin mengikuti kegiatan ${m.nama} dengan capaian ${predObj.keterangan.toLowerCase()}.</td>
+                        <td style="text-align: center; font-weight: bold;">${predObj ? `${predObj.huruf} (${predObj.keterangan})` : '-'}</td>
+                        <td style="font-size: 8.8pt;">${predObj ? `Aktif dan disiplin mengikuti kegiatan ${m.nama} dengan capaian ${predObj.keterangan.toLowerCase()}.` : 'Belum dinilai pada semester ini.'}</td>
                       </tr>
                     `
                     })
@@ -779,9 +794,9 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
                 : `
                   <tr>
                     <td style="text-align: center;">1</td>
-                    <td><b>Pramuka</b></td>
-                    <td style="text-align: center; font-weight: bold;">B (Baik)</td>
-                    <td style="font-size: 8.8pt;">Aktif mengikuti kegiatan kepramukaan, kerja sama tim, dan kedisiplinan di sekolah.</td>
+                    <td><b>-</b></td>
+                    <td style="text-align: center; font-weight: bold;">-</td>
+                    <td style="font-size: 8.8pt;">Belum ada kegiatan ekstrakurikuler yang dinilai pada semester ini.</td>
                   </tr>
                 `
             }
