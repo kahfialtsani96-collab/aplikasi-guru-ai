@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import { canManageJadwal } from '@/lib/jadwalAccess'
 import { SMK_COLORS, useSmkColor } from '../smkTheme'
 import {
   ArrowLeft,
@@ -155,6 +156,7 @@ export default function SmkJadwalPage() {
   const [userEmail, setUserEmail] = useState('')
   const [userName, setUserName] = useState('')
   const [isOperator, setIsOperator] = useState(false)
+  const [isJadwalManager, setIsJadwalManager] = useState(false)
 
   // Hari & Filter UI (Inisialisasi statis aman untuk Next.js build, di-update di client via useEffect)
   const [todayDayName, setTodayDayName] = useState<HariAktifType>('Senin')
@@ -240,7 +242,8 @@ export default function SmkJadwalPage() {
           setUserEmail(email)
           setUserName(guruRow?.nama_lengkap || email)
           setIsOperator(op)
-          if (!op) {
+          setIsJadwalManager(canManageJadwal(op, email))
+          if (!op && !canManageJadwal(op, email)) {
             setScopeMode('MINE')
           }
           setAuthChecking(false)
@@ -545,7 +548,7 @@ export default function SmkJadwalPage() {
   // HANDLER KHUSUS OPERATOR
   // =========================================================================
   const openCreateForm = (presetJamKe?: number, presetKelasId?: number) => {
-    if (!isOperator) return
+    if (!isJadwalManager) return
     const startJp = String(presetJamKe || 1)
     setEditingRowIds([])
     setFormHari(selectedHari)
@@ -568,7 +571,7 @@ export default function SmkJadwalPage() {
   }
 
   const openEditSingleRow = (item: JadwalRow) => {
-    if (!isOperator) return
+    if (!isJadwalManager) return
     setEditingRowIds([Number(item.id)])
     const validHari = HARI_AKTIF.find(
       (h) => h.toLowerCase() === (item.hari || '').toLowerCase()
@@ -585,7 +588,7 @@ export default function SmkJadwalPage() {
   }
 
   const openEditGroup = (group: GroupedJadwalCard) => {
-    if (!isOperator) return
+    if (!isJadwalManager) return
     const rowIds = group.rawRows.map((r) => Number(r.id))
     setEditingRowIds(rowIds)
     const validHari = HARI_AKTIF.find(
@@ -612,7 +615,7 @@ export default function SmkJadwalPage() {
 
   const handleSaveJadwal = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isOperator) return
+    if (!isJadwalManager) return
 
     const jamStart = Number(formJamMulai)
     const jamEnd = Number(formJamSampai)
@@ -749,7 +752,7 @@ export default function SmkJadwalPage() {
   }
 
   const handleDeleteGroup = async (group: GroupedJadwalCard) => {
-    if (!isOperator) return
+    if (!isJadwalManager) return
     const jpText =
       group.jamStart === group.jamEnd
         ? `Jam Ke-${group.jamStart}`
@@ -771,7 +774,7 @@ export default function SmkJadwalPage() {
   }
 
   const handleDeleteSingleRow = async (item: JadwalRow) => {
-    if (!isOperator) return
+    if (!isJadwalManager) return
     if (
       !confirm(
         `Hapus jadwal ${item.mapel || 'Mapel'} (${item.kelas || 'Kelas'}) pada ${item.hari} Jam Ke-${item.jam_ke}?`
@@ -805,7 +808,7 @@ export default function SmkJadwalPage() {
 
   // Salin seluruh jadwal SMK dari periode (semester) sebelumnya ke periode aktif
   const handleSalinJadwalSebelumnya = async () => {
-    if (!isOperator || !prevPeriode || isPrevSemesterEmpty) return
+    if (!isJadwalManager || !prevPeriode || isPrevSemesterEmpty) return
     if (
       !confirm(
         `Salin seluruh jadwal SMK dari Semester ${prevPeriode.semester} ${prevPeriode.tahun} ke Semester ${selectedSemester} ${selectedTahunAjaran}?`
@@ -958,7 +961,7 @@ export default function SmkJadwalPage() {
             </div>
           </div>
 
-          {isOperator ? (
+          {isJadwalManager ? (
             <button
               type="button"
               onClick={() => openCreateForm()}
@@ -1006,7 +1009,7 @@ export default function SmkJadwalPage() {
               ))}
             </select>
           </div>
-          {isOperator && prevPeriode && isPrevSemesterEmpty && (
+          {isJadwalManager && prevPeriode && isPrevSemesterEmpty && (
             <button
               type="button"
               onClick={handleSalinJadwalSebelumnya}
@@ -1020,7 +1023,7 @@ export default function SmkJadwalPage() {
                 : `Salin dari ${prevPeriode.semester} ${prevPeriode.tahun}`}
             </button>
           )}
-          {!prevPeriode && isPrevSemesterEmpty && isOperator && (
+          {!prevPeriode && isPrevSemesterEmpty && isJadwalManager && (
             <span className="text-[9px] text-slate-500 font-semibold">
               (Tidak ada periode sebelumnya untuk disalin)
             </span>
@@ -1243,12 +1246,12 @@ export default function SmkJadwalPage() {
                     Belum Ada Jadwal pada Hari {selectedHari}
                   </h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                    {isOperator
+                    {isJadwalManager
                       ? `Klik tombol "Tambah Jadwal" untuk menyusun slot jam pelajaran (1–8 JP) di hari ${selectedHari}.`
                       : `Belum ada jadwal pelajaran SMK yang terdaftar untuk hari ${selectedHari}.`}
                   </p>
                 </div>
-                {isOperator && (
+                {isJadwalManager && (
                   <button
                     type="button"
                     onClick={() => openCreateForm(1)}
@@ -1386,7 +1389,7 @@ export default function SmkJadwalPage() {
                         </div>
                       </div>
 
-                      {isOperator && (
+                      {isJadwalManager && (
                         <div className="flex items-center justify-end gap-1.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5 shrink-0">
                           <button
                             type="button"
@@ -1491,7 +1494,7 @@ export default function SmkJadwalPage() {
                                         <p className="font-black text-white text-xs leading-snug">
                                           {cell.mapel}
                                         </p>
-                                        {isOperator && (
+                                        {isJadwalManager && (
                                           <div className="flex items-center gap-0.5 shrink-0">
                                             <button
                                               type="button"
@@ -1516,7 +1519,7 @@ export default function SmkJadwalPage() {
                                         {guruObj?.nama_lengkap || cell.guru_email || '-'}
                                       </p>
                                     </div>
-                                  ) : isOperator ? (
+                                  ) : isJadwalManager ? (
                                     <button
                                       type="button"
                                       onClick={() => openCreateForm(jamKe, k.id)}
@@ -1546,7 +1549,7 @@ export default function SmkJadwalPage() {
       {/* =====================================================================
           4. MODAL TAMBAH / EDIT JADWAL (DENGAN RENTANG JP & SEMUA KELAS)
          ===================================================================== */}
-      {isOperator && isFormOpen && (
+      {isJadwalManager && isFormOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={handleSaveJadwal}

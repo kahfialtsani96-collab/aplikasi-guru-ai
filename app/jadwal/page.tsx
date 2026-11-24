@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
+import { canManageJadwal } from '@/lib/jadwalAccess'
 import DarkModeToggle from '@/app/components/DarkModeToggle'
 import { sortKelas } from '@/lib/utils'
 import {
@@ -182,6 +183,8 @@ export default function JadwalMengajarPage() {
   const [isStrictOperatorRole, setIsStrictOperatorRole] = useState(false)
   const [waliKelasAssignedId, setWaliKelasAssignedId] = useState<number | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  // Hak kelola jadwal: operator ATAU manajer terdaftar (mis. TRI RATNO)
+  const isJadwalManager = canManageJadwal(isOperator, userEmail)
   const [activeTab, setActiveTab] = useState<'kelola' | 'rekap'>('kelola')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
@@ -279,8 +282,8 @@ export default function JadwalMengajarPage() {
         .select('kelas_id, kelas, mapel_id, mapel, jam_ke')
         .eq('tanggal', targetDate)
 
-      // Guru hanya melihat status presensi miliknya sendiri; operator melihat semuanya.
-      if (!isOperator && userEmail) {
+      // Guru hanya melihat status presensi miliknya sendiri; operator/manajer melihat semuanya.
+      if (!isJadwalManager && userEmail) {
         query = query.ilike('guru_email', userEmail.trim())
       }
 
@@ -576,13 +579,13 @@ export default function JadwalMengajarPage() {
 
   // Daftar Jadwal sesuai Peran
   const roleScopedJadwal = useMemo(() => {
-    if (isOperator) return allSmpJadwal
+    if (isJadwalManager) return allSmpJadwal
     if (guruScope === 'all') return allSmpJadwal
     const cleanMe = (userEmail || '').trim().toLowerCase()
     return allSmpJadwal.filter(
       (j) => (j.guru_email || '').trim().toLowerCase() === cleanMe
     )
-  }, [allSmpJadwal, isOperator, guruScope, userEmail])
+  }, [allSmpJadwal, isJadwalManager, guruScope, userEmail])
 
   // Jadwal Pribadi Guru
   const myPersonalJadwal = useMemo(() => {
@@ -706,7 +709,7 @@ export default function JadwalMengajarPage() {
 
   // Mulai Edit Jadwal yang Sudah Ada
   const handleStartEdit = (item: Jadwal) => {
-    if (!isOperator || !item.id) return
+    if (!isJadwalManager || !item.id) return
     const { start, end } = parseJamRange(item)
     setEditingJadwalId(item.id)
     setHari(HARI_LIST.includes(item.hari) ? item.hari : 'Senin')
@@ -720,7 +723,7 @@ export default function JadwalMengajarPage() {
   // Simpan Baru (Tunggal / Semua Kelas Serentak) atau Update Edit
   const handleSimpan = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isOperator || isSubmitting) return
+    if (!isJadwalManager || isSubmitting) return
 
     if (!selectedKelasId || !selectedMapelId) {
       alert('Silakan pilih Kelas dan Mata Pelajaran!')
@@ -898,7 +901,7 @@ export default function JadwalMengajarPage() {
   }
 
   const handleDelete = async (id?: number) => {
-    if (!isOperator) return
+    if (!isJadwalManager) return
     if (!id || !confirm('Yakin ingin menghapus jadwal mengajar ini?')) return
 
     try {
@@ -928,7 +931,7 @@ export default function JadwalMengajarPage() {
 
   // Salin seluruh jadwal SMP dari periode (semester) sebelumnya ke periode aktif
   const handleSalinJadwalSebelumnya = async () => {
-    if (!isOperator || !prevPeriode || isPrevSemesterEmpty) return
+    if (!isJadwalManager || !prevPeriode || isPrevSemesterEmpty) return
     if (
       !confirm(
         `Salin seluruh jadwal SMP dari Semester ${prevPeriode.semester} ${prevPeriode.tahun} ke Semester ${selectedSemester} ${selectedTahunAjaran}?`
@@ -1262,7 +1265,7 @@ export default function JadwalMengajarPage() {
                   </option>
                 ))}
               </select>
-              {isOperator && prevPeriode && isPrevSemesterEmpty && (
+              {isJadwalManager && prevPeriode && isPrevSemesterEmpty && (
                 <button
                   type="button"
                   onClick={handleSalinJadwalSebelumnya}
@@ -1350,7 +1353,7 @@ export default function JadwalMengajarPage() {
                     : 'text-slate-700'
                 }`}
               >
-                <Clock className="w-4 h-4" /> {isOperator ? 'Input & Kelola' : 'Jadwal Mengajar'}
+                <Clock className="w-4 h-4" /> {isJadwalManager ? 'Input & Kelola' : 'Jadwal Mengajar'}
               </button>
               <button
                 onClick={() => setActiveTab('rekap')}
@@ -1380,7 +1383,7 @@ export default function JadwalMengajarPage() {
               {/* ===================================================================
                   BAGIAN ATAS A: FORM INPUT / EDIT (KHUSUS OPERATOR)
                  =================================================================== */}
-              {isOperator && (
+              {isJadwalManager && (
                 <form
                   onSubmit={handleSimpan}
                   className={`border rounded-xl p-2 shrink-0 shadow-xs space-y-1.5 print:hidden ${
@@ -1580,7 +1583,7 @@ export default function JadwalMengajarPage() {
               {/* ===================================================================
                   BAGIAN ATAS B: DASHBOARD RINGKAS GURU BIASA (NON-OPERATOR)
                  =================================================================== */}
-              {!isOperator && (
+              {!isJadwalManager && (
                 <div
                   className={`border rounded-xl p-2.5 shrink-0 shadow-xs space-y-2 print:hidden ${
                     isDarkMode
@@ -1752,7 +1755,7 @@ export default function JadwalMengajarPage() {
                       }`}
                     >
                       <Clock className="w-4 h-4" />{' '}
-                      {isOperator || guruScope === 'all'
+                      {isJadwalManager || guruScope === 'all'
                         ? 'Daftar Jadwal SMP'
                         : 'Jadwal Mingguan Saya'}{' '}
                       ({filteredDisplayJadwal.length})
@@ -1873,7 +1876,7 @@ export default function JadwalMengajarPage() {
                         </select>
                       </div>
 
-                      {(isOperator || guruScope === 'all') && (
+                      {(isJadwalManager || guruScope === 'all') && (
                         <div className="col-span-4 sm:col-span-4">
                           <select
                             value={listFilterGuruEmail}
@@ -1896,7 +1899,7 @@ export default function JadwalMengajarPage() {
 
                       <div
                         className={
-                          isOperator || guruScope === 'all'
+                          isJadwalManager || guruScope === 'all'
                             ? 'col-span-4 sm:col-span-5'
                             : 'col-span-8 sm:col-span-9'
                         }
@@ -2080,7 +2083,7 @@ export default function JadwalMengajarPage() {
                                             ⏰ {item.jam}
                                           </span>
 
-                                          {isOperator && (
+                                          {isJadwalManager && (
                                             <div className="flex items-center gap-1 print:hidden">
                                               <button
                                                 type="button"
@@ -2463,7 +2466,7 @@ export default function JadwalMengajarPage() {
                             >
                               <UserRound className="w-4 h-4 inline-block align-middle" /> {getGuruDisplayName(item.guru_email)}
                             </span>
-                            {isOperator && (
+                            {isJadwalManager && (
                               <button
                                 onClick={() => handleDelete(item.id)}
                                 className="text-rose-500 hover:text-rose-700 font-bold text-[10px] cursor-pointer print:hidden"
