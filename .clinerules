@@ -90,6 +90,7 @@ aplikasi-guru-ai/
 | `/laporan` | `app/laporan/page.tsx` | Laporan rapor: bangun dokumen rapor via `utils/raporBuilder.ts`, pratinjau via `components/RaporPreviewModal.tsx`; membaca `nilai`, `jurnal_agenda`, `siswa`, `kelas`, `mapel`, `guru`. |
 | `/ai` | `app/ai/page.tsx` | Pusat **Tool AI** (generator dokumen): KBC, Perangkat Ajar, Modul Ajar, Kokurikuler, Chatbot, LKPD, Soal, Multi-tool. Kirim ke `/api/gemini`, render hasil Markdown. |
 | `/cek-struktur` | `app/cek-struktur/page.tsx` | Utilitas diagnostik: memeriksa skema/kolom semua tabel Supabase (daftar `ALL_TABLES`). |
+| `/desain-lab` | `app/desain-lab/page.tsx` | **Eksperimen desain** bertema Apple (dari `DESIGN.md`): "Desain Lab" dengan data dummy, **bukan fitur produksi**. Tidak terhubung ke `Navbar` — hanya dapat diakses lewat URL `/desain-lab`. |
 
 ### Portal SMK (`/smk`)
 | Path | File | Fungsi utama |
@@ -100,7 +101,12 @@ aplikasi-guru-ai/
 | `/smk/absensi` | `app/smk/absensi/page.tsx` | Presensi SMK (manual + scan QR). |
 | `/smk/nilai` | `app/smk/nilai/page.tsx` | Kelola nilai siswa SMK (CRUD). |
 | `/smk/jurnal` | `app/smk/jurnal/page.tsx` | Jurnal agenda SMK. |
+| `/smk/kartu` | `app/smk/kartu/page.tsx` | Wrapper tipis (7 baris) yang merender komponen bersama `CetakKartu` (`app/components/KartuCetak.tsx`) dengan `jenjang="SMK"` — komponen yang sama dengan `/kartu` SMP. |
 
+> **Total: 25 halaman — 18 SMP + 7 SMK.**
+>
+> Catatan Bimbingan SMK: `/smk/bimbingan` **tidak ada** sebagai halaman terpisah. Fitur "Bimbingan Wali" untuk SMK dijalankan oleh halaman `/bimbingan` yang sama dengan SMP (sudah menangani data SMP & SMK via filter `jenjang`). Mencatat: di kode saat ini tile menu dashboard SMK (`app/smk/page.tsx`) masih menunjuk ke `/smk/bimbingan` (route yang belum ada) — sebaiknya diarahkan ke `/bimbingan`.
+>
 > Catatan: Router AI di `Navbar.tsx` menunjuk ke route seperti `/ai/kbc`, `/ai/perangkat`, `/ai/deep-learning`, dst. — semuanya **ditangani oleh satu halaman** `app/ai/page.tsx` (state `activeTool`/`tool` menentukan mode), bukan folder terpisah. Jangan menambahkan folder baru kecuali memang dibutuhkan.
 
 ---
