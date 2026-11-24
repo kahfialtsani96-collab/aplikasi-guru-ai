@@ -3585,16 +3585,16 @@ export default function LaporanPage() {
 
       <div className="relative z-10 flex flex-col h-full overflow-hidden">
         <header
-          className={`border-b px-6 py-2.5 flex items-center justify-between shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
+          className={`border-b px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 shrink-0 shadow-xs print:hidden transition-colors duration-300 ${
             isDarkMode
               ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md'
               : 'bg-slate-100/90 border-slate-300 backdrop-blur-md'
           }`}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Link
               href="/"
-              className={`p-1.5 rounded-lg transition ${
+              className={`p-1.5 rounded-lg transition shrink-0 ${
                 isDarkMode
                   ? 'text-slate-400 hover:text-white'
                   : 'text-slate-600 hover:text-slate-900'
@@ -3610,15 +3610,15 @@ export default function LaporanPage() {
                 />
               </svg>
             </Link>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <div
-                className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
+                className={`logo-anim w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border p-0.5 shadow-xs shrink-0 ${
                   isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
                 }`}
               >
-                <img src="/logo-smp.jpg" alt="Logo SMP" className="w-full h-full object-contain" />
+                <img src="/logo-smp.jpg" alt="Logo SMP" className="logo-anim-img w-full h-full object-contain" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h1
                   className={`font-bold text-base leading-none ${
                     isDarkMode ? 'text-white' : 'text-slate-900'
@@ -3637,10 +3637,10 @@ export default function LaporanPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
             <DarkModeToggle />
             <div
-              className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs ${
+              className={`border text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-2 shadow-xs min-w-0 max-w-full ${
                 isDarkMode
                   ? 'bg-slate-800 border-slate-700 text-slate-100'
                   : 'bg-white border-slate-300 text-slate-800'
@@ -3679,7 +3679,7 @@ export default function LaporanPage() {
             </div>
 
             <div
-              className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2.5 shadow-xs ${
+              className={`border text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2.5 shadow-xs min-w-0 max-w-full ${
                 isDarkMode
                   ? 'bg-slate-800 border-slate-700 text-slate-100'
                   : 'bg-white border-slate-300 text-slate-800'
@@ -3688,10 +3688,10 @@ export default function LaporanPage() {
               <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
                 {userDisplayName.charAt(0)}
               </span>
-              <div className="flex flex-col leading-tight">
-                <span className="font-extrabold">{userDisplayName}</span>
+              <div className="flex flex-col leading-tight min-w-0">
+                <span className="font-extrabold truncate">{userDisplayName}</span>
                 <span
-                  className={`text-[10px] font-mono ${
+                  className={`hidden sm:block text-[10px] font-mono truncate ${
                     isDarkMode ? 'text-slate-400' : 'text-slate-500'
                   }`}
                 >
@@ -3699,7 +3699,7 @@ export default function LaporanPage() {
                 </span>
               </div>
               <span
-                className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border ${
+                className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase ml-1 border shrink-0 ${
                   isDarkMode
                     ? 'bg-indigo-950 text-indigo-300 border-indigo-800'
                     : 'bg-indigo-100 text-indigo-800 border-indigo-200'
@@ -3734,14 +3734,14 @@ export default function LaporanPage() {
         </header>
 
         <div
-          className={`border-b px-6 py-2 shrink-0 overflow-x-auto print:hidden transition-colors duration-300 ${
+          className={`border-b px-4 sm:px-6 py-2 shrink-0 print:hidden transition-colors duration-300 ${
             isDarkMode
               ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md'
               : 'bg-slate-200/80 border-slate-300 backdrop-blur-md'
           }`}
         >
-          <div className="max-w-6xl mx-auto flex items-center justify-between text-xs font-bold">
-            <div className="flex items-center gap-2">
+          <div className="max-w-6xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs font-bold">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <span
                 className={`font-black pr-2 border-r flex items-center gap-1 ${
                   isDarkMode
@@ -3753,7 +3753,7 @@ export default function LaporanPage() {
               </span>
               <button
                 onClick={() => setActiveTab('pusat')}
-                className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer w-full sm:w-auto ${
                   activeTab === 'pusat'
                     ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
                     : isDarkMode
@@ -3765,7 +3765,7 @@ export default function LaporanPage() {
               </button>
               <button
                 onClick={() => setActiveTab('pengaturan')}
-                className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer w-full sm:w-auto ${
                   activeTab === 'pengaturan'
                     ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
                     : isDarkMode
@@ -3777,8 +3777,8 @@ export default function LaporanPage() {
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs">
+            <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+              <label className="flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs w-full sm:w-auto">
                 <input
                   type="checkbox"
                   checked={pakaiTtdKepsek}
@@ -3787,7 +3787,7 @@ export default function LaporanPage() {
                 />
                 <span><PencilLine className="w-4 h-4" /> TTD Kepsek</span>
               </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs">
+              <label className="flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold cursor-pointer select-none bg-indigo-100 text-indigo-900 px-3 py-1.5 rounded-xl border border-indigo-300 shadow-xs w-full sm:w-auto">
                 <input
                   type="checkbox"
                   checked={pakaiCapKepsek}
