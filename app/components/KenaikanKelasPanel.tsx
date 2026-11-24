@@ -297,11 +297,13 @@ export default function KenaikanKelasPanel({
           }
         }
       } else {
-        // Lulus & Lanjut ke SMK: luluskan record SMP, lalu salin biodata ke SMK
+        // Lulus & Lanjut ke SMK: cek duplikat & salin biodata ke SMK DULU,
+        // baru luluskan record SMP. Urutan ini penting: kalau salinan SMK
+        // gagal (duplikat NISN / insert error), record SMP tetap utuh di
+        // kelasnya dan tidak jadi yatim (kelas_id null tanpa salinan SMK).
         for (const id of ids) {
           const sid = Number(id)
           try {
-            await markLulus(sid)
             const src = siswaList.find((s) => s.id === sid)
             const nisn = src?.nisn?.trim() || null
             if (nisn) {
@@ -323,8 +325,12 @@ export default function KenaikanKelasPanel({
               kelas_id: Number(tujuanKelasId),
               jenjang: 'SMK',
             })
-            if (error) err++
-            else ok++
+            if (error) {
+              err++
+              continue
+            }
+            await markLulus(sid)
+            ok++
           } catch {
             err++
           }

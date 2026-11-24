@@ -202,7 +202,7 @@ export default function DashboardPage() {
         supabase.from('siswa').select('*', { count: 'exact', head: true }).or('jenjang.eq.SMP,jenjang.is.null'),
         supabase.from('kelas').select('*', { count: 'exact', head: true }).or('jenjang.eq.SMP,jenjang.is.null'),
         supabase.from('guru').select('*', { count: 'exact', head: true }),
-        supabase.from('absensi').select('status').eq('tanggal', todayStr),
+        supabase.from('absensi').select('status').eq('tanggal', todayStr).or('jenjang.eq.SMP,jenjang.is.null'),
       ])
 
       if (!isMounted) return
