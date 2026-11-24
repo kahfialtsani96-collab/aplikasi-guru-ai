@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
@@ -32,6 +32,7 @@ import {
   UserRound,
   Pencil,
   CopyPlus,
+  Loader2,
 } from 'lucide-react'
 
 // Helper instansiasi Supabase aman untuk mencegah error prerender SSG Vercel
@@ -258,6 +259,10 @@ export default function JadwalMengajarPage() {
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState('2026/2027')
   const [copyingPrevSemester, setCopyingPrevSemester] = useState(false)
 
+  // Status visual "Tersimpan" pada tombol Simpan (hanya tampilan, tampil 2,5 detik)
+  const [justSaved, setJustSaved] = useState(false)
+  const justSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Inisialisasi tanggal klien setelah mount (menghindari Blocking Route prerender)
   useEffect(() => {
     const iso = getLocalTodayIso()
@@ -270,6 +275,13 @@ export default function JadwalMengajarPage() {
     } else {
       // Jika hari ini Jumat (libur), arahkan matriks ke Sabtu
       setMatrixHari('Sabtu')
+    }
+  }, [])
+
+  // Bersihkan timer status "Tersimpan" bila halaman ditinggalkan
+  useEffect(() => {
+    return () => {
+      if (justSavedTimerRef.current) clearTimeout(justSavedTimerRef.current)
     }
   }, [])
 
@@ -721,6 +733,13 @@ export default function JadwalMengajarPage() {
   }
 
   // Simpan Baru (Tunggal / Semua Kelas Serentak) atau Update Edit
+  // Tampilkan centang "Tersimpan" pada tombol Simpan selama 2,5 detik (hanya visual)
+  const tandaiTersimpan = () => {
+    setJustSaved(true)
+    if (justSavedTimerRef.current) clearTimeout(justSavedTimerRef.current)
+    justSavedTimerRef.current = setTimeout(() => setJustSaved(false), 2500)
+  }
+
   const handleSimpan = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isJadwalManager || isSubmitting) return
@@ -848,6 +867,7 @@ export default function JadwalMengajarPage() {
         } else {
           resetFormInput()
           await fetchJadwal()
+          tandaiTersimpan()
         }
       } else if (isAllClassesSerentak) {
         const rowsToInsert = kelasList.map((k) => ({
@@ -870,6 +890,7 @@ export default function JadwalMengajarPage() {
         } else {
           resetFormInput()
           await fetchJadwal()
+          tandaiTersimpan()
         }
       } else {
         const selectedKelasObj = kelasList.find((k) => k.id === Number(selectedKelasId))
@@ -894,6 +915,7 @@ export default function JadwalMengajarPage() {
         } else {
           resetFormInput()
           await fetchJadwal()
+          tandaiTersimpan()
         }
       }
     } catch (err: any) {
@@ -1181,50 +1203,50 @@ export default function JadwalMengajarPage() {
             <div className="flex items-center gap-1">
               <Link
                 href="/jadwal"
-                className="bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1"
+                className="group bg-indigo-600 text-white px-2 py-0.5 rounded shadow-xs font-extrabold flex items-center gap-1"
               >
-                <Clock className="w-4 h-4" /> Jadwal
+                <Clock className="w-4 h-4 ikon-putar" /> Jadwal
               </Link>
               <Link
                 href="/absensi"
-                className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                className={`group px-2 py-0.5 rounded border transition flex items-center gap-1 ${
                   isDarkMode
                     ? 'bg-slate-800 text-slate-300 border-slate-700'
                     : 'bg-white text-slate-700 border-slate-300'
                 }`}
               >
-                <ClipboardList className="w-4 h-4" /> Absensi
+                <ClipboardList className="w-4 h-4 ikon-pantul" /> Absensi
               </Link>
               <Link
                 href="/nilai"
-                className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                className={`group px-2 py-0.5 rounded border transition flex items-center gap-1 ${
                   isDarkMode
                     ? 'bg-slate-800 text-slate-300 border-slate-700'
                     : 'bg-white text-slate-700 border-slate-300'
                 }`}
               >
-                <Star className="w-4 h-4" /> Penilaian
+                <Star className="w-4 h-4 ikon-putar" /> Penilaian
               </Link>
               <Link
                 href="/jurnal"
-                className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                className={`group px-2 py-0.5 rounded border transition flex items-center gap-1 ${
                   isDarkMode
                     ? 'bg-slate-800 text-slate-300 border-slate-700'
                     : 'bg-white text-slate-700 border-slate-300'
                 }`}
               >
-                <NotebookPen className="w-4 h-4" /> Jurnal
+                <NotebookPen className="w-4 h-4 ikon-tulis" /> Jurnal
               </Link>
               {canAccessBimbingan && (
                 <Link
                   href="/bimbingan"
-                  className={`px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                  className={`group px-2 py-0.5 rounded border transition flex items-center gap-1 ${
                     isDarkMode
                       ? 'bg-slate-800 text-slate-300 border-slate-700'
                       : 'bg-white text-slate-700 border-slate-300'
                   }`}
                 >
-                  <HeartHandshake className="w-4 h-4" /> Bimbingan
+                  <HeartHandshake className="w-4 h-4 ikon-denyut" /> Bimbingan
                 </Link>
               )}
             </div>
@@ -1273,14 +1295,18 @@ export default function JadwalMengajarPage() {
                   type="button"
                   onClick={handleSalinJadwalSebelumnya}
                   disabled={copyingPrevSemester}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-black flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                  className={`group px-1.5 py-0.5 rounded text-[9px] font-black flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
                     isDarkMode
                       ? 'bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900'
                       : 'bg-indigo-100 text-indigo-800 border border-indigo-300 hover:bg-indigo-200'
                   }`}
                   title={`Salin jadwal dari Semester ${prevPeriode.semester} ${prevPeriode.tahun}`}
                 >
-                  <CopyPlus className="w-3 h-3" />
+                  {copyingPrevSemester ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <CopyPlus className="w-3 h-3 ikon-timbul" />
+                  )}
                   {copyingPrevSemester
                     ? 'Menyalin...'
                     : `Salin dari ${prevPeriode.semester} ${prevPeriode.tahun}`}
@@ -1348,7 +1374,7 @@ export default function JadwalMengajarPage() {
             >
               <button
                 onClick={() => setActiveTab('kelola')}
-                className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`group py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
                   activeTab === 'kelola'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : isDarkMode
@@ -1356,11 +1382,11 @@ export default function JadwalMengajarPage() {
                     : 'text-slate-700'
                 }`}
               >
-                <Clock className="w-4 h-4" /> {isJadwalManager ? 'Input & Kelola' : 'Jadwal Mengajar'}
+                <Clock className="w-4 h-4 ikon-putar" /> {isJadwalManager ? 'Input & Kelola' : 'Jadwal Mengajar'}
               </button>
               <button
                 onClick={() => setActiveTab('rekap')}
-                className={`py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`group py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
                   activeTab === 'rekap'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : isDarkMode
@@ -1368,16 +1394,16 @@ export default function JadwalMengajarPage() {
                     : 'text-slate-700'
                 }`}
               >
-                <History className="w-4 h-4" /> Rekap &amp; Cetak
+                <History className="w-4 h-4 ikon-putar" /> Rekap &amp; Cetak
               </button>
             </div>
 
             <button
               onClick={() => window.print()}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-2.5 py-1 rounded-lg text-[10px] flex items-center justify-center gap-1 transition shadow-xs cursor-pointer shrink-0"
+              className="group bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-2.5 py-1 rounded-lg text-[10px] flex items-center justify-center gap-1 transition shadow-xs cursor-pointer shrink-0 active:scale-95"
               title="Cetak Jadwal PDF"
             >
-              <Printer className="w-4 h-4" /> Cetak
+              <Printer className="w-4 h-4 ikon-kertas" /> Cetak
             </button>
           </div>
 
@@ -1400,8 +1426,8 @@ export default function JadwalMengajarPage() {
                   }`}
                 >
                   {editingJadwalId && (
-                    <div className="flex items-center justify-between text-[10px] font-black text-amber-500 px-0.5">
-                      <span><Pencil className="w-4 h-4" /> MODE EDIT JADWAL #{editingJadwalId}</span>
+                    <div className="group flex items-center justify-between text-[10px] font-black text-amber-500 px-0.5">
+                      <span><Pencil className="w-4 h-4 ikon-tulis" /> MODE EDIT JADWAL #{editingJadwalId}</span>
                       <button
                         type="button"
                         onClick={resetFormInput}
@@ -1570,15 +1596,28 @@ export default function JadwalMengajarPage() {
                         : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                     }`}
                   >
-                    <span>
-                      {isSubmitting
-                        ? 'Menyimpan...'
-                        : editingJadwalId
-                        ? 'SIMPAN PERUBAHAN JADWAL'
-                        : selectedKelasId === 'ALL'
-                        ? `SIMPAN SERENTAK KE ${kelasList.length} KELAS`
-                        : '+ SIMPAN JADWAL'}
-                    </span>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...
+                      </>
+                    ) : justSaved ? (
+                      <motion.span
+                        initial={{ scale: 0.6, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                        className="flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Tersimpan
+                      </motion.span>
+                    ) : (
+                      <span>
+                        {editingJadwalId
+                          ? 'SIMPAN PERUBAHAN JADWAL'
+                          : selectedKelasId === 'ALL'
+                          ? `SIMPAN SERENTAK KE ${kelasList.length} KELAS`
+                          : '+ SIMPAN JADWAL'}
+                      </span>
+                    )}
                   </button>
                 </form>
               )}
@@ -1596,8 +1635,8 @@ export default function JadwalMengajarPage() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-[11px] font-black text-indigo-400">
-                        <Hand className="w-4 h-4 inline-block align-middle" /> {userDisplayName}
+                      <p className="group text-[11px] font-black text-indigo-400">
+                        <Hand className="w-4 h-4 inline-block align-middle ikon-lambai" /> {userDisplayName}
                       </p>
                       <p
                         className={`text-[10px] font-semibold ${
@@ -1620,7 +1659,7 @@ export default function JadwalMengajarPage() {
                       <button
                         type="button"
                         onClick={() => setGuruScope('mine')}
-                        className={`px-2 py-0.5 rounded-md cursor-pointer transition ${
+                        className={`group px-2 py-0.5 rounded-md cursor-pointer transition active:scale-95 ${
                           guruScope === 'mine'
                             ? 'bg-indigo-600 text-white'
                             : isDarkMode
@@ -1628,12 +1667,12 @@ export default function JadwalMengajarPage() {
                             : 'text-slate-600'
                         }`}
                       >
-                        <CalendarDays className="w-4 h-4" /> Jadwal Saya
+                        <CalendarDays className="w-4 h-4 ikon-pantul" /> Jadwal Saya
                       </button>
                       <button
                         type="button"
                         onClick={() => setGuruScope('all')}
-                        className={`px-2 py-0.5 rounded-md cursor-pointer transition ${
+                        className={`group px-2 py-0.5 rounded-md cursor-pointer transition active:scale-95 ${
                           guruScope === 'all'
                             ? 'bg-indigo-600 text-white'
                             : isDarkMode
@@ -1641,7 +1680,7 @@ export default function JadwalMengajarPage() {
                             : 'text-slate-600'
                         }`}
                       >
-                        <School className="w-4 h-4" /> Semua Kelas
+                        <School className="w-4 h-4 ikon-pantul" /> Semua Kelas
                       </button>
                     </div>
                   </div>
@@ -1655,8 +1694,8 @@ export default function JadwalMengajarPage() {
                           : 'bg-indigo-50/80 border-indigo-200'
                       }`}
                     >
-                      <p className="text-[10px] font-black uppercase text-amber-500 mb-1">
-                        <Flame className="w-4 h-4 inline-block align-middle" /> Jadwal {selectedDateHariName} ({tanggalCekAbsen}) •{' '}
+                      <p className="group text-[10px] font-black uppercase text-amber-500 mb-1">
+                        <Flame className="w-4 h-4 inline-block align-middle ikon-denyut" /> Jadwal {selectedDateHariName} ({tanggalCekAbsen}) •{' '}
                         {myTodayJadwal.length} Sesi
                       </p>
                       {myTodayJadwal.length === 0 ? (
@@ -1716,19 +1755,19 @@ export default function JadwalMengajarPage() {
                                 <div className="flex items-center gap-1">
                                   <Link
                                     href="/absensi"
-                                    className={`px-2 py-1 rounded text-white text-[9px] font-black ${
+                                    className={`group px-2 py-1 rounded text-white text-[9px] font-black ${
                                       sudahAbsen
                                         ? 'bg-emerald-700 hover:bg-emerald-800'
                                         : 'bg-amber-600 hover:bg-amber-700'
                                     }`}
                                   >
-                                    {sudahAbsen ? (<><CheckCircle2 className="w-4 h-4" /> Lihat Absen</>) : (<><ClipboardList className="w-4 h-4" /> Absen</>)}
+                                    {sudahAbsen ? (<><CheckCircle2 className="w-4 h-4 ikon-timbul" /> Lihat Absen</>) : (<><ClipboardList className="w-4 h-4 ikon-pantul" /> Absen</>)}
                                   </Link>
                                   <Link
                                     href="/jurnal"
-                                    className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black"
+                                    className="group px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black"
                                   >
-                                    <NotebookPen className="w-4 h-4" /> Jurnal
+                                    <NotebookPen className="w-4 h-4 ikon-tulis" /> Jurnal
                                   </Link>
                                 </div>
                               </div>
@@ -1753,11 +1792,11 @@ export default function JadwalMengajarPage() {
                 <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1.5 border-b border-slate-700/30 shrink-0">
                   <div className="flex items-center gap-2">
                     <h3
-                      className={`text-[11px] font-black uppercase flex items-center gap-1 ${
+                      className={`group text-[11px] font-black uppercase flex items-center gap-1 ${
                         isDarkMode ? 'text-indigo-300' : 'text-indigo-900'
                       }`}
                     >
-                      <Clock className="w-4 h-4" />{' '}
+                      <Clock className="w-4 h-4 ikon-putar" />{' '}
                       {isJadwalManager || guruScope === 'all'
                         ? 'Daftar Jadwal SMP'
                         : 'Jadwal Mingguan Saya'}{' '}
@@ -1791,7 +1830,7 @@ export default function JadwalMengajarPage() {
                     <button
                       type="button"
                       onClick={() => setViewMode('list')}
-                      className={`px-2 py-0.5 rounded-md cursor-pointer transition ${
+                      className={`group px-2 py-0.5 rounded-md cursor-pointer transition active:scale-95 ${
                         viewMode === 'list'
                           ? 'bg-indigo-600 text-white'
                           : isDarkMode
@@ -1799,12 +1838,12 @@ export default function JadwalMengajarPage() {
                           : 'text-slate-600'
                       }`}
                     >
-                      <ClipboardList className="w-4 h-4" /> Mode List
+                      <ClipboardList className="w-4 h-4 ikon-pantul" /> Mode List
                     </button>
                     <button
                       type="button"
                       onClick={() => setViewMode('matrix')}
-                      className={`px-2 py-0.5 rounded-md cursor-pointer transition ${
+                      className={`group px-2 py-0.5 rounded-md cursor-pointer transition active:scale-95 ${
                         viewMode === 'matrix'
                           ? 'bg-indigo-600 text-white'
                           : isDarkMode
@@ -1812,7 +1851,7 @@ export default function JadwalMengajarPage() {
                           : 'text-slate-600'
                       }`}
                     >
-                      <BarChart3 className="w-4 h-4" /> Matriks Kelas
+                      <BarChart3 className="w-4 h-4 ikon-naik" /> Matriks Kelas
                     </button>
                   </div>
                 </div>
@@ -1824,7 +1863,7 @@ export default function JadwalMengajarPage() {
                       <button
                         type="button"
                         onClick={() => setSelectedHariFilter('')}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 cursor-pointer transition ${
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 cursor-pointer transition active:scale-95 ${
                           selectedHariFilter === ''
                             ? 'bg-indigo-600 text-white'
                             : isDarkMode
@@ -1842,7 +1881,7 @@ export default function JadwalMengajarPage() {
                             key={h}
                             type="button"
                             onClick={() => setSelectedHariFilter(active ? '' : h)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 cursor-pointer transition flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 cursor-pointer transition active:scale-95 flex items-center gap-1 ${
                               active
                                 ? 'bg-indigo-600 text-white'
                                 : isDarkMode
@@ -1958,7 +1997,7 @@ export default function JadwalMengajarPage() {
                                   [group.hari]: !prev[group.hari],
                                 }))
                               }
-                              className={`w-full px-2.5 py-1.5 rounded-lg border flex items-center justify-between text-left cursor-pointer transition ${
+                              className={`group w-full px-2.5 py-1.5 rounded-lg border flex items-center justify-between text-left cursor-pointer transition ${
                                 isSelectedDateDay
                                   ? isDarkMode
                                     ? 'bg-indigo-950/60 border-indigo-700/70 text-indigo-200'
@@ -1973,7 +2012,7 @@ export default function JadwalMengajarPage() {
                                   {isCollapsed ? '▶' : '▼'}
                                 </span>
                                 <span className="text-[11px] font-black uppercase tracking-wide">
-                                  <CalendarDays className="w-4 h-4 inline-block align-middle" /> {group.hari}
+                                  <CalendarDays className="w-4 h-4 inline-block align-middle ikon-pantul" /> {group.hari}
                                 </span>
                                 {isSelectedDateDay && (
                                   <span className="px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 text-[8px] font-black">
@@ -1993,7 +2032,10 @@ export default function JadwalMengajarPage() {
                             </button>
 
                             {!isCollapsed && (
-                              <div className="space-y-1.5 pl-1">
+                              <div
+                                key={`${group.hari}-${selectedHariFilter}-${listFilterKelasId}-${listFilterGuruEmail}`}
+                                className="space-y-1.5 pl-1"
+                              >
                                 {group.items.map((item, index) => {
                                   const namaKelas =
                                     typeof item.kelas === 'object'
@@ -2008,8 +2050,11 @@ export default function JadwalMengajarPage() {
                                   const sudahAbsen = isJadwalItemSudahAbsen(item)
 
                                   return (
-                                    <div
+                                    <motion.div
                                       key={item.id || index}
+                                      initial={{ opacity: 0, y: 8 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      transition={{ duration: 0.25, delay: Math.min(index * 0.05, 0.5) }}
                                       className={`p-2 rounded-lg border ${
                                         sudahAbsen
                                           ? 'border-l-4 border-l-emerald-400'
@@ -2068,11 +2113,11 @@ export default function JadwalMengajarPage() {
 
                                       <div className="flex items-center justify-between gap-2 text-[10px]">
                                         <span
-                                          className={`font-semibold truncate ${
+                                          className={`group font-semibold truncate ${
                                             isDarkMode ? 'text-slate-300' : 'text-slate-700'
                                           }`}
                                         >
-                                          <UserRound className="w-4 h-4 inline-block align-middle" /> {getGuruDisplayName(item.guru_email)}
+                                          <UserRound className="w-4 h-4 inline-block align-middle ikon-pantul" /> {getGuruDisplayName(item.guru_email)}
                                         </span>
 
                                         <div className="flex items-center gap-2 shrink-0">
@@ -2091,24 +2136,24 @@ export default function JadwalMengajarPage() {
                                               <button
                                                 type="button"
                                                 onClick={() => handleStartEdit(item)}
-                                                className="px-1.5 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 font-bold cursor-pointer"
+                                                className="group px-1.5 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 font-bold cursor-pointer"
                                                 title="Edit Jadwal"
                                               >
-                                                <Pencil className="w-4 h-4" />
+                                                <Pencil className="w-4 h-4 ikon-tulis" />
                                               </button>
                                               <button
                                                 type="button"
                                                 onClick={() => handleDelete(item.id)}
-                                                className="px-1.5 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 font-bold cursor-pointer"
+                                                className="group px-1.5 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 font-bold cursor-pointer"
                                                 title="Hapus Jadwal"
                                               >
-                                                <Trash2 className="w-4 h-4" />
+                                                <Trash2 className="w-4 h-4 ikon-goyang" />
                                               </button>
                                             </div>
                                           )}
                                         </div>
                                       </div>
-                                    </div>
+                                    </motion.div>
                                   )
                                 })}
                               </div>
@@ -2133,7 +2178,7 @@ export default function JadwalMengajarPage() {
                             key={h}
                             type="button"
                             onClick={() => setMatrixHari(h)}
-                            className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold cursor-pointer transition ${
+                            className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold cursor-pointer transition active:scale-95 ${
                               matrixHari === h
                                 ? 'bg-indigo-600 text-white'
                                 : isDarkMode
@@ -2164,7 +2209,13 @@ export default function JadwalMengajarPage() {
                     </div>
 
                     {/* Tabel Matriks Scrollable Horizontal & Vertikal */}
-                    <div className="flex-1 overflow-auto border rounded-lg border-slate-700/40">
+                    <motion.div
+                      key={matrixHari}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex-1 overflow-auto border rounded-lg border-slate-700/40"
+                    >
                       <table className="w-full border-collapse text-[10px] min-w-[680px]">
                         <thead
                           className={`sticky top-0 z-10 ${
@@ -2299,7 +2350,7 @@ export default function JadwalMengajarPage() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </motion.div>
                   </div>
                 )}
               </div>
@@ -2388,7 +2439,10 @@ export default function JadwalMengajarPage() {
                     Tidak ada jadwal ditemukan.
                   </div>
                 ) : (
-                  <div className="flex-1 overflow-y-auto pr-1 space-y-1.5">
+                  <div
+                    key={`${filterHari}-${filterKelasId}-${filterMapelId}`}
+                    className="flex-1 overflow-y-auto pr-1 space-y-1.5"
+                  >
                     {filteredRekapList.map((item, index) => {
                       const namaKelas =
                         typeof item.kelas === 'object' ? item.kelas?.nama_kelas : item.kelas
@@ -2397,8 +2451,11 @@ export default function JadwalMengajarPage() {
                       const sudahAbsen = isJadwalItemSudahAbsen(item)
 
                       return (
-                        <div
+                        <motion.div
                           key={item.id || index}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.25, delay: Math.min(index * 0.05, 0.5) }}
                           className={`p-2 rounded-lg border transition shadow-xs flex flex-col gap-1 ${
                             sudahAbsen
                               ? isDarkMode
@@ -2463,22 +2520,22 @@ export default function JadwalMengajarPage() {
 
                           <div className="flex items-center justify-between pt-1 border-t border-slate-700/20 text-[10px]">
                             <span
-                              className={`font-semibold ${
+                              className={`group font-semibold ${
                                 isDarkMode ? 'text-slate-400' : 'text-slate-600'
                               }`}
                             >
-                              <UserRound className="w-4 h-4 inline-block align-middle" /> {getGuruDisplayName(item.guru_email)}
+                              <UserRound className="w-4 h-4 inline-block align-middle ikon-pantul" /> {getGuruDisplayName(item.guru_email)}
                             </span>
                             {isJadwalManager && (
                               <button
                                 onClick={() => handleDelete(item.id)}
-                                className="text-rose-500 hover:text-rose-700 font-bold text-[10px] cursor-pointer print:hidden"
+                                className="group text-rose-500 hover:text-rose-700 font-bold text-[10px] cursor-pointer print:hidden"
                               >
-                                <Trash2 className="w-4 h-4" /> Hapus
+                                <Trash2 className="w-4 h-4 ikon-goyang" /> Hapus
                               </button>
                             )}
                           </div>
-                        </div>
+                        </motion.div>
                       )
                     })}
                   </div>
