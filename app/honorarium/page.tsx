@@ -104,9 +104,11 @@ function extractSlots(jamKe: unknown): number[] {
 const normalizeMapelKey = (s: string) =>
   String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
-// Mapel gabungan jenjang SMK yang diajarkan ke seluruh kelas Xâ€“XII SECARA BERSAMAAN
-// dalam satu sesi (mis. PJOK, Qiro'ah, Pramuka). Satu sesi (tanggal + mapel) dihitung
-// TETAP 2 JP, dan tidak boleh diakumulasi meskipun tercatat di beberapa baris jurnal.
+// Mapel pembina (Pramuka, Qiro'ah, Presentasi) yang diajarkan ke seluruh kelas
+// SECARA BERSAMAAN dalam satu sesi TIDAK dihitung JP (0 JP), karena pembina sudah
+// mendapat tunjangan pembina flat dari tab Master. Dedup slot per tanggal tetap
+// berlaku untuk sesi gabungan lain (mis. PJOK), agar satu sesi yang tercatat di
+// beberapa baris jurnal tidak dihitung berulang kali.
 const EXCLUDED_PEMBINA_MAPEL_KEYS = new Set(['pramuka', 'qiroah', 'presentasi'])
 
 const bulanAkhir = (tahun: number, bulan: number) => new Date(tahun, bulan, 0).getDate()
@@ -1080,9 +1082,12 @@ export default function HonorariumPage() {
           // 1) mapel atau kelas kosong (null/string kosong) â†’ abaikan
           if (!mapelTxt || !kelasTxt) return
 
-          // 2) kata kunci PIKET/IZIN pada materi (case-insensitive, semua variasi):
-          //    'TIDAK HADIR', 'IZIN', 'IJIN', 'PRESENSI KELAS' â†’ abaikan
-          if (/(tidak hadir|\bizin\b|\bijin\b|presensi kelas)/i.test(materiTxt)) return
+          // 2) Baris log otomatis presensi / piket: hanya bila materi DIAWALI kata
+          //    kunci 'TIDAK HADIR', 'IZIN', 'IJIN', atau 'PRESENSI KELAS' -> abaikan.
+          //    Uji berjangkar di awal (bukan di sembarang posisi) supaya sesi mengajar
+          //    sah yang hanya MENYEBUT absen di tengah kalimat - mis. "Ulangan harian,
+          //    2 siswa tidak hadir" - tetap dihitung JP-nya.
+          if (/^(tidak hadir|izin|ijin|presensi kelas)\b/i.test(materiTxt)) return
 
           // 3) kegiatan luar kelas / ekskul penuh 'Tadabur Alam' (materi atau mapel) â†’ abaikan
           if (materiTxt.includes('tadabur alam') || mapelTxt.includes('tadabur alam')) return
@@ -1091,24 +1096,28 @@ export default function HonorariumPage() {
           const isPembina = EXCLUDED_PEMBINA_MAPEL_KEYS.has(normalizeMapelKey(mapelTxt)) || (jenjangTxt === 'SMK' && /^pjok/.test(normalizeMapelKey(mapelTxt)));
           if (isPembina) return;
 
-          // 4) VALIDASI MAPEL RESMI GURU:
-          //    Jika jurnal mencatat mapel yang BUKAN milik guru tsb. â†’ itu inputan guru
+          // 4) VALIDASI MAPEL RESMI GURU (fail-closed):
+          //    Jika jurnal mencatat mapel yang BUKAN milik guru tsb. -> itu inputan guru
           //    piket menggantikan guru lain (mis. PJOK/PKn/Bahasa Arab/Matematika saat
-          //    menjaga ujian/piket) â†’ jangan dihitung ke JP mengajar.
+          //    menjaga ujian/piket) -> jangan dihitung ke JP mengajar.
+          //    Fail-closed: bila guru TIDAK PUNYA baris guru_mapel sama sekali (atau
+          //    email jurnal tidak ditemukan di tabel guru), baris juga dibuang - guru
+          //    tanpa link mapel tidak mendapat JP sampai link mapelnya dilengkapi di
+          //    master guru_mapel. Sebelumnya validasi dilewati dalam kondisi ini
+          //    (fail-open), sehingga semua jurnal guru tsb. ikut terhitung.
           //    Pengecualian: kegiatan gabungan resmi (Pramuka/Qiro'ah/Presentasi).
           const mapelTxtClean = mapelTxt.replace(/['â€™â€˜`]/g, '')
           const isKegiatanGabungan = COMBINED_KEYWORDS.some((k) => mapelTxtClean.includes(k))
           if (!isKegiatanGabungan) {
             const guruId = emailToGuruId.get(em)
             const officialSet = guruId != null ? guruMapelByGuru.get(guruId) : undefined
-            if (officialSet && officialSet.size > 0) {
-              const matchResmi =
-                officialSet.has(mapelTxt) ||
-                Array.from(officialSet).some(
-                  (off) => off.includes(mapelTxt) || mapelTxt.includes(off)
-                )
-              if (!matchResmi) return // inputan guru piket â†’ tidak dihitung
-            }
+            if (!officialSet || officialSet.size === 0) return // guru tanpa link mapel -> tidak dihitung
+            const matchResmi =
+              officialSet.has(mapelTxt) ||
+              Array.from(officialSet).some(
+                (off) => off.includes(mapelTxt) || mapelTxt.includes(off)
+              )
+            if (!matchResmi) return // inputan guru piket -> tidak dihitung
           }
 
           const slots = extractSlots(row.jam_ke)
