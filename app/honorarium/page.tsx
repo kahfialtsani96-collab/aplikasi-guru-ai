@@ -71,8 +71,10 @@ function formatTanggal(iso?: string | null) {
 //     jumlah kelas dan bukan 1 JP).
 function extractSlots(jamKe: unknown): number[] {
   const raw = String(jamKe ?? '')
-  // 1) Buang seluruh teks dalam tanda kurung
-  const cleanStr = raw.replace(/\(.*?\)/g, '').trim()
+  // 1) Buang seluruh teks dalam tanda kurung (berpasangan); kurung buka yang
+  //    tidak tertutup beserta seluruh teks sesudahnya juga dibuang, supaya angka
+  //    jam waktu (mis. "08" dari "(08.00") tidak ikut terbaca sebagai slot.
+  const cleanStr = raw.replace(/\(.*?\)/g, '').replace(/\(.*$/, '').trim()
   if (!cleanStr) return []
 
   const slots = new Set<number>()
@@ -84,9 +86,10 @@ function extractSlots(jamKe: unknown): number[] {
     const a = Number(m[1])
     const b = Number(m[2])
     if (a >= 1 && a <= 12 && b >= 1 && b <= 12) {
-      const lo = Math.min(a, b)
-      const hi = Math.max(a, b)
-      for (let i = lo; i <= hi; i++) slots.add(i)
+      // Rentang terbalik (mis. "12 s/d 1") dilewati: bukan rentang yang sah.
+      // Kedua ujungnya tetap terbaca sebagai slot tunggal di pass 2b.
+      if (a > b) continue
+      for (let i = a; i <= b; i++) slots.add(i)
     }
   }
 
@@ -104,12 +107,13 @@ function extractSlots(jamKe: unknown): number[] {
 const normalizeMapelKey = (s: string) =>
   String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
-// Mapel pembina (Pramuka, Qiro'ah, Presentasi) yang diajarkan ke seluruh kelas
-// SECARA BERSAMAAN dalam satu sesi TIDAK dihitung JP (0 JP), karena pembina sudah
-// mendapat tunjangan pembina flat dari tab Master. Dedup slot per tanggal tetap
-// berlaku untuk sesi gabungan lain (mis. PJOK), agar satu sesi yang tercatat di
-// beberapa baris jurnal tidak dihitung berulang kali.
-const EXCLUDED_PEMBINA_MAPEL_KEYS = new Set(['pramuka', 'qiroah', 'presentasi'])
+// Mapel pembina / kegiatan gabungan (Pramuka, Qiro'ah, Presentasi): 0 JP, karena
+// sudah ada tunjangan pembina (keputusan Ketua, 25 Nov 2026). Pencocokan berbasis
+// substring setelah normalisasi, supaya varian nama ("Pramuka Gabungan",
+// "Ekstrakurikuler Pramuka", "Qiroah Gabungan") ikut 0 JP. PJOK SMK juga 0 JP.
+// Dedup slot per tanggal tetap berlaku untuk sesi gabungan lain, agar satu sesi
+// yang tercatat di beberapa baris jurnal tidak dihitung berulang kali.
+const PEMBINA_MAPEL_KEYWORDS = ['pramuka', 'qiroah', 'presentasi']
 
 const bulanAkhir = (tahun: number, bulan: number) => new Date(tahun, bulan, 0).getDate()
 
@@ -241,6 +245,7 @@ interface RekapRow {
   pembina: number
   wali_kelas: number
   tugas_tambahan: number
+  piket: number
   potongan: PotonganTerapan[]
   total_potongan: number
   total_bersih: number
@@ -356,6 +361,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
   const paperCss = paperSize === 'f4' ? '330mm 215mm' : '297mm 210mm'
 
   const kotorOf = (r: RekapRow) => toNum(r.total_bersih) + toNum(r.total_potongan)
+  const adaPiket = rows.some((r) => toNum(r.piket) > 0)
   const totalKotor = rows.reduce((a, r) => a + kotorOf(r), 0)
   const totalPotongan = rows.reduce((a, r) => a + toNum(r.total_potongan), 0)
   const totalBersih = rows.reduce((a, r) => a + toNum(r.total_bersih), 0)
@@ -461,6 +467,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                 <th className={`${thCls} text-right`}>Pembina</th>
                 <th className={`${thCls} text-right`}>Wali Kelas</th>
                 <th className={`${thCls} text-right`}>Tugas Tambahan</th>
+                {adaPiket && <th className={`${thCls} text-right`}>Piket</th>}
                 <th className={`${thCls} text-right`}>Total Kotor</th>
                 <th className={`${thCls} text-right`}>Potongan</th>
                 <th className={`${thCls} text-right`}>Total Bersih</th>
@@ -478,6 +485,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                   <td className={`${tdCls} text-right`}>{formatRupiah(r.pembina)}</td>
                   <td className={`${tdCls} text-right`}>{formatRupiah(r.wali_kelas)}</td>
                   <td className={`${tdCls} text-right`}>{formatRupiah(r.tugas_tambahan)}</td>
+                  {adaPiket && <td className={`${tdCls} text-right`}>{formatRupiah(r.piket)}</td>}
                   <td className={`${tdCls} text-right font-bold`}>{formatRupiah(kotorOf(r))}</td>
                   <td className={`${tdCls} text-right`}>
                     {r.potongan.length > 0
@@ -488,7 +496,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                 </tr>
               ))}
               <tr>
-                <td colSpan={9} className={`${tdCls} text-right font-black uppercase`}>Total Keseluruhan</td>
+                <td colSpan={adaPiket ? 10 : 9} className={`${tdCls} text-right font-black uppercase`}>Total Keseluruhan</td>
                 <td className={`${tdCls} text-right font-black`}>{formatRupiah(totalKotor)}</td>
                 <td className={`${tdCls} text-right font-black`}>{formatRupiah(totalPotongan)}</td>
                 <td className={`${tdCls} text-right font-black`}>{formatRupiah(totalBersih)}</td>
@@ -534,6 +542,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
                       {rowsL('Pembina', '', formatRupiah(r.pembina))}
                       {rowsL('Wali Kelas', '', formatRupiah(r.wali_kelas))}
                       {rowsL('Tugas Tambahan', '', formatRupiah(r.tugas_tambahan))}
+                      {toNum(r.piket) > 0 && rowsL('Piket', '', formatRupiah(r.piket))}
                       {rowsL('Total Kotor', '', formatRupiah(kotorOf(r)))}
                       {r.potongan.map((p) => rowsL(`Potongan ${p.nama}`, p.tipe === 'persen' ? p.nilai + '%' : formatRupiah(p.nilai), '- ' + formatRupiah(p.hasil)))}
                       {rowsL('Total Potongan', '', formatRupiah(r.total_potongan))}
@@ -959,6 +968,7 @@ export default function HonorariumPage() {
         pembina: n(p.pembina),
         wali_kelas: p.wali_kelas ? n(pengaturan?.tunjangan_wali_kelas) : 0,
         tugas_tambahan: 0,
+        piket: 0,
         potongan: [],
         total_potongan: 0,
         total_bersih: 0,
@@ -981,7 +991,8 @@ export default function HonorariumPage() {
       r.tunjangan_masa_kerja +
       r.pembina +
       r.wali_kelas +
-      r.tugas_tambahan
+      r.tugas_tambahan +
+      n(r.piket)
 
     const penerima = penerimaList.find((p) => p.guru_id === r.guru_id)
     const potongan: PotonganTerapan[] = potonganList
@@ -998,7 +1009,7 @@ export default function HonorariumPage() {
       })
 
     const totalPotongan = potongan.reduce((s, x) => s + x.hasil, 0)
-    return { ...r, potongan, total_potongan: totalPotongan, total_bersih: kotor - totalPotongan }
+    return { ...r, potongan, total_potongan: totalPotongan, total_bersih: Math.max(0, kotor - totalPotongan) }
   }
 
   // =====================================================================
@@ -1093,7 +1104,8 @@ export default function HonorariumPage() {
           if (materiTxt.includes('tadabur alam') || mapelTxt.includes('tadabur alam')) return
 
           const jenjangTxt = String(row.jenjang ?? '').trim().toUpperCase();
-          const isPembina = EXCLUDED_PEMBINA_MAPEL_KEYS.has(normalizeMapelKey(mapelTxt)) || (jenjangTxt === 'SMK' && /^pjok/.test(normalizeMapelKey(mapelTxt)));
+          const mapelKey = normalizeMapelKey(mapelTxt)
+          const isPembina = PEMBINA_MAPEL_KEYWORDS.some((k) => mapelKey.includes(k)) || (jenjangTxt === 'SMK' && /^pjok/.test(mapelKey));
           if (isPembina) return;
 
           // 4) VALIDASI MAPEL RESMI GURU (fail-closed):
@@ -1229,6 +1241,10 @@ export default function HonorariumPage() {
         absensiDates.forEach((tgl) => transportDates.add(tgl))
       }
 
+      // Staf piket dibayar per hari hadir: hari transport (absensi Hadir +
+      // tanggal tugas) x tarif piket. Guru mengajar: 0.
+      const piket = p.status === 'staf_piket' ? transportDates.size * n(pengaturan?.tarif_piket) : 0
+
       return computeTotalsRow({
         id: undefined,
         periode: targetPeriode,
@@ -1243,6 +1259,7 @@ export default function HonorariumPage() {
         pembina: n(p.pembina),
         wali_kelas: p.wali_kelas ? n(pengaturan?.tunjangan_wali_kelas) : 0,
         tugas_tambahan: tugasNominal,
+        piket,
         potongan: [],
         total_potongan: 0,
         total_bersih: 0,
@@ -1300,6 +1317,7 @@ export default function HonorariumPage() {
       pembina: r.pembina,
       wali_kelas: r.wali_kelas,
       tugas_tambahan: r.tugas_tambahan,
+      piket: n(r.piket),
       potongan: r.potongan,
       total_potongan: r.total_potongan,
       total_bersih: r.total_bersih,
@@ -1458,16 +1476,17 @@ export default function HonorariumPage() {
   // =====================================================================
   // TAB RIWAYAT PEMBAYARAN GAJI
   // =====================================================================
-  const loadRiwayat = useCallback(async () => {
+  const loadRiwayat = useCallback(async (periode?: string) => {
     const { data } = await supabase
       .from('honorarium_rekap')
       .select('periode')
       .eq('status', 'PAID')
     const periods = Array.from(new Set((data || []).map((r) => r.periode))).sort().reverse()
     setRiwayatPeriods(periods)
+    const diminta = periode ?? riwayatPeriode
     const defaultP =
-      riwayatPeriode && periods.includes(riwayatPeriode)
-        ? riwayatPeriode
+      diminta && periods.includes(diminta)
+        ? diminta
         : periods[0] || ''
     setRiwayatPeriode(defaultP)
 
@@ -1724,6 +1743,9 @@ export default function HonorariumPage() {
       }
       return { ...r, guru_nama: guru?.nama_lengkap || r.guru_nama || '' }
     })
+
+  // Kolom Piket hanya tampil bila ada penerima dengan nominal piket > 0.
+  const adaPiketRekap = rekapRows.some((r) => n(r.piket) > 0)
 
   // Baris yang dicetak pada slip tanda terima.
   // - Admin/Pengurus/Kepala Sekolah/Bendahara/Yayasan (showFullRekap): semua penerima
@@ -2221,6 +2243,7 @@ export default function HonorariumPage() {
                             <th className="p-1.5">Pembina</th>
                             <th className="p-1.5">Wali Kelas</th>
                             <th className="p-1.5">Tugas Tambahan</th>
+                            {adaPiketRekap && <th className="p-1.5">Piket</th>}
                             <th className="p-1.5">Potongan</th>
                             <th className="p-1.5 text-right">Total Potongan</th>
                             <th className="p-1.5 text-right">Total Bersih</th>
@@ -2314,6 +2337,9 @@ export default function HonorariumPage() {
                                     onChange={(e) => updateRekapRow(r.guru_id, { tugas_tambahan: Number(e.target.value) })}
                                     className={cellCls} />
                                 </td>
+                                {adaPiketRekap && (
+                                  <td className="p-1.5 text-right font-bold">{formatRupiah(n(r.piket))}</td>
+                                )}
 
                                 <td className="p-1.5 max-w-[180px]">
                                   <div className="space-y-0.5 text-[9px]">
@@ -2392,7 +2418,6 @@ export default function HonorariumPage() {
                               {(() => {
                                 const tj = n(pengaturan?.tarif_jp)
                                 const tt = n(pengaturan?.tarif_transport_harian)
-                                const kotor = personalRow.jumlah_jp * tj + personalRow.transport_hari * tt + personalRow.tunjangan_jabatan + personalRow.tunjangan_masa_kerja + personalRow.pembina + personalRow.wali_kelas + personalRow.tugas_tambahan
                                 const rowL = (label: string, sub: string, val: string, cls = '') => (
                                   <tr key={label} className={`border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
                                     <td className={`p-1.5 font-bold ${cls}`}>{label}</td>
@@ -2409,7 +2434,8 @@ export default function HonorariumPage() {
                                     {rowL('Pembina', '', formatRupiah(personalRow.pembina))}
                                     {rowL('Wali Kelas', '', formatRupiah(personalRow.wali_kelas))}
                                     {rowL('Tugas Tambahan', '', formatRupiah(personalRow.tugas_tambahan))}
-                                    {rowL('Total Kotor', '', formatRupiah(kotor), 'text-indigo-400')}
+                                    {n(personalRow.piket) > 0 && rowL('Piket', '', formatRupiah(personalRow.piket))}
+                                    {rowL('Total Kotor', '', formatRupiah(n(personalRow.total_bersih) + n(personalRow.total_potongan)), 'text-indigo-400')}
                                     {personalRow.potongan.map((p) => rowL(`Potongan ${p.nama}`, p.tipe === 'persen' ? p.nilai + '%' : formatRupiah(p.nilai), '- ' + formatRupiah(p.hasil), 'text-rose-400'))}
                                     <tr className={`border-t-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-400'}`}>
                                       <td className="p-2 font-black text-emerald-400">Total Bersih</td>
@@ -2459,7 +2485,7 @@ export default function HonorariumPage() {
                   value={riwayatPeriode}
                   onChange={(e) => {
                     setRiwayatPeriode(e.target.value)
-                    loadRiwayat()
+                    loadRiwayat(e.target.value)
                   }}
                   className={`border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`}
                 >
@@ -2523,7 +2549,7 @@ export default function HonorariumPage() {
                               <td className="p-1.5 font-bold">{r.guru_nama || guruNama(r.guru_id)}</td>
                               <td className="p-1.5 text-center">{r.jumlah_jp}</td>
                               <td className="p-1.5 text-center">{r.transport_hari}</td>
-                              <td className="p-1.5 text-right">{formatRupiah(r.jumlah_jp * n(pengaturan?.tarif_jp) + r.transport_hari * n(pengaturan?.tarif_transport_harian) + r.tunjangan_jabatan + r.tunjangan_masa_kerja + r.pembina + r.wali_kelas + r.tugas_tambahan)}</td>
+                              <td className="p-1.5 text-right">{formatRupiah(n(r.total_bersih) + n(r.total_potongan))}</td>
                               <td className="p-1.5 text-right text-rose-400">{formatRupiah(r.total_potongan)}</td>
                               <td className="p-1.5 text-right font-black text-emerald-400">{formatRupiah(r.total_bersih)}</td>
                               <td className="p-1.5 text-[10px] text-slate-400 space-y-0.5">
@@ -2547,7 +2573,7 @@ export default function HonorariumPage() {
                         <div key={r.guru_id} className="space-y-1">
                           <p className="text-xs font-extrabold">{guruNama(r.guru_id)}</p>
                           <p className="text-[11px] text-slate-400">JP: {r.jumlah_jp} Â· Transport: {r.transport_hari} hari</p>
-                          <p className="text-[11px] text-slate-400">Total Kotor: {formatRupiah(r.jumlah_jp * n(pengaturan?.tarif_jp) + r.transport_hari * n(pengaturan?.tarif_transport_harian) + r.tunjangan_jabatan + r.tunjangan_masa_kerja + r.pembina + r.wali_kelas + r.tugas_tambahan)}</p>
+                          <p className="text-[11px] text-slate-400">Total Kotor: {formatRupiah(n(r.total_bersih) + n(r.total_potongan))}</p>
                           <p className="text-[11px] text-rose-400">Potongan: {formatRupiah(r.total_potongan)}</p>
                           <p className="text-sm font-black text-emerald-400">Total Bersih: {formatRupiah(r.total_bersih)}</p>
                         </div>
@@ -2631,11 +2657,6 @@ export default function HonorariumPage() {
       {detailGuruId !== null && (() => {
         const drow = rekapRows.find((r) => r.guru_id === detailGuruId)
         if (!drow) return null
-        const kotor =
-          n(drow.jumlah_jp) * n(pengaturan?.tarif_jp) +
-          n(drow.transport_hari) * n(pengaturan?.tarif_transport_harian) +
-          n(drow.tunjangan_jabatan) + n(drow.tunjangan_masa_kerja) +
-          n(drow.pembina) + n(drow.wali_kelas) + n(drow.tugas_tambahan)
         return (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3" onClick={() => setDetailGuruId(null)}>
             <div className={`w-full max-w-lg rounded-2xl border shadow-2xl max-h-[85vh] overflow-y-auto p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200'}`} onClick={(e) => e.stopPropagation()}>
@@ -2658,7 +2679,8 @@ export default function HonorariumPage() {
                   ['Pembina', formatRupiah(drow.pembina)],
                   ['Wali Kelas', formatRupiah(drow.wali_kelas)],
                   ['Tugas Tambahan', formatRupiah(drow.tugas_tambahan)],
-                  ['Total Kotor', formatRupiah(kotor)],
+                  ...(n(drow.piket) > 0 ? [['Piket', formatRupiah(drow.piket)]] : []),
+                  ['Total Kotor', formatRupiah(n(drow.total_bersih) + n(drow.total_potongan))],
                 ].map(([l, v]) => (
                   <div key={l} className="flex justify-between border-b border-slate-100 py-1"><span>{l}</span><span className="font-bold">{v}</span></div>
                 ))}
@@ -2670,7 +2692,7 @@ export default function HonorariumPage() {
                     {(drow.potongan || []).map((po: any, i) => (
                       <div key={i} className="flex justify-between border-b border-slate-100 py-1">
                         <span>{po.nama || 'Potongan'}{po.tipe === 'persen' ? ` (${po.nilai}%)` : ''}</span>
-                        <span className="font-bold text-rose-500">-{formatRupiah(Number(po.nilai) || 0)}</span>
+                        <span className="font-bold text-rose-500">-{formatRupiah(Number(po.hasil) || 0)}</span>
                       </div>
                     ))}
                   </div>
