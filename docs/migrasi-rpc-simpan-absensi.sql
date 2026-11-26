@@ -26,6 +26,14 @@
 --   sejak fungsi ini dipakai. Absensi SMK ikut rusak dan ikut sembuh,
 --   karena memakai fungsi yang sama.
 --
+--   PERBAIKAN KE-2 (26 Nov 2026, setelah SQL pertama dijalankan):
+--   INSERT memakai `r ->> 'kolom'` padahal `r` adalah record dari
+--   jsonb_to_recordset, bukan jsonb — Postgres menolak dengan
+--   "operator does not exist: record ->> unknown". Sekarang memakai
+--   akses kolom langsung `r.kolom`. Bug ini tersembunyi selama ini
+--   karena DELETE selalu gagal duluan sehingga INSERT tidak pernah
+--   tercapai.
+--
 -- CARA PAKAI:
 --   1. Jalankan file ini di Supabase Dashboard > SQL Editor > Run.
 --      LAKUKAN INI SEBELUM merge PR #5, supaya fungsi sudah ada saat
@@ -93,21 +101,21 @@ BEGIN
     semester, tahun_ajaran, guru_email, jenjang
   )
   SELECT
-    (r ->> 'tanggal')::date,
-    r ->> 'jam_ke',
-    (r ->> 'jam_ke_num')::integer,
-    (r ->> 'kelas_id')::integer,
-    (r ->> 'mapel_id')::integer,
-    r ->> 'siswa_id',
-    r ->> 'kelas',
-    r ->> 'mapel',
-    r ->> 'nama_siswa',
-    r ->> 'nisn',
-    r ->> 'status',
-    r ->> 'semester',
-    r ->> 'tahun_ajaran',
-    r ->> 'guru_email',
-    r ->> 'jenjang'
+    r.tanggal,
+    r.jam_ke,
+    r.jam_ke_num::integer,
+    r.kelas_id::integer,
+    r.mapel_id::integer,
+    r.siswa_id,
+    r.kelas,
+    r.mapel,
+    r.nama_siswa,
+    r.nisn,
+    r.status,
+    r.semester,
+    r.tahun_ajaran,
+    r.guru_email,
+    r.jenjang
   FROM jsonb_to_recordset(p_rows) AS r (
     tanggal text, jam_ke text, jam_ke_num text, kelas_id text,
     mapel_id text, siswa_id text, kelas text, mapel text,
