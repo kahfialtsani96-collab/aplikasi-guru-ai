@@ -12,7 +12,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-// Status kartu bulanan — wording sama dengan statusPeriode di halaman Honorarium.
+// Status kartu bulanan — label tampilan kartu (DRAFT tampil 'Menunggu Validasi',
+// PAID tampil 'Sudah Terbit'); nilai status internal tetap sama seperti statusPeriode
+// di halaman Honorarium.
 export type StatusKartu = 'PAID' | 'DISAHKAN YAYASAN' | 'DISAHKAN KEPSEK' | 'DRAFT' | 'BELUM DIHITUNG'
 
 export interface BulanCardData {
@@ -44,12 +46,14 @@ function formatRupiah(n: number) {
 
 // Tampilan per status: chip + garis kiri + latar pastel translusen (terlihat di
 // mode terang maupun gelap, seperti kartu Info GTK) + ikon status.
+// Chip 'Menunggu Validasi' berdenyut lembut (animate-pulse) supaya menarik perhatian;
+// 'Sudah Terbit' statis karena sudah selesai.
 const STATUS_TAMPILAN: Record<
   StatusKartu,
   { label: string; chip: string; bar: string; tint: string; icon: LucideIcon; iconCls: string }
 > = {
   PAID: {
-    label: 'PAID',
+    label: 'Sudah Terbit',
     chip: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40',
     bar: 'bg-emerald-500',
     tint: 'bg-emerald-500/15 border-emerald-500/40',
@@ -73,8 +77,8 @@ const STATUS_TAMPILAN: Record<
     iconCls: 'bg-amber-500/20 text-amber-500',
   },
   DRAFT: {
-    label: 'DRAFT',
-    chip: 'bg-amber-500/15 text-amber-400 border border-amber-500/40',
+    label: 'Menunggu Validasi',
+    chip: 'bg-amber-500/15 text-amber-400 border border-amber-500/40 animate-pulse',
     bar: 'bg-amber-500',
     tint: 'bg-amber-500/15 border-amber-500/40',
     icon: Clock,
