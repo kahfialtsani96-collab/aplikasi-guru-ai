@@ -14,6 +14,18 @@
 --   database. Kalau INSERT gagal, DELETE ikut dibatalkan otomatis,
 --   jadi absensi lama tetap utuh dan guru tinggal tekan Simpan lagi.
 --
+-- PERBAIKAN 2026-11-26 (bug: simpan absensi gagal total):
+--   Kolom absensi.tanggal ternyata TEXT, bukan DATE — jadi perbandingan
+--   `tanggal = p_tanggal` (date) ditolak Postgres dengan error
+--   "operator does not exist: text = date". DELETE di bawah sekarang
+--   membandingkan `tanggal = p_tanggal::text`. Tanda tangan fungsi
+--   tidak berubah, jadi CREATE OR REPLACE ini cukup dijalankan ulang;
+--   tidak ada perubahan kode aplikasi dan tidak perlu deploy ulang.
+--   Bug ini baru muncul 26 Nov 2026 karena PR #5 merge 24 Nov sore dan
+--   25 Nov tidak ada KBM (Hari Guru) — 26 Nov adalah simpan pertama
+--   sejak fungsi ini dipakai. Absensi SMK ikut rusak dan ikut sembuh,
+--   karena memakai fungsi yang sama.
+--
 -- CARA PAKAI:
 --   1. Jalankan file ini di Supabase Dashboard > SQL Editor > Run.
 --      LAKUKAN INI SEBELUM merge PR #5, supaya fungsi sudah ada saat
@@ -50,7 +62,7 @@ BEGIN
     DELETE FROM public.absensi
     WHERE siswa_id = ANY(p_siswa_ids)
       AND mapel_id = p_mapel_id
-      AND tanggal = p_tanggal
+      AND tanggal = p_tanggal::text
       AND semester = p_semester
       AND tahun_ajaran = p_tahun_ajaran
       AND (p_guru_email IS NULL OR guru_email = p_guru_email)
@@ -62,7 +74,7 @@ BEGIN
     DELETE FROM public.absensi
     WHERE kelas_id = p_kelas_id
       AND mapel_id = p_mapel_id
-      AND tanggal = p_tanggal
+      AND tanggal = p_tanggal::text
       AND semester = p_semester
       AND tahun_ajaran = p_tahun_ajaran
       AND (p_guru_email IS NULL OR guru_email = p_guru_email)
