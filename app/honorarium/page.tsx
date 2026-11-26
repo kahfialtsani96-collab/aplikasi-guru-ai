@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
+import { animated, useSpring } from '@react-spring/web'
+import HonorBulanCards, { type BulanCardData, type StatusKartu } from '@/app/components/HonorBulanCards'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import DarkModeToggle from '@/app/components/DarkModeToggle'
 import { useAuthRole } from '@/hooks/useAuthRole'
@@ -264,6 +266,18 @@ interface RekapRow {
   updated_at?: string | null
   detailJp?: JpDetail[]
   detailTransport?: string[]
+}
+
+// Status kartu bulanan dari baris rekap tersimpan (dipakai grid kartu bulanan).
+// Wording sama dengan statusPeriode: PAID / DISAHKAN YAYASAN / DISAHKAN KEPSEK / DRAFT.
+// Tanpa baris tersimpan = 'BELUM DIHITUNG'.
+function statusDariRows(rows: RekapRow[]): StatusKartu {
+  if (rows.length === 0) return 'BELUM DIHITUNG'
+  if (rows.some((r) => r.status === 'PAID')) return 'PAID'
+  const r0 = rows[0]
+  if (r0?.disahkan_yayasan_at) return 'DISAHKAN YAYASAN'
+  if (r0?.disahkan_kepsek_at || r0?.confirmed_at) return 'DISAHKAN KEPSEK'
+  return 'DRAFT'
 }
 
 interface JpDetail {
@@ -734,6 +748,10 @@ export default function HonorariumPage() {
   const [penerimaList, setPenerimaList] = useState<PenerimaRow[]>([])
   const [tugasList, setTugasList] = useState<TugasRow[]>([])
   const [rekapList, setRekapList] = useState<RekapRow[]>([])
+  // Rekap mentah (tersimpan) setahun penuh untuk grid kartu bulanan.
+  const [rekapTahun, setRekapTahun] = useState<RekapRow[]>([])
+  // Pemantik muat ulang tahun setelah simpan/hitung otomatis (baris baru belum punya id).
+  const [tahunRefreshKey, setTahunRefreshKey] = useState(0)
   const [riwayatList, setRiwayatList] = useState<RekapRow[]>([])
   const [riwayatPeriods, setRiwayatPeriods] = useState<string[]>([])
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([])
@@ -938,6 +956,47 @@ export default function HonorariumPage() {
     return () => { mounted = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periode, currentEmail, penerimaList, guruList, pengaturan, potonganList, showFullRekap, currentGuruId])
+
+  // =====================================================================
+  // MUAT REKAP SETAHUN (untuk grid kartu bulanan). Baris MENTAH tersimpan saja
+  // (bukan hasil hydrate) supaya bulan tanpa rekap tampil 'BELUM DIHITUNG'.
+  // =====================================================================
+  useEffect(() => {
+    if (!currentEmail) return
+    let mounted = true
+
+    async function loadTahun() {
+      let q = supabase
+        .from('honorarium_rekap')
+        .select('*')
+        .gte('periode', `${periodeTahun}-01`)
+        .lte('periode', `${periodeTahun}-12`)
+      if (!showFullRekap && currentGuruId) {
+        q = q.eq('guru_id', currentGuruId)
+      }
+      const res = await q.order('periode')
+      if (mounted && res.data) setRekapTahun(res.data as RekapRow[])
+    }
+
+    loadTahun()
+    return () => { mounted = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodeTahun, currentEmail, showFullRekap, currentGuruId, tahunRefreshKey])
+
+  // Sinkronkan kartu bulan berjalan dengan baris tersimpan di rekapList
+  // (mis. setelah persetujuan / pembayaran) tanpa menunggu muat ulang tahun.
+  // Hanya baris ber-id (tersimpan) yang dipakai; baris hydrate bernilai nol
+  // (id undefined) tidak mengubah status 'BELUM DIHITUNG'.
+  useEffect(() => {
+    const saved = rekapList.filter((r) => r.id && r.periode === periode)
+    setRekapTahun((prev) => {
+      const merged = [...prev.filter((r) => r.periode !== periode), ...saved]
+      if (merged.length === prev.length && merged.every((r, i) => r === prev[i])) {
+        return prev
+      }
+      return merged
+    })
+  }, [rekapList, periode])
 
   // =====================================================================
   // MEMASTIKAN SEMUA PENERIMA AKTIF MUNCUL DI REKAP
@@ -1276,6 +1335,7 @@ export default function HonorariumPage() {
       setJurnalSahCount(validJurnal)
       setRekapList(rows)
       await persistRekap(rows)
+      setTahunRefreshKey((k) => k + 1)
       showToast('ok', `Berhasil menarik ${validJurnal} entri jurnal sah & menghitung otomatis, lalu tersimpan ke database.`)
 
       // Log rincian spesifik: bandingkan nilai lama vs nilai baru per guru
@@ -1339,6 +1399,7 @@ export default function HonorariumPage() {
     try {
       const error = await persistRekap()
       if (error) throw error
+      setTahunRefreshKey((k) => k + 1)
       showToast('ok', `Rekap ${BLN_NAMES[Number(periodeBulan) - 1]} ${periodeTahun} berhasil disimpan.`)
 
       const base = prevRekapRef.current || []
@@ -1771,6 +1832,35 @@ export default function HonorariumPage() {
   const statusPeriodeCls = isPaidPeriode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40' : stageYayasan ? 'bg-violet-500/15 text-violet-400 border border-violet-500/40' : stageKepsek ? 'bg-sky-500/15 text-sky-400 border border-sky-500/40' : isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-300'
   const personalRow = rekapRows.find((r) => r.guru_id === currentGuruId)
 
+  // Data grid kartu bulanan: 12 bulan pada tahun terpilih, dari rekap tersimpan.
+  const kartuBulan: BulanCardData[] = useMemo(() => {
+    return BLN_NAMES.map((label, i) => {
+      const bln = String(i + 1).padStart(2, '0')
+      const rows = rekapTahun.filter((r) => r.periode === `${periodeTahun}-${bln}`)
+      const ada = rows.length > 0
+      return {
+        bulan: bln,
+        label,
+        status: statusDariRows(rows),
+        totalJp: ada ? rows.reduce((a, r) => a + n(r.jumlah_jp), 0) : null,
+        totalTransport: ada ? rows.reduce((a, r) => a + n(r.transport_hari), 0) : null,
+        totalBersih: ada ? rows.reduce((a, r) => a + n(r.total_bersih), 0) : null,
+        totalKotor: ada ? rows.reduce((a, r) => a + n(r.total_bersih) + n(r.total_potongan), 0) : null,
+        jumlahGuru: rows.length,
+      }
+    })
+  }, [rekapTahun, periodeTahun])
+
+  // Transisi halus (React Spring) saat isi rekap berganti bulan.
+  const [rekapSpring, rekapSpringApi] = useSpring(() => ({ opacity: 1, y: 0 }))
+  useEffect(() => {
+    rekapSpringApi.start({
+      from: { opacity: 0, y: 14 },
+      to: { opacity: 1, y: 0 },
+      config: { tension: 300, friction: 26 },
+    })
+  }, [periode, rekapSpringApi])
+
   // Cetak slip tanda terima milik PEMILIK akun yang login saja (bukan slip guru
   // lain). Pencocokan via guru_id / nama_lengkap dari tabel guru untuk email akun
   // login. Jika email belum terdaftar di tabel guru atau tidak ada data honorarium,
@@ -1840,7 +1930,8 @@ export default function HonorariumPage() {
           </div>
         </header>
 
-        {/* FILTER BULAN & TAHUN */}
+        {/* FILTER BULAN & TAHUN - disembunyikan di tab Rekap (diganti grid kartu bulan) */}
+        {activeTab !== 'rekap' && (
         <div className="px-3 pt-3 flex flex-wrap items-center gap-2">
           <div className={`flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
             <CalendarDays className={`w-4 h-4 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`} />
@@ -1869,6 +1960,7 @@ export default function HonorariumPage() {
             </span>
           )}
         </div>
+        )}
 
         {/* TAB SWITCHER */}
         <div className="px-3 pt-3">
@@ -2067,6 +2159,18 @@ export default function HonorariumPage() {
 
           {activeTab === 'rekap' && (
             <>
+              {/* GRID KARTU BULANAN (gaya Info GTK) - menggantikan dropdown bulan */}
+              <HonorBulanCards
+                tahun={periodeTahun}
+                tahunOptions={tahunOptions}
+                onTahunChange={(t) => setPeriodeTahun(t)}
+                cards={kartuBulan}
+                selectedBulan={periodeBulan}
+                onSelect={(b) => setPeriodeBulan(b)}
+                isDarkMode={isDarkMode}
+                isPersonal={!showFullRekap}
+              />
+              <animated.div style={rekapSpring} className="space-y-3">
               <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
 
               {(isKepalaSekolah || isBendahara || isYayasan) && (
@@ -2471,6 +2575,7 @@ export default function HonorariumPage() {
 
                 </>
               )}
+              </animated.div>
             </>
           )}
 
