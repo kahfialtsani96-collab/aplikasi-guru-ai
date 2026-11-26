@@ -148,6 +148,29 @@ function parseJamRange(item: Jadwal): { start: number; end: number; jp: number }
   }
 }
 
+// Mapel sesi gabungan lintas jenjang (satu sesi untuk kelas 7-12 bersama,
+// mis. Qiroah & Pramuka): guru yang sama di hari + jam yang sama untuk
+// mapel gabungan yang sama BUKAN bentrok, melainkan satu sesi yang sama.
+const GABUNGAN_MAPEL_KEYS = ['qiroah', 'pramuka']
+
+function normalisasiNamaMapel(
+  nama: string | { nama_mapel?: string } | null | undefined
+): string {
+  const teks = typeof nama === 'string' ? nama : (nama?.nama_mapel ?? '')
+  return (teks || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+// True bila kedua nama mapel adalah mapel gabungan yang SAMA
+// (mis. "QIRO,AH" SMP dan "QIRO'AH" SMK sama-sama jadi "qiroah").
+function isSesiGabunganSama(
+  namaBaru: string | { nama_mapel?: string } | null | undefined,
+  namaLama: string | { nama_mapel?: string } | null | undefined
+): boolean {
+  const a = normalisasiNamaMapel(namaBaru)
+  const b = normalisasiNamaMapel(namaLama)
+  return a !== '' && a === b && GABUNGAN_MAPEL_KEYS.includes(a)
+}
+
 // Warna identitas berdasarkan tingkat kelas SMP (VII, VIII, IX)
 function getKelasAccent(namaKelas: string, isDarkMode: boolean) {
   const upper = (namaKelas || '').toUpperCase()
@@ -779,6 +802,10 @@ export default function JadwalMengajarPage() {
     const endInput = Number(jamSelesai)
     const isAllClassesSerentak = selectedKelasId === 'ALL' && !editingJadwalId
 
+    // Nama mapel baru (dipakai untuk pengecualian sesi gabungan di bawah).
+    const mapelBaruObj = mapelList.find((m) => m.id === Number(selectedMapelId))
+    const namaMapelBaru = mapelBaruObj?.nama_mapel || ''
+
     if (!isAllClassesSerentak) {
       const bentrok = allSmpJadwal.find((j) => {
         if (editingJadwalId && j.id === editingJadwalId) return false
@@ -791,6 +818,9 @@ export default function JadwalMengajarPage() {
         const isSameKelas = Number(j.kelas_id) === Number(selectedKelasId)
         const isSameGuru =
           (j.guru_email || '').trim().toLowerCase() === selectedGuruEmail.trim().toLowerCase()
+
+        // Sesi gabungan yang sama (mis. Qiroah/Pramuka kelas 7-12) bukan bentrok guru.
+        if (isSameGuru && isSesiGabunganSama(namaMapelBaru, j.mapel)) return false
 
         return isSameKelas || isSameGuru
       })

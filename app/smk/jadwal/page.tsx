@@ -37,6 +37,29 @@ const TAHUN_AJARAN_LIST = ['2026/2027', '2027/2028']
 const SEMESTER_LIST = ['Ganjil', 'Genap'] as const
 type SemesterType = (typeof SEMESTER_LIST)[number]
 
+// Mapel sesi gabungan lintas jenjang (satu sesi untuk kelas 7-12 bersama,
+// mis. Qiroah & Pramuka): guru yang sama di hari + jam yang sama untuk
+// mapel gabungan yang sama BUKAN bentrok, melainkan satu sesi yang sama.
+const GABUNGAN_MAPEL_KEYS = ['qiroah', 'pramuka']
+
+function normalisasiNamaMapel(
+  nama: string | { nama_mapel?: string } | null | undefined
+): string {
+  const teks = typeof nama === 'string' ? nama : (nama?.nama_mapel ?? '')
+  return (teks || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+// True bila kedua nama mapel adalah mapel gabungan yang SAMA
+// (mis. "QIRO,AH" SMP dan "QIRO'AH" SMK sama-sama jadi "qiroah").
+function isSesiGabunganSama(
+  namaBaru: string | { nama_mapel?: string } | null | undefined,
+  namaLama: string | { nama_mapel?: string } | null | undefined
+): boolean {
+  const a = normalisasiNamaMapel(namaBaru)
+  const b = normalisasiNamaMapel(namaLama)
+  return a !== '' && a === b && GABUNGAN_MAPEL_KEYS.includes(a)
+}
+
 interface KelasSmk {
   id: number
   nama_kelas: string
@@ -647,6 +670,10 @@ export default function SmkJadwalPage() {
 
     const editingSet = new Set(editingRowIds.map((id) => Number(id)))
 
+    // Nama mapel baru (dipakai untuk pengecualian sesi gabungan di bawah).
+    const mapelObj = listMapel.find((m) => Number(m.id) === mapelIdNum)
+    const namaMapelBaru = mapelObj?.nama_mapel || ''
+
     for (const jp of targetJamList) {
       for (const kelasTarget of targetClasses) {
         const classConflict = listJadwalSmk.find(
@@ -670,7 +697,8 @@ export default function SmkJadwalPage() {
           !editingSet.has(Number(j.id)) &&
           j.hari.toLowerCase() === formHari.toLowerCase() &&
           Number(j.jam_ke) === jp &&
-          (j.guru_email || '').toLowerCase() === cleanEmail
+          (j.guru_email || '').toLowerCase() === cleanEmail &&
+          !isSesiGabunganSama(namaMapelBaru, j.mapel)
       )
       if (teacherSmkConflict) {
         showToast(
@@ -684,7 +712,8 @@ export default function SmkJadwalPage() {
         (j) =>
           j.hari.toLowerCase() === formHari.toLowerCase() &&
           Number(j.jam_ke) === jp &&
-          (j.guru_email || '').toLowerCase() === cleanEmail
+          (j.guru_email || '').toLowerCase() === cleanEmail &&
+          !isSesiGabunganSama(namaMapelBaru, j.mapel)
       )
       if (teacherSmpConflict) {
         showToast(
@@ -694,8 +723,6 @@ export default function SmkJadwalPage() {
         return
       }
     }
-
-    const mapelObj = listMapel.find((m) => Number(m.id) === mapelIdNum)
 
     setSaving(true)
     try {
