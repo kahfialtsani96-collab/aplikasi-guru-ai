@@ -1,9 +1,16 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { animate, stagger } from 'animejs'
 import { animated, useSpring } from '@react-spring/web'
-import { CalendarDays, ChevronRight } from 'lucide-react'
+import {
+  BadgeCheck,
+  CalendarDays,
+  CalendarX,
+  ChevronRight,
+  Clock,
+  type LucideIcon,
+} from 'lucide-react'
 
 // Status kartu bulanan — wording sama dengan statusPeriode di halaman Honorarium.
 export type StatusKartu = 'PAID' | 'DISAHKAN YAYASAN' | 'DISAHKAN KEPSEK' | 'DRAFT' | 'BELUM DIHITUNG'
@@ -35,31 +42,51 @@ function formatRupiah(n: number) {
   return 'Rp ' + Math.round(v).toLocaleString('id-ID')
 }
 
-const STATUS_TAMPILAN: Record<StatusKartu, { label: string; chip: string; bar: string }> = {
+// Tampilan per status: chip + garis kiri + latar pastel translusen (terlihat di
+// mode terang maupun gelap, seperti kartu Info GTK) + ikon status.
+const STATUS_TAMPILAN: Record<
+  StatusKartu,
+  { label: string; chip: string; bar: string; tint: string; icon: LucideIcon; iconCls: string }
+> = {
   PAID: {
     label: 'PAID',
     chip: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40',
     bar: 'bg-emerald-500',
+    tint: 'bg-emerald-500/15 border-emerald-500/40',
+    icon: BadgeCheck,
+    iconCls: 'bg-emerald-500/20 text-emerald-500',
   },
   'DISAHKAN YAYASAN': {
     label: 'DISAHKAN YAYASAN',
     chip: 'bg-amber-500/15 text-amber-400 border border-amber-500/40',
     bar: 'bg-amber-500',
+    tint: 'bg-amber-500/15 border-amber-500/40',
+    icon: Clock,
+    iconCls: 'bg-amber-500/20 text-amber-500',
   },
   'DISAHKAN KEPSEK': {
     label: 'DISAHKAN KEPSEK',
     chip: 'bg-amber-500/15 text-amber-400 border border-amber-500/40',
     bar: 'bg-amber-500',
+    tint: 'bg-amber-500/15 border-amber-500/40',
+    icon: Clock,
+    iconCls: 'bg-amber-500/20 text-amber-500',
   },
   DRAFT: {
     label: 'DRAFT',
     chip: 'bg-amber-500/15 text-amber-400 border border-amber-500/40',
     bar: 'bg-amber-500',
+    tint: 'bg-amber-500/15 border-amber-500/40',
+    icon: Clock,
+    iconCls: 'bg-amber-500/20 text-amber-500',
   },
   'BELUM DIHITUNG': {
     label: 'Belum Dihitung',
     chip: 'bg-slate-500/15 text-slate-400 border border-slate-500/40',
     bar: 'bg-slate-400',
+    tint: 'bg-slate-500/10 border-slate-500/30',
+    icon: CalendarX,
+    iconCls: 'bg-slate-500/20 text-slate-400',
   },
 }
 
@@ -78,46 +105,55 @@ function BulanCard({
   isPersonal: boolean
   onSelect: (bulan: string) => void
 }) {
-  // React Spring: kartu terpilih membesar halus (spring) saat bulan dipilih.
+  const [hover, setHover] = useState(false)
+  // React Spring: kartu terpilih membesar halus; saat disentuh kartu terangkat.
   const spring = useSpring({
-    scale: selected ? 1.04 : 1,
-    config: { tension: 320, friction: 18 },
+    scale: hover ? 1.05 : selected ? 1.03 : 1,
+    y: hover ? -4 : 0,
+    config: { tension: 350, friction: 20 },
   })
   const st = STATUS_TAMPILAN[data.status]
+  const Icon = st.icon
   const ada = data.status !== 'BELUM DIHITUNG'
   return (
     <div className="kartu-bulan-honor h-full">
       <animated.button
         type="button"
         onClick={() => onSelect(data.bulan)}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onFocus={() => setHover(true)}
+        onBlur={() => setHover(false)}
         style={spring}
         aria-pressed={selected}
-        className={`relative w-full h-full text-left rounded-2xl border p-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+        className={`relative w-full h-full text-left rounded-2xl border p-3 cursor-pointer shadow-sm transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${st.tint} ${
           selected
-            ? isDarkMode
-              ? 'border-indigo-400 ring-2 ring-indigo-400/60 shadow-lg shadow-indigo-500/20 bg-slate-900'
-              : 'border-indigo-500 ring-2 ring-indigo-500/50 shadow-lg shadow-indigo-500/20 bg-white'
-            : isDarkMode
-              ? 'border-slate-800 bg-slate-900 hover:border-slate-600'
-              : 'border-slate-300 bg-white hover:border-slate-400'
+            ? 'ring-2 ring-indigo-400/80 shadow-xl shadow-indigo-500/30'
+            : 'hover:shadow-xl'
         }`}
       >
         <span className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${st.bar}`} aria-hidden />
-        <span className="pl-2 flex items-center gap-2">
+        <span className="pl-2 flex items-center gap-1.5">
           <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-[11px] font-black shrink-0 ${isDarkMode ? 'bg-slate-800 text-indigo-300' : 'bg-indigo-50 text-indigo-700'}`}>
             {nomor}
           </span>
-          <span className={`text-sm font-extrabold uppercase tracking-wide ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+          <span className={`text-[13px] font-extrabold uppercase tracking-wide ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
             {data.label}
+          </span>
+          <span className={`ml-auto flex items-center justify-center w-6 h-6 rounded-full shrink-0 ${st.iconCls}`} aria-hidden>
+            <Icon className="w-3.5 h-3.5" />
           </span>
         </span>
         <span className={`pl-2 mt-1.5 inline-flex text-[9px] font-black px-2 py-0.5 rounded-full ${st.chip}`}>
           {st.label}
         </span>
-        <span className={`pl-2 block mt-1.5 space-y-0.5 text-[11px] font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-          <span className="block">{isPersonal ? 'JP Saya' : 'Total JP'}: {ada && data.totalJp != null ? data.totalJp : '–'}</span>
-          <span className="block">Transport: {ada && data.totalTransport != null ? `${data.totalTransport} hari` : '–'}</span>
-          <span className="block">{isPersonal ? 'Honor Saya' : 'Total Honor'}: {ada && data.totalBersih != null ? formatRupiah(data.totalBersih) : '–'}</span>
+        <span className="pl-2 block mt-2">
+          <span className={`block text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+            {isPersonal ? 'Honor Saya' : 'Total Honor'}
+          </span>
+          <span className={`block text-lg xl:text-xl font-black leading-tight ${ada && data.totalBersih != null ? (isDarkMode ? 'text-slate-100' : 'text-slate-900') : (isDarkMode ? 'text-slate-500' : 'text-slate-400')}`}>
+            {ada && data.totalBersih != null ? formatRupiah(data.totalBersih) : '–'}
+          </span>
         </span>
         <span className={`pl-2 mt-2.5 inline-flex items-center gap-1 text-[10px] font-black ${isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>
           Lihat Rincian <ChevronRight className="w-3.5 h-3.5" />
@@ -174,7 +210,7 @@ export default function HonorBulanCards({
           </select>
         </label>
       </div>
-      <div ref={gridRef} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+      <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
         {cards.map((c, i) => (
           <BulanCard
             key={c.bulan}
