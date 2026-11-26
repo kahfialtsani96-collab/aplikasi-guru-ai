@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import HonorNotification from '@/app/components/HonorNotification'
 import { SMK_COLORS, useSmkColor, type SmkColorKey } from './smkTheme'
 import {
   Users,
@@ -574,6 +575,9 @@ export default function SmkDashboardPage() {
       <div onClickCapture={handleExitToSmp}>
         <PixelBatSwitcher isDarkMode={true} variant="floating" targetHref="/" />
       </div>
+
+      {/* NOTIFIKASI HONOR — kotak lonceng di atas kelelawar; muncul tgl 27, hilang bila lunas */}
+      <HonorNotification isDarkMode={true} />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import { useAuthRole } from '@/hooks/useAuthRole'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import PixelBatSwitcher from '@/app/components/PixelBatSwitcher'
+import HonorNotification from '@/app/components/HonorNotification'
 import DarkModeToggle from '@/app/components/DarkModeToggle'
 import DynamicIslandNotification, { type Accent } from '@/app/components/DynamicIslandNotification'
 import {
@@ -1308,6 +1309,9 @@ export default function DashboardPage() {
       {(isOperator || isStrictOperatorRole || canAccessSmkPortal) && (
         <PixelBatSwitcher isDarkMode={isDarkMode} variant="floating" />
       )}
+
+      {/* NOTIFIKASI HONOR — kotak lonceng di atas kelelawar; muncul tgl 27, hilang bila lunas */}
+      <HonorNotification isDarkMode={isDarkMode} />
 
     </motion.div>
   )
