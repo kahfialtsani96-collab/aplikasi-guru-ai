@@ -192,7 +192,7 @@ export default function HonorBulanCards({
   }, [tahun])
 
   return (
-    <div className={`border rounded-2xl p-3 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
+    <div className={`border rounded-2xl p-3 space-y-3 ${isDarkMode ? 'bg-indigo-950 border-slate-800' : 'bg-indigo-50 border-slate-300'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-extrabold flex items-center gap-1.5 text-indigo-400">
           <CalendarDays className="w-4 h-4" /> Kartu Bulanan Honorarium

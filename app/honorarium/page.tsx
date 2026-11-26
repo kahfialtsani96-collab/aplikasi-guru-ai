@@ -2171,7 +2171,9 @@ export default function HonorariumPage() {
                 isPersonal={!showFullRekap}
               />
               <animated.div style={rekapSpring} className="space-y-3">
-              <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
+              {isPengurusUtama && (
+                <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
+              )}
 
               {(isKepalaSekolah || isBendahara || isYayasan) && (
                 <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
@@ -2581,7 +2583,9 @@ export default function HonorariumPage() {
 
           {activeTab === 'riwayat' && (
             <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
-              <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
+              {isPengurusUtama && (
+                <AuditLogBox logs={auditLogs} isDarkMode={isDarkMode} />
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-xs font-extrabold flex items-center gap-1.5 text-indigo-400">
                   <FileCheck2 className="w-4 h-4" /> Riwayat Pembayaran Gaji (Arsip SAH)
