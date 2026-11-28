@@ -82,7 +82,7 @@ function extractSlots(jamKe: unknown): number[] {
   const slots = new Set<number>()
 
   // 2a) Rentang dua angka: "Jam Ke-7 s/d 8" -> 7..8 => {7,8}
-  const rangeRe = /(\d{1,2})\s*(?:s\.?\/?d\.?|sampai|hingga|\bto\b|[-â€“â€”])\s*(\d{1,2})/gi
+  const rangeRe = /(\d{1,2})\s*(?:s\.?\/?d\.?|sampai|hingga|\bto\b|[-â€“—])\s*(\d{1,2})/gi
   let m: RegExpExecArray | null
   while ((m = rangeRe.exec(cleanStr)) !== null) {
     const a = Number(m[1])
@@ -163,7 +163,7 @@ function formatWaktuAudit(iso?: string | null): string {
 const BLN_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 
-const STATUS_BADGE = 'SAH & SUDAH DIBAYARKAN â€” Disahkan oleh Kepala Sekolah, Bendahara, dan Ketua Yayasan SMP/SMK Muna Mustofa Lampung'
+const STATUS_BADGE = 'SAH & SUDAH DIBAYARKAN — Disahkan oleh Kepala Sekolah, Bendahara, dan Ketua Yayasan SMP/SMK Muna Mustofa Lampung'
 
 // Nama pejabat penandatangan (Kepala Sekolah / Bendahara / Ketua Yayasan) kini
 // diambil LANGSUNG dari kolom `jabatan` tabel public.guru (lihat resolver
@@ -309,7 +309,7 @@ function AuditLogBox({ logs, isDarkMode }: { logs: AuditLogRow[]; isDarkMode: bo
           {logs.map((lg) => (
             <li key={lg.id} className="flex items-start gap-2 text-[10px] leading-snug">
               <span className="font-black text-emerald-400 whitespace-nowrap shrink-0">{formatWaktuAudit(lg.created_at)}</span>
-              <span className="text-slate-500 shrink-0">â€”</span>
+              <span className="text-slate-500 shrink-0">—</span>
               <span className="flex-1 font-medium text-slate-300">
                 {lg.nama_lengkap}: <span className="text-slate-400">{lg.aksi}</span>
               </span>
@@ -524,7 +524,7 @@ function PrintDocument({ mode, paperSize, rows, tarifJp, tarifTransport, isPaid,
     )
   }
 
-  // mode === 'slip' â€” slip tanda terima per penerima
+  // mode === 'slip' — slip tanda terima per penerima
   return (
     <div className="hidden print:block bg-white text-black p-2" style={{ fontFamily: "'Times New Roman', serif" }}>
       <style>{`@media print { @page { size: ${paperCss} !important; margin: 8mm !important; } .no-break { break-inside: avoid; } }`}</style>
@@ -677,7 +677,7 @@ export default function HonorariumPage() {
   const [loading, setLoading] = useState(true)
 
   // Identitas 3 Pengurus Utama ditentukan via pencocokan nama (case-insensitive, trim +
-  // rapatkan spasi) terhadap whitelist tetap PENGURUS_NAMES â€” BUKAN berdasarkan role akun.
+  // rapatkan spasi) terhadap whitelist tetap PENGURUS_NAMES — BUKAN berdasarkan role akun.
   // Pattern sama dengan server-side public.honorarium_current_access() (docs/migrasi-
   // rpc-otorisasi-honor.sql). Operator biasa TIDAK otomatis menjadi Pengurus Utama.
   const isPengurusUtama = isPengurusName(currentName)
@@ -690,7 +690,7 @@ export default function HonorariumPage() {
   const periode = `${periodeTahun}-${periodeBulan}`
 
   // Batas tanggal 27 untuk persetujuan Kepala Sekolah (dihitung setelah hydration,
-  // bukan saat prerender â€” menghindari "unstable value new Date()" di Next.js 16).
+  // bukan saat prerender — menghindari "unstable value new Date()" di Next.js 16).
   const [canKirimKepsek, setCanKirimKepsek] = useState(false)
   useEffect(() => {
     const [cY, cM] = periode.split('-').map(Number)
@@ -1436,7 +1436,7 @@ export default function HonorariumPage() {
   // KONFIRMASI SUDAH DIBAYARKAN (kunci permanen PAID)
   // =====================================================================
   // =====================================================================
-  // TAB MASTER â€” PENGATURAN, POTONGAN, PENERIMA
+  // TAB MASTER — PENGATURAN, POTONGAN, PENERIMA
   // =====================================================================
   const setPengaturanField = (key: keyof PengaturanRow, value: number) => {
     setPengaturan((prev) => ({ ...(prev as PengaturanRow), [key]: value }))
@@ -1482,7 +1482,7 @@ export default function HonorariumPage() {
   }
 
   // =====================================================================
-  // TAB REKAP â€” TUGAS TAMBAHAN
+  // TAB REKAP — TUGAS TAMBAHAN
   // =====================================================================
   const reloadTugas = async () => {
     const { data } = await supabase
@@ -1922,7 +1922,7 @@ export default function HonorariumPage() {
             <div>
               <h1 className="text-sm font-extrabold leading-tight">HONORARIUM GURU &amp; STAF</h1>
               <p className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                Rekap gabungan SMP &amp; SMK Muna Mustofa â€” {bulanLabel} {periodeTahun}
+                Rekap gabungan SMP &amp; SMK Muna Mustofa — {bulanLabel} {periodeTahun}
               </p>
             </div>
           </div>
@@ -2186,7 +2186,7 @@ export default function HonorariumPage() {
               {(isKepalaSekolah || isBendahara || isYayasan) && (
                 <div className={`border rounded-2xl p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-xs font-extrabold text-indigo-400">Alur Persetujuan â€” {bulanLabel} {periodeTahun}</h3>
+                    <h3 className="text-xs font-extrabold text-indigo-400">Alur Persetujuan — {bulanLabel} {periodeTahun}</h3>
                     <span className={`text-[10px] font-black px-2 py-1 rounded-full ${statusPeriodeCls}`}>
                       {statusPeriode}
                     </span>
@@ -2463,7 +2463,7 @@ export default function HonorariumPage() {
                                         <span className="font-bold">{p.tipe === 'persen' ? p.nilai + '%' : formatRupiah(p.nilai)}</span>
                                       </div>
                                     ))}
-                                    {r.potongan.length === 0 && <span className="text-slate-500">â€”</span>}
+                                    {r.potongan.length === 0 && <span className="text-slate-500">—</span>}
                                   </div>
                                 </td>
                                 <td className="p-1.5 text-right font-black text-rose-400 whitespace-nowrap">{formatRupiah(r.total_potongan)}</td>
@@ -2510,7 +2510,7 @@ export default function HonorariumPage() {
                       <div>
                         <h3 className="text-sm font-extrabold">{guruNama(currentGuruId ?? 0)}</h3>
                         <p className={`text-[10px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                          Rincian Honorarium Pribadi â€” {bulanLabel} {periodeTahun}
+                          Rincian Honorarium Pribadi — {bulanLabel} {periodeTahun}
                         </p>
                       </div>
                       {personalRow?.status === 'PAID' && (
@@ -2670,9 +2670,9 @@ export default function HonorariumPage() {
                               <td className="p-1.5 text-right text-rose-400">{formatRupiah(r.total_potongan)}</td>
                               <td className="p-1.5 text-right font-black text-emerald-400">{formatRupiah(r.total_bersih)}</td>
                               <td className="p-1.5 text-[10px] text-slate-400 space-y-0.5">
-                                <div><span className="font-bold">KS:</span> {r.disahkan_kepsek_by || '-'} â€” {formatTanggal(r.disahkan_kepsek_at)}</div>
-                                <div><span className="font-bold">Yayasan:</span> {r.disahkan_yayasan_by || '-'} â€” {formatTanggal(r.disahkan_yayasan_at)}</div>
-                                <div><span className="font-bold">Bendahara:</span> {r.dibayar_bendahara_by || '-'} â€” {formatTanggal(r.dibayar_bendahara_at)}</div>
+                                <div><span className="font-bold">KS:</span> {r.disahkan_kepsek_by || '-'} — {formatTanggal(r.disahkan_kepsek_at)}</div>
+                                <div><span className="font-bold">Yayasan:</span> {r.disahkan_yayasan_by || '-'} — {formatTanggal(r.disahkan_yayasan_at)}</div>
+                                <div><span className="font-bold">Bendahara:</span> {r.dibayar_bendahara_by || '-'} — {formatTanggal(r.dibayar_bendahara_at)}</div>
                               </td>
                             </tr>
                           ))}
@@ -2778,7 +2778,7 @@ export default function HonorariumPage() {
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3" onClick={() => setDetailGuruId(null)}>
             <div className={`w-full max-w-lg rounded-2xl border shadow-2xl max-h-[85vh] overflow-y-auto p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200'}`} onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-extrabold">Detail Honor â€” {guruNama(detailGuruId)}</h3>
+                <h3 className="text-sm font-extrabold">Detail Honor — {guruNama(detailGuruId)}</h3>
                 <button onClick={() => setDetailGuruId(null)} className="text-slate-500 hover:text-slate-900 cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -2821,7 +2821,7 @@ export default function HonorariumPage() {
                   <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
                     {drow.detailJp.map((d, i) => (
                       <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
-                        <span>{formatTanggalSingkat(d.tanggal)}{d.mapel ? ` â€” ${d.mapel}` : ''} â€” Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
+                        <span>{formatTanggalSingkat(d.tanggal)}{d.mapel ? ` — ${d.mapel}` : ''} — Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
                       </div>
                     ))}
                   </div>
