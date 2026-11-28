@@ -31,9 +31,8 @@ AS $$
     coalesce(g.role, ''),
     upper(btrim(regexp_replace(coalesce(g.nama_lengkap, ''), '[[:space:]]+', ' ', 'g')))
       IN ('MUZAINI AL KAHFI','RIZIEQ NIZAR'),
-    coalesce(g.role, '') = 'operator'
-      OR upper(btrim(regexp_replace(coalesce(g.nama_lengkap, ''), '[[:space:]]+', ' ', 'g')))
-         IN ('MUZAINI AL KAHFI','RIZIEQ NIZAR')
+    upper(btrim(regexp_replace(coalesce(g.nama_lengkap, ''), '[[:space:]]+', ' ', 'g'))))
+      IN ('MUZAINI AL KAHFI','RIZIEQ NIZAR')
   FROM auth.users u
   LEFT JOIN public.guru g ON lower(g.email) = lower(u.email)
   WHERE u.id = auth.uid()
@@ -74,7 +73,7 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.honorarium_log_audit(text, text) TO authenticated;
 
 -- ============================================================================
--- 2. SIMPAN MASTER (tarif + potongan + penerima) — Pengurus/Operator
+-- 2. SIMPAN MASTER (tarif + potongan + penerima) — Pengurus Utama
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.honorarium_save_master(
   p_pengaturan jsonb DEFAULT '[]'::jsonb,
@@ -92,7 +91,7 @@ DECLARE
 BEGIN
   SELECT * INTO acc FROM public.honorarium_current_access();
   IF NOT acc.can_manage THEN
-    RAISE EXCEPTION 'Akses ditolak: hanya Pengurus/Operator yang dapat menyimpan Master'
+    RAISE EXCEPTION 'Akses ditolak: hanya Pengurus Utama yang dapat menyimpan Master'
       USING ERRCODE = '42501';
   END IF;
   v_by := acc.nama_txt;
@@ -168,8 +167,8 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.honorarium_save_master(jsonb, jsonb, jsonb) TO authenticated;
 
 -- ============================================================================
--- 3. SIMPAN REKAP BULANAN — Pengurus/Operator atau Yayasan (tahap Yayasan)
---    Pengurus/Operator: selalu boleh menyimpan.
+-- 3. SIMPAN REKAP BULANAN — Pengurus Utama atau Yayasan (tahap Yayasan)
+--    Pengurus Utama: selalu boleh menyimpan.
 --    Yayasan: boleh menyimpan HANYA untuk periode yang sudah disahkan Kepsek dan
 --    belum disahkan Yayasan. Menolak jika periode sudah melewati persetujuan
 --    Yayasan / PAID (terkunci).
@@ -189,7 +188,7 @@ BEGIN
   SELECT * INTO acc FROM public.honorarium_current_access();
   IF NOT acc.can_manage THEN
     IF acc.jabatan NOT LIKE '%yayasan%' THEN
-      RAISE EXCEPTION 'Akses ditolak: hanya Pengurus/Operator atau Yayasan yang dapat menyimpan Rekap'
+      RAISE EXCEPTION 'Akses ditolak: hanya Pengurus Utama atau Yayasan yang dapat menyimpan Rekap'
         USING ERRCODE = '42501';
     END IF;
     -- Yayasan hanya boleh mengedit periode yang SUDAH disahkan Kepala Sekolah.
@@ -392,7 +391,7 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.honorarium_pay_bendahara(text) TO authenticated;
 
 -- ============================================================================
--- 7. TUGAS TAMBAHAN (insert / delete) — Pengurus/Operator
+-- 7. TUGAS TAMBAHAN (insert / delete) — Pengurus Utama
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.honorarium_save_tugas(
   p_periode text,
@@ -411,7 +410,7 @@ DECLARE
 BEGIN
   SELECT * INTO acc FROM public.honorarium_current_access();
   IF NOT acc.can_manage THEN
-    RAISE EXCEPTION 'Akses ditolak: hanya Pengurus/Operator yang dapat mencatat tugas'
+    RAISE EXCEPTION 'Akses ditolak: hanya Pengurus Utama yang dapat mencatat tugas'
       USING ERRCODE = '42501';
   END IF;
 
@@ -434,7 +433,7 @@ DECLARE
 BEGIN
   SELECT * INTO acc FROM public.honorarium_current_access();
   IF NOT acc.can_manage THEN
-    RAISE EXCEPTION 'Akses ditolak: hanya Pengurus/Operator yang dapat menghapus tugas'
+    RAISE EXCEPTION 'Akses ditolak: hanya Pengurus Utama yang dapat menghapus tugas'
       USING ERRCODE = '42501';
   END IF;
 
