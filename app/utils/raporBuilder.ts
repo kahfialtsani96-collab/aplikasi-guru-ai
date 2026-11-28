@@ -280,9 +280,21 @@ export async function buildRaporDocument(params: BuildRaporParams): Promise<Buil
       return a.nama.localeCompare(b.nama)
     })
 
-  // Ekstrakurikuler Pramuka & Qiro'ah
+  // Ekstrakurikuler Pramuka & Qiro'ah — disaring per jenjang seperti mapel
+  // akademik. Tanpa saringan ini, baris SMK ikut masuk ke rapor SMP (dan
+  // sebaliknya): mis. QIRO'AH SMK (id 55) tampil berdampingan dengan
+  // QIRO,AH SMP (id 17) karena dedupe di bawah hanya membuang nama yang
+  // persis sama. Sengaja hanya jenjang (tanpa cek tingkat/semester seperti
+  // cabang akademik SMK) karena baris ekskul bertingkat "Semua Tingkat".
   const mapelEkskul = allRows
-    .filter((m: any) => /qiro|pramuka|ekstra/i.test(String(m.nama_mapel || '')))
+    .filter((m: any) => {
+      if (!/qiro|pramuka|ekstra/i.test(String(m.nama_mapel || ''))) return false
+      const mJenjang = String(m.jenjang || 'SMP').trim().toUpperCase()
+      if (!isSmk) {
+        return mJenjang === 'SMP' || mJenjang === 'SEMUA' || mJenjang === 'SMP & SMK'
+      }
+      return mJenjang === 'SMK' || mJenjang === 'SEMUA' || mJenjang === 'SMP & SMK'
+    })
     .reduce((acc: { id: number; nama: string }[], curr: any) => {
       const cleanName = String(curr.nama_mapel || '').trim()
       if (!acc.some((item) => item.nama.toLowerCase() === cleanName.toLowerCase())) {
