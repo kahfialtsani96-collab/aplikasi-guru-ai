@@ -30,10 +30,10 @@ AS $$
     lower(coalesce(g.jabatan, '')),
     coalesce(g.role, ''),
     upper(btrim(regexp_replace(coalesce(g.nama_lengkap, ''), '[[:space:]]+', ' ', 'g')))
-      IN ('MUZAINI AL KAHFI','RIZIEQ NIZAR','TRI RATNO S.PD.,MPD.'),
+      IN ('MUZAINI AL KAHFI','RIZIEQ NIZAR'),
     coalesce(g.role, '') = 'operator'
       OR upper(btrim(regexp_replace(coalesce(g.nama_lengkap, ''), '[[:space:]]+', ' ', 'g')))
-         IN ('MUZAINI AL KAHFI','RIZIEQ NIZAR','TRI RATNO S.PD.,MPD.')
+         IN ('MUZAINI AL KAHFI','RIZIEQ NIZAR')
   FROM auth.users u
   LEFT JOIN public.guru g ON lower(g.email) = lower(u.email)
   WHERE u.id = auth.uid()

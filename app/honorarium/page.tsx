@@ -26,8 +26,8 @@ const getSupabaseAnonKey = () =>
 
 const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey())
 
-// 3 Pengurus Utama (akses penuh). Pencocokan case-insensitive + trim spasi.
-const PENGURUS_NAMES = ['MUZAINI AL KAHFI', 'RIZIEQ NIZAR', 'TRI RATNO S.Pd.,MPd.']
+// 2 Pengurus Utama (akses penuh). Pencocokan case-insensitive + trim spasi.
+const PENGURUS_NAMES = ['MUZAINI AL KAHFI', 'RIZIEQ NIZAR']
 
 const normalizeName = (s: string) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
 const isPengurusName = (nama: string) => PENGURUS_NAMES.some((p) => normalizeName(p) === normalizeName(nama))
