@@ -266,6 +266,7 @@ interface RekapRow {
   updated_at?: string | null
   detailJp?: JpDetail[]
   detailTransport?: string[]
+  detailTugas?: TugasDetail[]
 }
 
 // Status kartu bulanan dari baris rekap tersimpan (dipakai grid kartu bulanan).
@@ -286,6 +287,269 @@ interface JpDetail {
   jp: number
   mapel?: string
   slots?: number[]
+}
+
+interface TugasDetail {
+  tanggal: string
+  nama_kegiatan: string
+  nominal: number
+}
+
+// =====================================================================
+// MUAT PETA JURNAL (dipakai Tarik & Hitung + rincian otomatis saat Detail dibuka)
+// =====================================================================
+// Mengambil entri jurnal_agenda 'Terlaksana' untuk daftar email pada periode
+// tertentu, lengkap dengan validasi mapel resmi guru (guru_mapel), filter
+// baris presensi/piket/kegiatan luar kelas, dan deduplikasi slot gabungan.
+// Mengembalikan peta per email (slot jam + nama mapel per tanggal) serta
+// jumlah entri jurnal sah yang dipakai perhitungan JP.
+async function muatPetaJurnal(
+  emails: string[],
+  targetPeriode: string,
+  guruList: GuruRow[]
+): Promise<{
+  jurnalMap: Map<string, { dateSlots: Map<string, Set<number>>; dateMapel: Map<string, Set<string>> }>
+  validJurnal: number
+}> {
+  const jurnalMap = new Map<string, { dateSlots: Map<string, Set<number>>; dateMapel: Map<string, Set<string>> }>()
+  let validJurnal = 0
+  if (emails.length > 0) {
+    const [tahunStr, bulanStr] = targetPeriode.split('-')
+    const tahun = Number(tahunStr)
+    const bulan = Number(bulanStr)
+    const startIso = `${targetPeriode}-01`
+    const endIso = `${targetPeriode}-${String(bulanAkhir(tahun, bulan)).padStart(2, '0')}`
+    const { data } = await supabase
+      .from('jurnal_agenda')
+      .select('tanggal, jam_ke, guru_email, mapel, kelas, materi, jenjang, status')
+      .in('guru_email', emails)
+      .eq('status', 'Terlaksana')
+      .gte('tanggal', startIso)
+      .lte('tanggal', endIso)
+    if (data) {
+      // --- Muat mapel resmi per guru (guru_mapel + mapel) untuk validasi JP riil ---
+      // Daftar mata pelajaran resmi yang diampu masing-masing guru diperoleh dari
+      // tabel relasi `guru_mapel` (guru_id → mapel_id) yang digabung dengan tabel
+      // `mapel` untuk mendapatkan nama mapel-nya.
+      const [guruMapelRes, mapelRes] = await Promise.all([
+        supabase.from('guru_mapel').select('guru_id, mapel_id'),
+        supabase.from('mapel').select('id, nama_mapel'),
+      ])
+
+      const mapelNameById = new Map<number, string>()
+      ;(mapelRes.data || []).forEach((m: any) => {
+        if (m.id != null && m.nama_mapel) {
+          mapelNameById.set(Number(m.id), String(m.nama_mapel))
+        }
+      })
+
+      // guru_id → himpunan nama mapel resmi (ternormalisasi: huruf kecil + rapatkan spasi).
+      const guruMapelByGuru = new Map<number, Set<string>>()
+      ;(guruMapelRes.data || []).forEach((gm: any) => {
+        const gid = Number(gm.guru_id)
+        const namaMapel = mapelNameById.get(Number(gm.mapel_id))
+        if (!gid || !namaMapel) return
+        const norm = String(namaMapel).trim().toLowerCase().replace(/\s+/g, ' ')
+        if (!norm) return
+        if (!guruMapelByGuru.has(gid)) guruMapelByGuru.set(gid, new Set())
+        guruMapelByGuru.get(gid)!.add(norm)
+      })
+
+      // email → guru_id agar bisa mencocokkan mapel jurnal ke guru pemiliknya.
+      const emailToGuruId = new Map<string, number>()
+      guruList.forEach((g) => {
+        if (g.email) emailToGuruId.set(String(g.email).trim().toLowerCase(), g.id)
+      })
+
+      // Kegiatan gabungan resmi yang selalu sah walaupun di luar mapel guru.
+      const COMBINED_KEYWORDS = ['pramuka', 'qiroah', 'qiro ah', 'presentasi']
+
+      data.forEach((row) => {
+        const em = (row.guru_email || '').trim().toLowerCase()
+        if (!em) return
+        // Filter ulang di sisi client agar hanya baris bulan/tahun terpilih yang dihitung
+        if (!tanggalMasukBulan(row.tanggal, tahunStr, bulanStr)) return
+
+        // FILTER CERDAS: lewati baris log otomatis presensi / piket / kegiatan luar kelas
+        const mapelTxt = String(row.mapel ?? '').trim().toLowerCase()
+        const kelasTxt = String(row.kelas ?? '').trim().toLowerCase()
+        const materiTxt = String(row.materi ?? '').trim().toLowerCase()
+
+        // 1) mapel atau kelas kosong (null/string kosong) → abaikan
+        if (!mapelTxt || !kelasTxt) return
+
+        // 2) Baris log otomatis presensi / piket: hanya bila materi DIAWALI kata
+        //    kunci 'TIDAK HADIR', 'IZIN', 'IJIN', atau 'PRESENSI KELAS' -> abaikan.
+        //    Uji berjangkar di awal (bukan di sembarang posisi) supaya sesi mengajar
+        //    sah yang hanya MENYEBUT absen di tengah kalimat - mis. "Ulangan harian,
+        //    2 siswa tidak hadir" - tetap dihitung JP-nya.
+        if (/^(tidak hadir|izin|ijin|presensi kelas)\b/i.test(materiTxt)) return
+
+        // 3) kegiatan luar kelas / ekskul penuh 'Tadabur Alam' (materi atau mapel) → abaikan
+        if (materiTxt.includes('tadabur alam') || mapelTxt.includes('tadabur alam')) return
+
+        const jenjangTxt = String(row.jenjang ?? '').trim().toUpperCase();
+        const mapelKey = normalizeMapelKey(mapelTxt)
+        const isPembina = PEMBINA_MAPEL_KEYWORDS.some((k) => mapelKey.includes(k)) || (jenjangTxt === 'SMK' && /^pjok/.test(mapelKey));
+        if (isPembina) return;
+
+        // 4) VALIDASI MAPEL RESMI GURU (fail-closed):
+        //    Jika jurnal mencatat mapel yang BUKAN milik guru tsb. -> itu inputan guru
+        //    piket menggantikan guru lain (mis. PJOK/PKn/Bahasa Arab/Matematika saat
+        //    menjaga ujian/piket) -> jangan dihitung ke JP mengajar.
+        //    Fail-closed: bila guru TIDAK PUNYA baris guru_mapel sama sekali (atau
+        //    email jurnal tidak ditemukan di tabel guru), baris juga dibuang - guru
+        //    tanpa link mapel tidak mendapat JP sampai link mapelnya dilengkapi di
+        //    master guru_mapel. Sebelumnya validasi dilewati dalam kondisi ini
+        //    (fail-open), sehingga semua jurnal guru tsb. ikut terhitung.
+        //    Pengecualian: kegiatan gabungan resmi (Pramuka/Qiro'ah/Presentasi).
+        const mapelTxtClean = mapelTxt.replace(/['’‘`]/g, '')
+        const isKegiatanGabungan = COMBINED_KEYWORDS.some((k) => mapelTxtClean.includes(k))
+        if (!isKegiatanGabungan) {
+          const guruId = emailToGuruId.get(em)
+          const officialSet = guruId != null ? guruMapelByGuru.get(guruId) : undefined
+          if (!officialSet || officialSet.size === 0) return // guru tanpa link mapel -> tidak dihitung
+          const matchResmi =
+            officialSet.has(mapelTxt) ||
+            Array.from(officialSet).some(
+              (off) => off.includes(mapelTxt) || mapelTxt.includes(off)
+            )
+          if (!matchResmi) return // inputan guru piket -> tidak dihitung
+        }
+
+        const slots = extractSlots(row.jam_ke)
+        if (slots.length === 0) return
+        const tgl = row.tanggal ? String(row.tanggal) : ''
+        if (!tgl) return
+
+        // Entri jurnal sah yang benar-benar dipakai perhitungan JP
+        validJurnal++
+
+        if (!jurnalMap.has(em)) jurnalMap.set(em, { dateSlots: new Map(), dateMapel: new Map() })
+        const rec = jurnalMap.get(em)!
+        if (!rec.dateSlots.has(tgl)) rec.dateSlots.set(tgl, new Set())
+        const daySet = rec.dateSlots.get(tgl)!
+        slots.forEach((s) => daySet.add(s))
+        // Simpan nama mapel per tanggal untuk Rincian JP (nama distinct, digabung saat tampil).
+        const mapelDisplay = String(row.mapel ?? '').trim()
+        if (mapelDisplay) {
+          if (!rec.dateMapel.has(tgl)) rec.dateMapel.set(tgl, new Set())
+          rec.dateMapel.get(tgl)!.add(mapelDisplay)
+        }
+      })
+    }
+  }
+  return { jurnalMap, validJurnal }
+}
+
+// =====================================================================
+// MUAT ABSENSI GURU (dipakai Tarik & Hitung + rincian otomatis)
+// =====================================================================
+// Kehadiran 'Hadir' dari tabel absensi_guru menjadi sumber utama hari
+// transport. Tanggal unik (tanggal,guru_email) digabung ke himpunan hari
+// transport yang sama dengan jurnal → anti double-count otomatis
+// (1 hari tetap 1 hari). Jika tabel absensi_guru belum dibuat, dimuat aman
+// (graceful fallback).
+async function muatAbsensiGuru(
+  emails: string[],
+  targetPeriode: string
+): Promise<Map<string, Set<string>>> {
+  const absensiGuruByEmail = new Map<string, Set<string>>()
+  if (emails.length === 0) return absensiGuruByEmail
+  const [pkTahunStr, pkBulanStr] = targetPeriode.split('-')
+  const pkTahun = Number(pkTahunStr)
+  const pkBulan = Number(pkBulanStr)
+  if (!Number.isFinite(pkTahun) || !Number.isFinite(pkBulan)) return absensiGuruByEmail
+  const startIso = `${targetPeriode}-01`
+  const endIso = `${targetPeriode}-${String(bulanAkhir(pkTahun, pkBulan)).padStart(2, '0')}`
+  try {
+    const { data: absensiData, error: absensiError } = await supabase
+      .from('absensi_guru')
+      .select('tanggal, guru_email')
+      .eq('status', 'Hadir')
+      .in('guru_email', emails)
+      .gte('tanggal', startIso)
+      .lte('tanggal', endIso)
+    if (absensiData && !absensiError) {
+      absensiData.forEach((r: any) => {
+        const em = (r.guru_email || '').trim().toLowerCase()
+        if (!em) return
+        const tgl = r.tanggal ? String(r.tanggal).slice(0, 10) : ''
+        if (!tgl) return
+        if (!absensiGuruByEmail.has(em)) absensiGuruByEmail.set(em, new Set())
+        absensiGuruByEmail.get(em)!.add(tgl)
+      })
+    }
+  } catch {
+    /* tabel absensi_guru belum dibuat → abaikan */
+  }
+  return absensiGuruByEmail
+}
+
+// =====================================================================
+// SUSUN RINCIAN DETAIL SATU GURU (dipakai Tarik & Hitung + rincian otomatis)
+// =====================================================================
+// Menyusun rincian detail (JP per tanggal + tanggal transport + tugas
+// tambahan) dari sumber yang sudah dimuat. TIDAK menghitung uang — hanya
+// detail; angka uang tetap berasal dari baris rekap yang sudah tersimpan.
+function susunDetailGuru(args: {
+  isStafPiket: boolean
+  jurnalRec?: { dateSlots: Map<string, Set<number>>; dateMapel: Map<string, Set<string>> }
+  absensiDates?: Set<string>
+  tugasItems: TugasRow[]
+}): {
+  jumlahJp: number
+  detailJp: JpDetail[]
+  detailTransport: string[]
+  detailTugas: TugasDetail[]
+  transportDates: Set<string>
+} {
+  let jumlahJp = 0
+  const transportDates = new Set<string>()
+  const detailJp: JpDetail[] = []
+  const jurnalRec = args.jurnalRec
+
+  if (!args.isStafPiket && jurnalRec) {
+    // Agregasi per tanggal: total JP = jumlah slot unik hari itu (deduplikasi gabungan)
+    jurnalRec.dateSlots.forEach((daySet, tgl) => {
+      const arr = Array.from(daySet).sort((a, b) => a - b)
+      transportDates.add(tgl)
+      jumlahJp += arr.length
+      detailJp.push({
+        tanggal: tgl,
+        jam: arr.length ? arr.join('-') : '-',
+        jp: arr.length,
+        mapel: Array.from(jurnalRec.dateMapel.get(tgl) || []).join(', '),
+        slots: arr,
+      })
+    })
+  }
+
+  // Tugas tambahan: tanggalnya ikut hari transport (anti dobel via Set yang sama).
+  const detailTugas: TugasDetail[] = []
+  args.tugasItems.forEach((t) => {
+    if (t.tanggal) transportDates.add(t.tanggal)
+    detailTugas.push({
+      tanggal: t.tanggal || '',
+      nama_kegiatan: t.nama_kegiatan || '',
+      nominal: Number(t.nominal) || 0,
+    })
+  })
+  detailTugas.sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)))
+
+  // Kehadiran 'Hadir' absensi_guru → tambah ke hari transport (TIDAK menambah JP).
+  // Nilai Set `transportDates` yang sama dipakai jurnal/tugas → anti double-count.
+  if (args.absensiDates && args.absensiDates.size > 0) {
+    args.absensiDates.forEach((tgl) => transportDates.add(tgl))
+  }
+
+  return {
+    jumlahJp,
+    detailJp,
+    detailTransport: Array.from(transportDates),
+    detailTugas,
+    transportDates,
+  }
 }
 
 interface AuditLogRow {
@@ -731,6 +995,13 @@ export default function HonorariumPage() {
   const [riwayatPeriode, setRiwayatPeriode] = useState('')
   const [detailGuruId, setDetailGuruId] = useState<number | null>(null)
 
+  // Rincian detail (JP/transport/tugas) untuk baris tersimpan: dihitung saat
+  // dibutuhkan (buka Detail / tampilan pribadi) dari jurnal + absensi + tugas
+  // — TANPA mengubah angka uang yang sudah tersimpan/diedit manual.
+  const detailSiapRef = useRef<Set<string>>(new Set())
+  const detailHitungRef = useRef<Set<string>>(new Set())
+  const [detailMemuat, setDetailMemuat] = useState(false)
+
   const [guruList, setGuruList] = useState<GuruRow[]>([])
 
   // Deteksi peran berbasis jabatan (transparansi & alur persetujuan)
@@ -950,6 +1221,11 @@ export default function HonorariumPage() {
         const hydrated = hydrateRekap(rekapRes.data)
         setRekapList(hydrated)
         prevRekapRef.current = hydrated
+        // Baris segar dari database tidak membawa rincian detail → rincian
+        // otomatis harus dihitung ulang saat Detail dibuka.
+        detailSiapRef.current = new Set(
+          [...detailSiapRef.current].filter((k) => !k.startsWith(`${periode}:`))
+        )
       }
     }
 
@@ -1078,7 +1354,7 @@ export default function HonorariumPage() {
   const buildAutoRekap = useCallback(async (targetPeriode: string): Promise<{ rows: RekapRow[]; validJurnal: number }> => {
     const activePenerima = penerimaList.filter((p) => p.aktif)
     const mengajarPenerima = activePenerima.filter((p) => p.status !== 'staf_piket')
-    const emails = Array.from(
+    const emails: string[] = Array.from(
       new Set(mengajarPenerima.map((p) => getGuruEmail(p.guru_id)).filter((e) => e.length > 0))
     )
 
@@ -1086,180 +1362,15 @@ export default function HonorariumPage() {
     // Satu kegiatan gabungan (ekskul Pramuka/Qiroah VII–XII, Presentasi X–XII) tercatat
     // di beberapa baris kelas sekaligus pada jam yang sama; slot jam digabung lewat Set
     // sehingga tetap dihitung 1x (mis. {7,8} = 2 JP), bukan dikali jumlah kelas/bukan 1 JP.
-    const jurnalMap = new Map<string, { dateSlots: Map<string, Set<number>>; dateMapel: Map<string, Set<string>> }>()
-    let validJurnal = 0
-    if (emails.length > 0) {
-      const [tahunStr, bulanStr] = targetPeriode.split('-')
-      const tahun = Number(tahunStr)
-      const bulan = Number(bulanStr)
-      const startIso = `${targetPeriode}-01`
-      const endIso = `${targetPeriode}-${String(bulanAkhir(tahun, bulan)).padStart(2, '0')}`
-      const { data } = await supabase
-        .from('jurnal_agenda')
-        .select('tanggal, jam_ke, guru_email, mapel, kelas, materi, jenjang, status')
-        .in('guru_email', emails)
-        .eq('status', 'Terlaksana')
-        .gte('tanggal', startIso)
-        .lte('tanggal', endIso)
-      if (data) {
-        // --- Muat mapel resmi per guru (guru_mapel + mapel) untuk validasi JP riil ---
-        // Daftar mata pelajaran resmi yang diampu masing-masing guru diperoleh dari
-        // tabel relasi `guru_mapel` (guru_id → mapel_id) yang digabung dengan tabel
-        // `mapel` untuk mendapatkan nama mapel-nya.
-        const [guruMapelRes, mapelRes] = await Promise.all([
-          supabase.from('guru_mapel').select('guru_id, mapel_id'),
-          supabase.from('mapel').select('id, nama_mapel'),
-        ])
-
-        const mapelNameById = new Map<number, string>()
-        ;(mapelRes.data || []).forEach((m: any) => {
-          if (m.id != null && m.nama_mapel) {
-            mapelNameById.set(Number(m.id), String(m.nama_mapel))
-          }
-        })
-
-        // guru_id → himpunan nama mapel resmi (ternormalisasi: huruf kecil + rapatkan spasi).
-        const guruMapelByGuru = new Map<number, Set<string>>()
-        ;(guruMapelRes.data || []).forEach((gm: any) => {
-          const gid = Number(gm.guru_id)
-          const namaMapel = mapelNameById.get(Number(gm.mapel_id))
-          if (!gid || !namaMapel) return
-          const norm = String(namaMapel).trim().toLowerCase().replace(/\s+/g, ' ')
-          if (!norm) return
-          if (!guruMapelByGuru.has(gid)) guruMapelByGuru.set(gid, new Set())
-          guruMapelByGuru.get(gid)!.add(norm)
-        })
-
-        // email → guru_id agar bisa mencocokkan mapel jurnal ke guru pemiliknya.
-        const emailToGuruId = new Map<string, number>()
-        guruList.forEach((g) => {
-          if (g.email) emailToGuruId.set(String(g.email).trim().toLowerCase(), g.id)
-        })
-
-        // Kegiatan gabungan resmi yang selalu sah walaupun di luar mapel guru.
-        const COMBINED_KEYWORDS = ['pramuka', 'qiroah', 'qiro ah', 'presentasi']
-
-        data.forEach((row) => {
-          const em = (row.guru_email || '').trim().toLowerCase()
-          if (!em) return
-          // Filter ulang di sisi client agar hanya baris bulan/tahun terpilih yang dihitung
-          if (!tanggalMasukBulan(row.tanggal, tahunStr, bulanStr)) return
-
-          // FILTER CERDAS: lewati baris log otomatis presensi / piket / kegiatan luar kelas
-          const mapelTxt = String(row.mapel ?? '').trim().toLowerCase()
-          const kelasTxt = String(row.kelas ?? '').trim().toLowerCase()
-          const materiTxt = String(row.materi ?? '').trim().toLowerCase()
-
-          // 1) mapel atau kelas kosong (null/string kosong) → abaikan
-          if (!mapelTxt || !kelasTxt) return
-
-          // 2) Baris log otomatis presensi / piket: hanya bila materi DIAWALI kata
-          //    kunci 'TIDAK HADIR', 'IZIN', 'IJIN', atau 'PRESENSI KELAS' -> abaikan.
-          //    Uji berjangkar di awal (bukan di sembarang posisi) supaya sesi mengajar
-          //    sah yang hanya MENYEBUT absen di tengah kalimat - mis. "Ulangan harian,
-          //    2 siswa tidak hadir" - tetap dihitung JP-nya.
-          if (/^(tidak hadir|izin|ijin|presensi kelas)\b/i.test(materiTxt)) return
-
-          // 3) kegiatan luar kelas / ekskul penuh 'Tadabur Alam' (materi atau mapel) → abaikan
-          if (materiTxt.includes('tadabur alam') || mapelTxt.includes('tadabur alam')) return
-
-          const jenjangTxt = String(row.jenjang ?? '').trim().toUpperCase();
-          const mapelKey = normalizeMapelKey(mapelTxt)
-          const isPembina = PEMBINA_MAPEL_KEYWORDS.some((k) => mapelKey.includes(k)) || (jenjangTxt === 'SMK' && /^pjok/.test(mapelKey));
-          if (isPembina) return;
-
-          // 4) VALIDASI MAPEL RESMI GURU (fail-closed):
-          //    Jika jurnal mencatat mapel yang BUKAN milik guru tsb. -> itu inputan guru
-          //    piket menggantikan guru lain (mis. PJOK/PKn/Bahasa Arab/Matematika saat
-          //    menjaga ujian/piket) -> jangan dihitung ke JP mengajar.
-          //    Fail-closed: bila guru TIDAK PUNYA baris guru_mapel sama sekali (atau
-          //    email jurnal tidak ditemukan di tabel guru), baris juga dibuang - guru
-          //    tanpa link mapel tidak mendapat JP sampai link mapelnya dilengkapi di
-          //    master guru_mapel. Sebelumnya validasi dilewati dalam kondisi ini
-          //    (fail-open), sehingga semua jurnal guru tsb. ikut terhitung.
-          //    Pengecualian: kegiatan gabungan resmi (Pramuka/Qiro'ah/Presentasi).
-          const mapelTxtClean = mapelTxt.replace(/['’‘`]/g, '')
-          const isKegiatanGabungan = COMBINED_KEYWORDS.some((k) => mapelTxtClean.includes(k))
-          if (!isKegiatanGabungan) {
-            const guruId = emailToGuruId.get(em)
-            const officialSet = guruId != null ? guruMapelByGuru.get(guruId) : undefined
-            if (!officialSet || officialSet.size === 0) return // guru tanpa link mapel -> tidak dihitung
-            const matchResmi =
-              officialSet.has(mapelTxt) ||
-              Array.from(officialSet).some(
-                (off) => off.includes(mapelTxt) || mapelTxt.includes(off)
-              )
-            if (!matchResmi) return // inputan guru piket -> tidak dihitung
-          }
-
-          const slots = extractSlots(row.jam_ke)
-          if (slots.length === 0) return
-          const tgl = row.tanggal ? String(row.tanggal) : ''
-          if (!tgl) return
-
-          // Entri jurnal sah yang benar-benar dipakai perhitungan JP
-          validJurnal++
-
-          if (!jurnalMap.has(em)) jurnalMap.set(em, { dateSlots: new Map(), dateMapel: new Map() })
-          const rec = jurnalMap.get(em)!
-          if (!rec.dateSlots.has(tgl)) rec.dateSlots.set(tgl, new Set())
-          const daySet = rec.dateSlots.get(tgl)!
-          slots.forEach((s) => daySet.add(s))
-          // Simpan nama mapel per tanggal untuk Rincian JP (nama distinct, digabung saat tampil).
-          const mapelDisplay = String(row.mapel ?? '').trim()
-          if (mapelDisplay) {
-            if (!rec.dateMapel.has(tgl)) rec.dateMapel.set(tgl, new Set())
-            rec.dateMapel.get(tgl)!.add(mapelDisplay)
-          }
-        })
-      }
-    }
+    const { jurnalMap, validJurnal } = await muatPetaJurnal(emails, targetPeriode, guruList)
 
     // --- ABSENSI GURU (SUMBER UTAMA TRANSPORT HARI) -------------------------
     // Kehadiran 'Hadir' dari tabel absensi_guru menjadi sumber utama hari
-    // transport. Tanggal unik (tanggal,guru_email) digabung ke himpunan hari
-    // transport yang sama dengan jurnal → anti double-count otomatis
-    // (1 hari tetap 1 hari). Jika tabel absensi_guru belum dibuat, dimuat aman
-    // (graceful fallback).
-    // ------------------------------------------------------------------------
-    const absensiGuruByEmail = new Map<string, Set<string>>()
-    if (activePenerima.length > 0) {
-      const [pkTahunStr, pkBulanStr] = targetPeriode.split('-')
-      const pkTahun = Number(pkTahunStr)
-      const pkBulan = Number(pkBulanStr)
-      if (Number.isFinite(pkTahun) && Number.isFinite(pkBulan)) {
-        const allActiveEmails = Array.from(
-          new Set(
-            activePenerima.map((p) => getGuruEmail(p.guru_id)).filter((e) => e.length > 0)
-          )
-        )
-        if (allActiveEmails.length > 0) {
-          const startIso = `${targetPeriode}-01`
-          const endIso = `${targetPeriode}-${String(bulanAkhir(pkTahun, pkBulan)).padStart(2, '0')}`
-          try {
-            const { data: absensiData, error: absensiError } = await supabase
-              .from('absensi_guru')
-              .select('tanggal, guru_email')
-              .eq('status', 'Hadir')
-              .in('guru_email', allActiveEmails)
-              .gte('tanggal', startIso)
-              .lte('tanggal', endIso)
-            if (absensiData && !absensiError) {
-              absensiData.forEach((r: any) => {
-                const em = (r.guru_email || '').trim().toLowerCase()
-                if (!em) return
-                const tgl = r.tanggal ? String(r.tanggal).slice(0, 10) : ''
-                if (!tgl) return
-                if (!absensiGuruByEmail.has(em)) absensiGuruByEmail.set(em, new Set())
-                absensiGuruByEmail.get(em)!.add(tgl)
-              })
-            }
-          } catch {
-            /* tabel absensi_guru belum dibuat → abaikan */
-          }
-        }
-      }
-    }
+    // transport (lihat muatAbsensiGuru di atas).
+    const allActiveEmails: string[] = Array.from(
+      new Set(activePenerima.map((p) => getGuruEmail(p.guru_id)).filter((e) => e.length > 0))
+    )
+    const absensiGuruByEmail = await muatAbsensiGuru(allActiveEmails, targetPeriode)
 
     const tugasPeriode = tugasList.filter((t) => t.periode === targetPeriode)
 
@@ -1269,47 +1380,18 @@ export default function HonorariumPage() {
       const email = getGuruEmail(p.guru_id)
       const jurnalRec = jurnalMap.get(email)
 
-      let jumlahJp = 0
-      const transportDates = new Set<string>()
-      const detailJp: JpDetail[] = []
-
-      if (p.status === 'staf_piket') {
-        jumlahJp = 0
-      } else {
-        if (jurnalRec) {
-          // Agregasi per tanggal: total JP = jumlah slot unik hari itu (deduplikasi gabungan)
-          jurnalRec.dateSlots.forEach((daySet, tgl) => {
-            const arr = Array.from(daySet).sort((a, b) => a - b)
-            transportDates.add(tgl)
-            jumlahJp += arr.length
-            detailJp.push({
-              tanggal: tgl,
-              jam: arr.length ? arr.join('-') : '-',
-              jp: arr.length,
-              mapel: Array.from(jurnalRec.dateMapel.get(tgl) || []).join(', '),
-              slots: arr,
-            })
-          })
-        }
-      }
-
-      let tugasNominal = 0
-      tugasPeriode.forEach((t) => {
-        if (t.guru_ids.includes(p.guru_id)) {
-          if (t.tanggal) transportDates.add(t.tanggal)
-          tugasNominal += n(t.nominal)
-        }
+      // Rincian detail (JP/transport/tugas) disusun dari sumber yang sama
+      // dengan Tarik & Hitung — angka uang TIDAK dihitung di sini.
+      const det = susunDetailGuru({
+        isStafPiket: p.status === 'staf_piket',
+        jurnalRec,
+        absensiDates: absensiGuruByEmail.get(email),
+        tugasItems: tugasPeriode.filter((t) => t.guru_ids.includes(p.guru_id)),
       })
-
-      // Kehadiran 'Hadir' absensi_guru → tambah ke hari transport (TIDAK menambah JP).
-      // Nilai Set `transportDates` yang sama dipakai jurnal/tugas → anti double-count.
-      const absensiDates = absensiGuruByEmail.get(email)
-      if (absensiDates && absensiDates.size > 0) {
-        absensiDates.forEach((tgl) => transportDates.add(tgl))
-      }
-
-      // Staf piket dibayar per hari hadir: hari transport (absensi Hadir +
-      // tanggal tugas) x tarif piket. Guru mengajar: 0.
+      const jumlahJp = det.jumlahJp
+      const transportDates = det.transportDates
+      const detailJp = det.detailJp
+      const tugasNominal = det.detailTugas.reduce((s, t) => s + t.nominal, 0)
       const piket = p.status === 'staf_piket' ? transportDates.size * n(pengaturan?.tarif_piket) : 0
 
       return computeTotalsRow({
@@ -1319,8 +1401,9 @@ export default function HonorariumPage() {
         guru_nama: guru?.nama_lengkap || '',
         jumlah_jp: jumlahJp,
         transport_hari: transportDates.size,
-        detailJp,
-        detailTransport: Array.from(transportDates),
+        detailJp: det.detailJp,
+        detailTransport: det.detailTransport,
+        detailTugas: det.detailTugas,
         tunjangan_jabatan: n(p.tunjangan_jabatan),
         tunjangan_masa_kerja: n(p.tunjangan_masa_kerja),
         pembina: n(p.pembina),
@@ -1335,6 +1418,90 @@ export default function HonorariumPage() {
     })
     return { rows: rowsBuilt, validJurnal }
   }, [penerimaList, guruList, potonganList, pengaturan, tugasList])
+
+  // Hitung rincian detail SATU guru untuk satu periode (dipakai saat Detail
+  // dibuka / tampilan pribadi dimuat). Memakai helper yang sama dengan
+  // Tarik & Hitung sehingga hasil detailnya identik — hanya field detail
+  // yang dipakai, angka uang tidak disentuh.
+  const hitungDetailGuru = useCallback(async (guruId: number, targetPeriode: string) => {
+    const email = getGuruEmail(guruId)
+    if (!email) return null
+    const penerima = penerimaList.find((p) => p.guru_id === guruId)
+    const isStafPiket = penerima?.status === 'staf_piket'
+    const { jurnalMap } = isStafPiket
+      ? { jurnalMap: new Map<string, { dateSlots: Map<string, Set<number>>; dateMapel: Map<string, Set<string>> }>() }
+      : await muatPetaJurnal([email], targetPeriode, guruList)
+    const absensiMap = await muatAbsensiGuru([email], targetPeriode)
+    const tugasItems = tugasList.filter((t) => t.periode === targetPeriode && t.guru_ids.includes(guruId))
+    const det = susunDetailGuru({
+      isStafPiket,
+      jurnalRec: jurnalMap.get(email),
+      absensiDates: absensiMap.get(email),
+      tugasItems,
+    })
+    return { detailJp: det.detailJp, detailTransport: det.detailTransport, detailTugas: det.detailTugas }
+  }, [guruList, penerimaList, tugasList])
+
+  // Lengkapi field detail (detailJp/detailTransport/detailTugas) pada baris
+  // rekap yang sudah ada — HANYA field detail yang digabung, semua angka
+  // uang (JP, transport, tunjangan, potongan, bersih) dibiarkan apa adanya.
+  const lengkapiDetailGuru = useCallback(async (guruId: number) => {
+    const key = `${periode}:${guruId}`
+    if (detailSiapRef.current.has(key) || detailHitungRef.current.has(key)) return
+    detailHitungRef.current.add(key)
+    setDetailMemuat(true)
+    try {
+      const det = await hitungDetailGuru(guruId, periode)
+      if (det) {
+        setRekapList((prev) =>
+          prev.map((r) =>
+            r.guru_id === guruId && r.periode === periode
+              ? { ...r, detailJp: det.detailJp, detailTransport: det.detailTransport, detailTugas: det.detailTugas }
+              : r
+          )
+        )
+      }
+    } catch {
+      // Gagal memuat rincian: angka uang tetap tampil, bagian rincian kosong.
+    } finally {
+      detailHitungRef.current.delete(key)
+      detailSiapRef.current.add(key)
+      setDetailMemuat(false)
+    }
+  }, [periode, hitungDetailGuru])
+
+  // Saat modal Detail dibuka: lengkapi rincian guru tsb. bila barisnya belum
+  // punya rincian (mis. bulan tersimpan). Bila rincian sudah ada (habis
+  // Tarik & Hitung), tidak dihitung ulang.
+  useEffect(() => {
+    if (detailGuruId == null) return
+    const row = rekapList.find((r) => r.guru_id === detailGuruId && r.periode === periode)
+    if (!row) return
+    const sudahAda =
+      (row.detailJp?.length || 0) > 0 ||
+      (row.detailTransport?.length || 0) > 0 ||
+      (row.detailTugas?.length || 0) > 0
+    if (sudahAda) {
+      detailSiapRef.current.add(`${periode}:${detailGuruId}`)
+      return
+    }
+    lengkapiDetailGuru(detailGuruId)
+  }, [detailGuruId, periode, rekapList, lengkapiDetailGuru])
+
+  // Tampilan pribadi guru: lengkapi rincian miliknya sendiri otomatis saat
+  // barisnya dimuat, supaya bagian Rincian Tugas Tambahan + tombol Detail
+  // langsung menampilkan data tanpa Tarik & Hitung.
+  useEffect(() => {
+    if (showFullRekap || currentGuruId == null) return
+    const row = rekapList.find((r) => r.guru_id === currentGuruId && r.periode === periode)
+    if (!row) return
+    const sudahAda =
+      (row.detailJp?.length || 0) > 0 ||
+      (row.detailTransport?.length || 0) > 0 ||
+      (row.detailTugas?.length || 0) > 0
+    if (sudahAda) return
+    lengkapiDetailGuru(currentGuruId)
+  }, [showFullRekap, currentGuruId, periode, rekapList, lengkapiDetailGuru])
 
   const handleAutoCalc = async () => {
     setSaving(true)
@@ -2562,6 +2729,19 @@ export default function HonorariumPage() {
                             </tbody>
                           </table>
                         </div>
+                        {personalRow.detailTugas && personalRow.detailTugas.length > 0 && (
+                          <div>
+                            <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Tugas Tambahan</div>
+                            <div className="space-y-1 text-[11px]">
+                              {[...personalRow.detailTugas].sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))).map((t, i) => (
+                                <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
+                                  <span>{formatTanggalSingkat(t.tanggal)} — {t.nama_kegiatan}</span><span className="font-bold">{formatRupiah(Number(t.nominal) || 0)}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="text-right text-[11px] font-black mt-1">Total: {formatRupiah(personalRow.tugas_tambahan)}</div>
+                          </div>
+                        )}
                         {personalRow.updated_by && (
                           <p className={`text-[9px] font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
                             <Info className="w-3 h-3 inline-block align-middle mr-1" />
@@ -2578,6 +2758,11 @@ export default function HonorariumPage() {
                           <button onClick={printOwnSlip} className="text-[10px] font-black px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white cursor-pointer">
                             <FileCheck2 className="w-3.5 h-3.5 inline-block align-middle mr-1" /> Cetak Slip Pribadi
                           </button>
+                          {currentGuruId != null && (
+                            <button onClick={() => setDetailGuruId(currentGuruId)} className="text-[10px] font-black px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer">
+                              Lihat Rincian
+                            </button>
+                          )}
                         </div>
                       </>
                     )}
@@ -2839,6 +3024,22 @@ export default function HonorariumPage() {
                   </div>
                   <div className="text-right text-[11px] font-black mt-1">Total: {drow.transport_hari} hari</div>
                 </div>
+              )}
+              {drow.detailTugas && drow.detailTugas.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Tugas Tambahan</div>
+                  <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
+                    {[...drow.detailTugas].sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))).map((t, i) => (
+                      <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
+                        <span>{formatTanggalSingkat(t.tanggal)} — {t.nama_kegiatan}</span><span className="font-bold">{formatRupiah(Number(t.nominal) || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-right text-[11px] font-black mt-1">Total: {formatRupiah(drow.tugas_tambahan)}</div>
+                </div>
+              )}
+              {detailMemuat && !drow.detailJp?.length && !drow.detailTransport?.length && !drow.detailTugas?.length && (
+                <p className="text-[11px] text-slate-400">Memuat rincian…</p>
               )}
             </div>
           </div>
