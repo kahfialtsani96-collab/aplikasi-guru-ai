@@ -2732,14 +2732,30 @@ export default function HonorariumPage() {
                         {personalRow.detailTugas && personalRow.detailTugas.length > 0 && (
                           <div>
                             <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Tugas Tambahan</div>
-                            <div className="space-y-1 text-[11px]">
-                              {[...personalRow.detailTugas].sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))).map((t, i) => (
-                                <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
-                                  <span>{formatTanggalSingkat(t.tanggal)} — {t.nama_kegiatan}</span><span className="font-bold">{formatRupiah(Number(t.nominal) || 0)}</span>
-                                </div>
-                              ))}
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-[11px] min-w-[320px]">
+                                <thead>
+                                  <tr className={`text-[9px] uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    <th className="p-1.5">Tanggal</th>
+                                    <th className="p-1.5">Kegiatan</th>
+                                    <th className="p-1.5 text-right">Nominal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[...personalRow.detailTugas].sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))).map((t, i) => (
+                                    <tr key={i} className={`border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+                                      <td className="p-1.5 whitespace-nowrap font-bold">{formatTanggalSingkat(t.tanggal)}</td>
+                                      <td className="p-1.5">{t.nama_kegiatan || '-'}</td>
+                                      <td className="p-1.5 text-right font-bold whitespace-nowrap">{formatRupiah(Number(t.nominal) || 0)}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className={`border-t-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-400'}`}>
+                                    <td className="p-1.5 font-black" colSpan={2}>Total</td>
+                                    <td className="p-1.5 text-right font-black whitespace-nowrap">{formatRupiah(personalRow.tugas_tambahan)}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
                             </div>
-                            <div className="text-right text-[11px] font-black mt-1">Total: {formatRupiah(personalRow.tugas_tambahan)}</div>
                           </div>
                         )}
                         {personalRow.updated_by && (
@@ -2961,7 +2977,7 @@ export default function HonorariumPage() {
         if (!drow) return null
         return (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3" onClick={() => setDetailGuruId(null)}>
-            <div className={`w-full max-w-lg rounded-2xl border shadow-2xl max-h-[85vh] overflow-y-auto p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`w-full max-w-[720px] rounded-2xl border shadow-2xl max-h-[85vh] overflow-y-auto p-4 space-y-3 ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200'}`} onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold">Detail Honor — {guruNama(detailGuruId)}</h3>
                 <button onClick={() => setDetailGuruId(null)} className="text-slate-500 hover:text-slate-900 cursor-pointer"><X className="w-4 h-4" /></button>
@@ -3000,44 +3016,101 @@ export default function HonorariumPage() {
                   </div>
                 </div>
               )}
-              {drow.detailJp && drow.detailJp.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian JP</div>
-                  <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
-                    {drow.detailJp.map((d, i) => (
-                      <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
-                        <span>{formatTanggalSingkat(d.tanggal)}{d.mapel ? ` — ${d.mapel}` : ''} — Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
+              {(drow.detailJp?.length || drow.detailTransport?.length || drow.detailTugas?.length) ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-3 min-w-0">
+                    {drow.detailJp && drow.detailJp.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian JP</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-[11px] min-w-[300px]">
+                            <thead>
+                              <tr className={`text-[9px] uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                <th className="p-1.5">Tanggal</th>
+                                <th className="p-1.5">Mapel</th>
+                                <th className="p-1.5 text-center">Slot</th>
+                                <th className="p-1.5 text-right">JP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {drow.detailJp.map((d, i) => (
+                                <tr key={i} className={`border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+                                  <td className="p-1.5 whitespace-nowrap font-bold">{formatTanggalSingkat(d.tanggal)}</td>
+                                  <td className="p-1.5">{d.mapel || '-'}</td>
+                                  <td className="p-1.5 text-center whitespace-nowrap">{d.jam || '-'}</td>
+                                  <td className="p-1.5 text-right font-bold">{d.jp}</td>
+                                </tr>
+                              ))}
+                              <tr className={`border-t-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-400'}`}>
+                                <td className="p-1.5 font-black" colSpan={3}>Total</td>
+                                <td className="p-1.5 text-right font-black">{drow.detailJp.reduce((s: number, d: JpDetail) => s + (Number(d.jp) || 0), 0)} JP</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    ))}
+                    )}
+                    {drow.detailTugas && drow.detailTugas.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Tugas Tambahan</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-[11px] min-w-[300px]">
+                            <thead>
+                              <tr className={`text-[9px] uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                <th className="p-1.5">Tanggal</th>
+                                <th className="p-1.5">Kegiatan</th>
+                                <th className="p-1.5 text-right">Nominal</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...drow.detailTugas].sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))).map((t, i) => (
+                                <tr key={i} className={`border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+                                  <td className="p-1.5 whitespace-nowrap font-bold">{formatTanggalSingkat(t.tanggal)}</td>
+                                  <td className="p-1.5">{t.nama_kegiatan || '-'}</td>
+                                  <td className="p-1.5 text-right font-bold whitespace-nowrap">{formatRupiah(Number(t.nominal) || 0)}</td>
+                                </tr>
+                              ))}
+                              <tr className={`border-t-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-400'}`}>
+                                <td className="p-1.5 font-black" colSpan={2}>Total</td>
+                                <td className="p-1.5 text-right font-black whitespace-nowrap">{formatRupiah(drow.tugas_tambahan)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    {drow.detailTransport && drow.detailTransport.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Transport</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-[11px] min-w-[240px]">
+                            <thead>
+                              <tr className={`text-[9px] uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                <th className="p-1.5 text-center">No</th>
+                                <th className="p-1.5">Tanggal</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...drow.detailTransport].sort().map((d, i) => (
+                                <tr key={i} className={`border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+                                  <td className="p-1.5 text-center">{i + 1}</td>
+                                  <td className="p-1.5 whitespace-nowrap font-bold">{formatTanggalSingkat(d)}</td>
+                                </tr>
+                              ))}
+                              <tr className={`border-t-2 ${isDarkMode ? 'border-slate-700' : 'border-slate-400'}`}>
+                                <td className="p-1.5"></td>
+                                <td className="p-1.5 font-black">Total: {drow.transport_hari} hari</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-              {drow.detailTransport && drow.detailTransport.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Transport</div>
-                  <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
-                    {[...drow.detailTransport].sort().map((d, i) => (
-                      <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
-                        <span>{formatTanggalSingkat(d)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-right text-[11px] font-black mt-1">Total: {drow.transport_hari} hari</div>
-                </div>
-              )}
-              {drow.detailTugas && drow.detailTugas.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Tugas Tambahan</div>
-                  <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
-                    {[...drow.detailTugas].sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))).map((t, i) => (
-                      <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
-                        <span>{formatTanggalSingkat(t.tanggal)} — {t.nama_kegiatan}</span><span className="font-bold">{formatRupiah(Number(t.nominal) || 0)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-right text-[11px] font-black mt-1">Total: {formatRupiah(drow.tugas_tambahan)}</div>
-                </div>
-              )}
+              ) : null}
               {detailMemuat && !drow.detailJp?.length && !drow.detailTransport?.length && !drow.detailTugas?.length && (
                 <p className="text-[11px] text-slate-400">Memuat rincian…</p>
               )}
