@@ -284,6 +284,7 @@ interface JpDetail {
   tanggal: string
   jam: string
   jp: number
+  mapel?: string
   slots?: number[]
 }
 
@@ -1085,7 +1086,7 @@ export default function HonorariumPage() {
     // Satu kegiatan gabungan (ekskul Pramuka/Qiroah VIIâ€“XII, Presentasi Xâ€“XII) tercatat
     // di beberapa baris kelas sekaligus pada jam yang sama; slot jam digabung lewat Set
     // sehingga tetap dihitung 1x (mis. {7,8} = 2 JP), bukan dikali jumlah kelas/bukan 1 JP.
-    const jurnalMap = new Map<string, { dateSlots: Map<string, Set<number>> }>()
+    const jurnalMap = new Map<string, { dateSlots: Map<string, Set<number>>; dateMapel: Map<string, Set<string>> }>()
     let validJurnal = 0
     if (emails.length > 0) {
       const [tahunStr, bulanStr] = targetPeriode.split('-')
@@ -1199,11 +1200,17 @@ export default function HonorariumPage() {
           // Entri jurnal sah yang benar-benar dipakai perhitungan JP
           validJurnal++
 
-          if (!jurnalMap.has(em)) jurnalMap.set(em, { dateSlots: new Map() })
+          if (!jurnalMap.has(em)) jurnalMap.set(em, { dateSlots: new Map(), dateMapel: new Map() })
           const rec = jurnalMap.get(em)!
           if (!rec.dateSlots.has(tgl)) rec.dateSlots.set(tgl, new Set())
           const daySet = rec.dateSlots.get(tgl)!
           slots.forEach((s) => daySet.add(s))
+          // Simpan nama mapel per tanggal untuk Rincian JP (nama distinct, digabung saat tampil).
+          const mapelDisplay = String(row.mapel ?? '').trim()
+          if (mapelDisplay) {
+            if (!rec.dateMapel.has(tgl)) rec.dateMapel.set(tgl, new Set())
+            rec.dateMapel.get(tgl)!.add(mapelDisplay)
+          }
         })
       }
     }
@@ -1279,6 +1286,7 @@ export default function HonorariumPage() {
               tanggal: tgl,
               jam: arr.length ? arr.join('-') : '-',
               jp: arr.length,
+              mapel: Array.from(jurnalRec.dateMapel.get(tgl) || []).join(', '),
               slots: arr,
             })
           })
@@ -2813,10 +2821,23 @@ export default function HonorariumPage() {
                   <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
                     {drow.detailJp.map((d, i) => (
                       <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
-                        <span>{formatTanggalSingkat(d.tanggal)} â€” Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
+                        <span>{formatTanggalSingkat(d.tanggal)}{d.mapel ? ` â€” ${d.mapel}` : ''} â€” Slot {d.jam || '-'}</span><span className="font-bold">{d.jp} JP</span>
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {drow.detailTransport && drow.detailTransport.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Rincian Transport</div>
+                  <div className="max-h-40 overflow-y-auto space-y-1 text-[11px]">
+                    {[...drow.detailTransport].sort().map((d, i) => (
+                      <div key={i} className="flex justify-between border-b border-slate-100 py-0.5">
+                        <span>{formatTanggalSingkat(d)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-right text-[11px] font-black mt-1">Total: {drow.transport_hari} hari</div>
                 </div>
               )}
             </div>
